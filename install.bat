@@ -287,6 +287,23 @@ if errorlevel 1 (
     echo   [OK] pydantic         - already installed
 )
 
+::: PyQt6-WebEngine (VRM 虚拟形象模块依赖，可选)
+set "VRM_OK=1"
+%PYTHON_CMD% -c "from PyQt6.QtWebEngineWidgets import QWebEngineView" >nul 2>&1
+if errorlevel 1 (
+    echo   [..] PyQt6-WebEngine - installing...
+    %PYTHON_CMD% -m pip install PyQt6-WebEngine --quiet 2>nul
+    %PYTHON_CMD% -c "from PyQt6.QtWebEngineWidgets import QWebEngineView" >nul 2>&1
+    if errorlevel 1 (
+        echo   [!!] PyQt6-WebEngine - FAILED (VRM 模块将被禁用，不影响主程序)
+        set "VRM_OK=0"
+    ) else (
+        echo   [OK] PyQt6-WebEngine - installed
+    )
+) else (
+    echo   [OK] PyQt6-WebEngine - already installed
+)
+
 echo.
 if "%OFFICE_OK%"=="1" (
     echo   [OK] All Office dependencies ready (.docx .xlsx .pptx .pdf).

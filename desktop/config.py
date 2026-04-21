@@ -44,6 +44,10 @@ DEFAULT_CONFIG = {
     "vision_model":      "",     # 空则用 provider 默认 vision 模型
     "vision_api_key":    "",     # 空则继承主 API Key
     "vision_base_url":   "",     # 自定义 API 地址（一般不用填）
+    # ── VRM 虚拟形象模块 ──
+    "vrm_enabled":       True,   # 是否启用 VRM 虚拟形象面板
+    "vrm_width":         220,    # VRM 面板宽度 (px)
+    "vrm_height":        220,    # VRM 面板高度 (px)
 }
 
 

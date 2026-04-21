@@ -590,15 +590,43 @@ class ChatPage(QWidget):
         layout.addWidget(self._scroll)
         layout.addWidget(input_frame)
 
-        # 右侧：工具面板
+        # 右侧：VRM 虚拟形象 + 工具面板
+        right_col = QWidget()
+        right_col.setFixedWidth(220)
+        right_col.setStyleSheet("background:#161b22;")
+        right_lay = QVBoxLayout(right_col)
+        right_lay.setContentsMargins(0, 0, 0, 0)
+        right_lay.setSpacing(0)
+
+        # VRM 面板（模块化加载，失败则不显示）
+        self.vrm_widget = None
+        try:
+            from vrm_module import VRM_AVAILABLE, vrm_widget_class
+            from desktop.config import load_config
+            _cfg = load_config()
+            if VRM_AVAILABLE and _cfg.get("vrm_enabled", True):
+                self.vrm_widget = vrm_widget_class(
+                    parent=right_col,
+                    width=_cfg.get("vrm_width", 220),
+                    height=_cfg.get("vrm_height", 220),
+                )
+                right_lay.addWidget(self.vrm_widget)
+        except Exception as e:
+            print(f"[VRM] ChatPage 加载跳过: {e}")
+
+        # 工具面板
         self.tool_panel = ToolPanel()
         self.tool_panel.tool_clicked.connect(self._on_tool_clicked)
+        # 工具面板去掉自己的固定宽度和背景（由父容器统一控制）
+        self.tool_panel.setFixedWidth(220)
+        self.tool_panel.setStyleSheet("")  # 清除自带背景
+        right_lay.addWidget(self.tool_panel, stretch=1)
 
         # 补全选中
         self._completer.selected.connect(self._on_completer_selected)
 
         outer.addWidget(left, stretch=1)
-        outer.addWidget(self.tool_panel)
+        outer.addWidget(right_col)
 
     def _on_text_changed(self):
         """检测 / 开头，弹出补全"""
@@ -5295,6 +5323,17 @@ class MainWindow(QMainWindow):
         self._thinking_lbl = self.chat_page.add_thinking_indicator()
         self._status_mode.setText("🔄 处理中…")
 
+        # VRM: 用户发消息 → 好奇表情 + 开始说话动画
+        vrm = getattr(self.chat_page, "vrm_widget", None)
+        if vrm:
+            try:
+                from vrm_module.emotion_bridge import translate
+                name, val = translate("curious", 0.5)
+                vrm.set_emotion(name, val)
+                vrm.set_speaking(True)
+            except Exception:
+                pass
+
         self._worker = AGIWorker(self.agent, text)
         self._worker.finished.connect(self._on_result)
         self._worker.error.connect(self._on_error)
@@ -5367,6 +5406,27 @@ class MainWindow(QMainWindow):
                 f"情绪: {e.get('primary','?')} "
                 f"({int(e.get('intensity',0)*10)}/10)"
             )
+            # VRM: 更新表情
+            vrm = getattr(self.chat_page, "vrm_widget", None)
+            if vrm:
+                try:
+                    from vrm_module.emotion_bridge import translate
+                    name, val = translate(
+                        e.get("primary", "neutral"),
+                        e.get("intensity", 0)
+                    )
+                    vrm.set_emotion(name, val)
+                    vrm.set_speaking(False)
+                except Exception:
+                    pass
+        else:
+            # VRM: 无情绪时回到 idle
+            vrm = getattr(self.chat_page, "vrm_widget", None)
+            if vrm:
+                try:
+                    vrm.set_speaking(False)
+                except Exception:
+                    pass
         self._status_mode.setText("就绪")
         self._update_memory_count()
 
@@ -5386,6 +5446,14 @@ class MainWindow(QMainWindow):
         self.chat_page.remove_thinking_indicator()
         self.chat_page.add_ai_message(f"❌ 错误: {err}")
         self._status_mode.setText("就绪")
+        # VRM: 错误时恢复 idle
+        vrm = getattr(self.chat_page, "vrm_widget", None)
+        if vrm:
+            try:
+                vrm.set_speaking(False)
+                vrm.set_emotion("neutral", 0.5)
+            except Exception:
+                pass
 
     def _on_tab_changed(self, idx: int):
         if idx == 1:   # 记忆库

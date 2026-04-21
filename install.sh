@@ -196,6 +196,18 @@ else
     fi
 fi
 
+# PyQt6-WebEngine (VRM 虚拟形象模块依赖，可选)
+if python3 -c "from PyQt6.QtWebEngineWidgets import QWebEngineView" 2>/dev/null; then
+    echo " [OK] PyQt6-WebEngine - already installed"
+else
+    echo " [..] PyQt6-WebEngine - installing..."
+    if python3 -m pip install PyQt6-WebEngine -q 2>/dev/null; then
+        echo " [OK] PyQt6-WebEngine - installed"
+    else
+        echo " [!!] PyQt6-WebEngine - FAILED (VRM 模块将被禁用，不影响主程序)"
+    fi
+fi
+
 echo ""
 if $OFFICE_OK; then
     echo " [OK] All Office dependencies ready (.docx .xlsx .pptx .pdf)."

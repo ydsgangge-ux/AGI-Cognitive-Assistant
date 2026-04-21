@@ -39,6 +39,9 @@ desktop.ini
 PROJECT_HANDOFF.md
 main_patch.txt
 
+# VRM model files (large binary, user provides separately)
+vrm_module/static/*.vrm
+
 # Packaging
 *.tar.gz
 *.zip
