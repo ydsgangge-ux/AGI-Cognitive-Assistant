@@ -59,3 +59,4 @@ simlife/data/npc_cards.json
 simlife/data/event_history.json
 simlife/data/scheduled_events.json
 simlife/data/weather_cache.json
+simlife/data/last_online.json

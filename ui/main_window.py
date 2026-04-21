@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 
 from PyQt6.QtCore    import Qt, QThread, pyqtSignal, QTimer, QSize
+import random
 from PyQt6.QtGui     import QFont, QIcon, QColor, QPixmap, QPainter
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -4492,6 +4493,9 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_statusbar()
 
+        # 启动后 2 秒检查离线消息
+        QTimer.singleShot(2000, self._check_offline_messages)
+
     def _setup_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -5454,6 +5458,42 @@ class MainWindow(QMainWindow):
                 vrm.set_emotion("neutral", 0.5)
             except Exception:
                 pass
+
+    def _check_offline_messages(self):
+        """启动时检查并展示离线消息"""
+        try:
+            from simlife.offline_messages import on_startup
+            messages = on_startup()
+            if not messages:
+                return
+
+            self._status_mode.setText("加载离线消息...")
+            self._offline_msg_queue = list(messages)
+            self._offline_msg_idx = 0
+            QTimer.singleShot(800, self._show_next_offline_message)
+        except Exception as e:
+            print(f"[Offline] 消息加载跳过: {e}")
+
+    def _show_next_offline_message(self):
+        """逐条展示离线消息"""
+        if not hasattr(self, "_offline_msg_queue"):
+            return
+        if self._offline_msg_idx >= len(self._offline_msg_queue):
+            self._status_mode.setText("就绪")
+            return
+
+        msg = self._offline_msg_queue[self._offline_msg_idx]
+        self._offline_msg_idx += 1
+
+        label = f"[离线消息 · {msg['timestamp']}]"
+        self.chat_page.add_ai_message(f"{label}\n{msg['text']}")
+
+        # 下一条间隔 1.5-3 秒
+        if self._offline_msg_idx < len(self._offline_msg_queue):
+            delay = random.randint(1500, 3000)
+            QTimer.singleShot(delay, self._show_next_offline_message)
+        else:
+            self._status_mode.setText("就绪")
 
     def _on_tab_changed(self, idx: int):
         if idx == 1:   # 记忆库

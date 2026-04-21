@@ -103,8 +103,14 @@ REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主�
     "modality": "记忆模态(visual/auditory/emotional/semantic/procedural/autobio)",
     "what_to_remember": "需要记住的核心内容（一段话，必须用当前真实日期作为时间锚点，如'今天（{current_time}）''昨天''本周'，绝对禁止编造不存在的日期），包含人物、事件、感受",
     "reason": "为什么要/不要记住这个"
-  }}
+  }},
+
+  "schedule_info": 如果用户提到未来要做的事情（如"明天我要看电影"、"下周三去体检"），填写：{{"content": "计划内容", "date": "日期", "category": "分类"}}。如果对话中没有提到未来计划，填写null。
 }}
+
+重要规则：
+- 当用户提到未来要做的计划时，schedule_info 必须填写，need_tools 设为 true，tool_task 中要求调用 add_schedule 工具。
+- 当你自己提议未来一起做什么并得到用户同意时，也要用 add_schedule 记录，source 设为 "system"。
 
 只输出JSON，不要其他内容。"""
 
@@ -320,6 +326,23 @@ class ConsciousnessAgent:
         tool_result_section = ""
         tool_steps  = []
         tools_used  = []
+
+        # ── 自动处理行程计划 ──
+        schedule_info = reasoning.get("schedule_info")
+        if schedule_info and isinstance(schedule_info, dict):
+            try:
+                from engine.tools import execute_tool
+                sch_result = execute_tool("add_schedule", {
+                    "content": schedule_info.get("content", ""),
+                    "date": schedule_info.get("date", ""),
+                    "category": schedule_info.get("category", "personal"),
+                    "source": schedule_info.get("source", "user"),
+                })
+                if sch_result.get("ok"):
+                    self._log("行程", f"已记录计划: {sch_result.get('message', '')}")
+                    tool_result_section += f"\n[行程已记录] {sch_result.get('message', '')}"
+            except Exception as e:
+                self._log("行程", f"记录计划失败: {e}")
 
         if need_tools:
             tool_task = reasoning.get("tool_task") or user_input
