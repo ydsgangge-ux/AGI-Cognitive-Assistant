@@ -23,7 +23,7 @@ class OpenAICompatClient:
 
     def generate(self, prompt: str, system: str = None,
                  max_tokens: int = 1000, temperature: float = 0.7,
-                 messages: List[Dict] = None) -> str:
+                 messages: List[Dict] = None, model: str = None) -> str:
         if messages is None:
             msgs = []
             if system:
@@ -32,8 +32,9 @@ class OpenAICompatClient:
         else:
             msgs = messages
 
+        use_model = model or self.model
         payload = json.dumps({
-            "model": self.model, "messages": msgs,
+            "model": use_model, "messages": msgs,
             "max_tokens": max_tokens, "temperature": temperature
         }, ensure_ascii=False).encode("utf-8")
 
@@ -206,7 +207,7 @@ class GeminiClient:
         if system and not messages:
             body["systemInstruction"] = {"parts": [{"text": system}]}
 
-        url = (f"{self.BASE_URL}/{self.model}:generateContent"
+        url = (f"{self.BASE_URL}/{model or self.model}:generateContent"
                f"?key={self.api_key}")
         payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(
@@ -234,7 +235,7 @@ class OllamaClient:
 
     def generate(self, prompt: str, system: str = None,
                  max_tokens: int = 1000, temperature: float = 0.7,
-                 messages: List[Dict] = None) -> str:
+                 messages: List[Dict] = None, model: str = None) -> str:
         if messages is None:
             msgs = []
             if system:
@@ -244,7 +245,7 @@ class OllamaClient:
             msgs = messages
 
         payload = json.dumps({
-            "model": self.model, "messages": msgs, "stream": False,
+            "model": model or self.model, "messages": msgs, "stream": False,
             "options": {"num_predict": max_tokens, "temperature": temperature}
         }, ensure_ascii=False).encode("utf-8")
 
@@ -281,7 +282,7 @@ class OllamaClient:
 class MockClient:
     def generate(self, prompt: str, system: str = None,
                  max_tokens: int = 1000, temperature: float = 0.7,
-                 messages: List[Dict] = None) -> str:
+                 messages: List[Dict] = None, model: str = None) -> str:
         if any(k in prompt for k in ["emotion", "needs_deep_memory",
                                       "情绪类型", "初步感受", "感知结果"]):
             return json.dumps({

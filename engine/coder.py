@@ -4,6 +4,7 @@
 """
 
 import os
+import csv
 import json
 import uuid
 import shutil
@@ -61,6 +62,130 @@ class CodingSession:
     created_at:  str = field(default_factory=lambda: datetime.now().isoformat())
 
 
+# 按 provider 分类的编程模型列表
+CODER_MODELS = {
+    "deepseek": [
+        ("deepseek-chat",     "DeepSeek Chat（快速）"),
+        ("deepseek-reasoner", "DeepSeek Reasoner（强推理）"),
+    ],
+    "openai": [
+        ("gpt-4o-mini",  "GPT-4o Mini（快速）"),
+        ("gpt-4o",       "GPT-4o（均衡）"),
+        ("o3-mini",      "O3 Mini（强推理）"),
+    ],
+    "claude": [
+        ("claude-3-5-haiku-20241022",  "Claude 3.5 Haiku（快速）"),
+        ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet（强推理）"),
+    ],
+    "qwen": [
+        ("qwen-turbo", "Qwen Turbo（快速）"),
+        ("qwen-plus",  "Qwen Plus（均衡）"),
+        ("qwen-max",   "Qwen Max（强推理）"),
+    ],
+    "ollama": [],  # 从 list_models 动态获取
+}
+
+
+def parse_table_file(file_path: str, max_rows: int = 200) -> Dict:
+    """
+    解析表格文件（CSV/Excel），返回结构化信息
+    用于传入 coder 的上下文
+    """
+    ext = Path(file_path).suffix.lower()
+    rows = []
+
+    if ext in (".csv", ".tsv", ".txt"):
+        try:
+            delimiter = "," if ext == ".csv" else "\t"
+            # 尝试不同编码
+            for enc in ("utf-8", "gbk", "gb2312", "utf-8-sig"):
+                try:
+                    with open(file_path, encoding=enc, errors="replace") as f:
+                        reader = csv.reader(f, delimiter=delimiter)
+                        rows = [r for r in reader if any(c.strip() for c in r)]
+                        break
+                except UnicodeDecodeError:
+                    continue
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    elif ext in (".xlsx", ".xls"):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                row_data = [str(c) if c is not None else "" for c in row]
+                if any(c.strip() for c in row_data):
+                    rows.append(row_data)
+            wb.close()
+        except ImportError:
+            return {"ok": False, "error": "需要安装 openpyxl：pip install openpyxl"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    else:
+        return {"ok": False, "error": f"不支持的文件格式：{ext}"}
+
+    if not rows:
+        return {"ok": False, "error": "表格为空"}
+
+    # 提取表头
+    headers = rows[0] if rows else []
+    data_rows = rows[1:max_rows + 1]
+    total_rows = len(rows) - 1
+
+    # 检测每列数据类型
+    col_types = []
+    for col_idx in range(len(headers)):
+        values = [r[col_idx] if col_idx < len(r) else "" for r in data_rows]
+        numeric_count = sum(1 for v in values if v.strip().replace(".", "").replace("-", "").replace("%", "").isdigit())
+        if numeric_count / max(len(values), 1) > 0.8:
+            has_pct = any("%" in v for v in values)
+            has_money = any(("¥" in v or "$" in v or "￥" in v) for v in values)
+            if has_pct:
+                col_types.append("百分比")
+            elif has_money:
+                col_types.append("金额")
+            else:
+                col_types.append("数字")
+        else:
+            col_types.append("文本")
+
+    # 生成 markdown 表格
+    md_lines = []
+    md_lines.append(f"## 表格数据（共 {total_rows} 行）\n")
+    md_lines.append("| " + " | ".join(h for h in headers) + " |")
+
+    # 列类型标注（第二行）
+    type_row = " | ".join(
+        f"{headers[i]}: {col_types[i]}"
+        for i in range(min(len(headers), len(col_types)))
+    )
+    md_lines.append(f"| {type_row} |")
+
+    # 分隔行
+    md_lines.append("| " + " | ".join("---" for _ in headers) + " |")
+
+    # 数据行
+    for row in data_rows:
+        cells = [str(row[i]) if i < len(row) else "" for i in range(len(headers))]
+        md_lines.append("| " + " | ".join(cells) + " |")
+
+    # 如果有截断
+    if total_rows > max_rows:
+        md_lines.append(f"\n> 以上仅显示前 {max_rows} 行，完整数据共 {total_rows} 行")
+
+    return {
+        "ok": True,
+        "headers": headers,
+        "col_types": col_types,
+        "total_rows": total_rows,
+        "preview_rows": data_rows,
+        "markdown": "\n".join(md_lines),
+        "context_text": "\n".join(md_lines)
+    }
+
+
 class CodingAgent:
     """
     自主编程智能体
@@ -75,13 +200,32 @@ class CodingAgent:
         "javascript": ["node", "{main}"],
         "html":       None,   # 直接打开浏览器，不需要命令行运行
         "bash":       ["bash", "{main}"],
+        "bat":        ["cmd", "/c", "{main}"],
+        "java":       ["java", "{main}"],
+        "c":          ["gcc", "-o", "{main_noext}", "{main}", "&&", "{main_noext}"],
+        "cpp":        ["g++", "-o", "{main_noext}", "{main}", "&&", "{main_noext}"],
+        "csharp":     ["dotnet", "run", "--project", "."],
+        "go":         ["go", "run", "{main}"],
     }
 
     def __init__(self, llm_client, work_dir: str = None,
-                 on_progress: Callable = None):
+                 on_progress: Callable = None, model: str = ""):
         self.llm       = llm_client
         self.work_dir  = Path(work_dir or tempfile.mkdtemp(prefix="agi_code_"))
         self.on_progress = on_progress or (lambda msg, level="info": print(f"[{level}] {msg}"))
+        self.model     = model or ""  # 空=用默认模型
+
+    # 按语言动态调整 max_tokens
+    MAX_TOKENS_MAP = {
+        "html":   8192,
+        "bat":    4096,
+        "python": 4096,
+        "cpp":    4096,
+        "java":   4096,
+        "go":     4096,
+        "csharp": 4096,
+    }
+    DEFAULT_MAX_TOKENS = 4096
 
     # ══════════════════════════════════════════════
     # 主入口
@@ -108,7 +252,7 @@ class CodingAgent:
             # ① 写代码（首轮全写，后续只修改有问题的部分）
             if i == 1:
                 self.on_progress("✍️  正在生成代码…", "write")
-                code_files = self._write_code(task, language, prev_error=None)
+                code_files = self._write_code(task, language, prev_error=None, context=context)
             else:
                 prev = session.iterations[-1]
                 self.on_progress(f"🔧 正在修复错误…", "fix")
@@ -180,7 +324,7 @@ class CodingAgent:
     # 代码生成
     # ══════════════════════════════════════════════
     def _write_code(self, task: str, language: str,
-                    prev_error: str = None) -> Dict[str, str]:
+                    prev_error: str = None, context: str = "") -> Dict[str, str]:
         """让 LLM 写代码，返回 {filename: content} 字典"""
 
         lang_hints = {
@@ -188,6 +332,12 @@ class CodingAgent:
             "javascript": "使用原生 JavaScript，无需 npm",
             "html":       "单文件 HTML，内联 CSS 和 JS，无外部依赖",
             "bash":       "bash shell 脚本",
+            "bat":        "Windows批处理脚本(.bat)，使用 CMD 命令，如 systeminfo、wmic、ipconfig、tasklist、del、dir 等",
+            "java":       "Java 17+，单文件使用 public class Main，不要 package 声明",
+            "c":          "C语言，使用标准库，main函数入口",
+            "cpp":        "C++17，使用标准库，单文件即可",
+            "csharp":     "C#，单文件 Program.cs，使用顶级语句（top-level statements）",
+            "go":         "Go语言，单文件 main.go，package main",
         }
         hint = lang_hints.get(language, f"使用 {language}")
 
@@ -200,6 +350,7 @@ class CodingAgent:
 1. 代码必须能直接运行，不需要任何额外配置
 2. 如果是游戏/界面程序，使用标准库（Python用tkinter，不用pygame）
 3. 代码要完整，不要省略任何部分
+{"4. 参考以下代码/上下文来完成任务：\n" + context[:10000] if context.strip() else ""}
 
 请以 JSON 格式返回文件内容，格式如下：
 {{
@@ -213,7 +364,8 @@ class CodingAgent:
 
 只输出 JSON，不要其他内容。"""
 
-        raw = self.llm.generate(prompt, max_tokens=3000, temperature=0.3)
+        raw = self.llm.generate(prompt, max_tokens=self.MAX_TOKENS_MAP.get(language, self.DEFAULT_MAX_TOKENS),
+                                temperature=0.3, model=self.model or None)
         return self._parse_code_json(raw)
 
     def _fix_code(self, task: str, language: str,
@@ -253,7 +405,8 @@ class CodingAgent:
 
 注意：返回完整代码，不是只返回修改部分。只输出 JSON。"""
 
-        raw = self.llm.generate(prompt, max_tokens=3000, temperature=0.2)
+        raw = self.llm.generate(prompt, max_tokens=self.MAX_TOKENS_MAP.get(language, self.DEFAULT_MAX_TOKENS),
+                                temperature=0.2, model=self.model or None)
         return self._parse_code_json(raw)
 
     def _analyse_error(self, task: str, code: Dict[str, str],
@@ -302,11 +455,19 @@ class CodingAgent:
                     "stderr": ""}
 
         # 替换主文件名
-        cmd = [c.replace("{main}", main_file) for c in cmd_template]
+        main_noext = Path(main_file).stem
+        cmd = [c.replace("{main}", main_file).replace("{main_noext}", main_noext)
+              for c in cmd_template]
+
+        # C/C++ 用 shell=True 支持 && 链接编译+运行
+        use_shell = language in ("c", "cpp")
+        if use_shell:
+            cmd = " ".join(cmd)
 
         try:
             result = subprocess.run(
                 cmd,
+                shell=use_shell,
                 cwd=str(proj_dir),
                 capture_output=True,
                 text=True,

@@ -2664,21 +2664,26 @@ class CoderWorker(QThread):
     done    = pyqtSignal(object)      # CodingSession
     error   = pyqtSignal(str)
 
-    def __init__(self, agent_llm, task: str, language: str, save_to: str):
+    def __init__(self, agent_llm, task: str, language: str, save_to: str,
+                 context: str = "", model: str = ""):
         super().__init__()
         self.agent_llm = agent_llm
         self.task      = task
         self.language  = language
         self.save_to   = save_to
+        self.context   = context
+        self.model     = model
 
     def run(self):
         try:
             from engine.coder import CodingAgent
             coder = CodingAgent(
                 llm_client=self.agent_llm,
-                on_progress=lambda msg, level="info": self.log.emit(msg, level)
+                on_progress=lambda msg, level="info": self.log.emit(msg, level),
+                model=self.model
             )
-            session = coder.run(self.task, self.language, self.save_to)
+            session = coder.run(self.task, self.language, self.save_to,
+                                context=self.context)
             self.done.emit(session)
         except Exception as e:
             import traceback
@@ -2715,6 +2720,42 @@ class CoderPage(QWidget):
 
     def set_llm(self, llm_client):
         self._agent_llm = llm_client
+        # 根据 provider 填充模型下拉框
+        self._populate_model_combo(llm_client)
+
+    def _populate_model_combo(self, llm_client):
+        """根据 LLM 类型填充可用的编程模型"""
+        self._model_combo.clear()
+        provider = ""
+        try:
+            cls_name = llm_client.__class__.__name__
+            if "DeepSeek" in cls_name:
+                provider = "deepseek"
+            elif "OpenAI" in cls_name:
+                provider = "openai"
+            elif "Claude" in cls_name:
+                provider = "claude"
+            elif "Qwen" in cls_name:
+                provider = "qwen"
+            elif "Ollama" in cls_name:
+                provider = "ollama"
+        except Exception:
+            pass
+
+        from engine.coder import CODER_MODELS
+        models = CODER_MODELS.get(provider, [])
+
+        if provider == "ollama" and hasattr(llm_client, "list_models"):
+            ollama_models = llm_client.list_models()
+            for m in ollama_models:
+                self._model_combo.addItem(m, m)
+        elif models:
+            for model_id, model_desc in models:
+                self._model_combo.addItem(f"{model_id}  {model_desc}", model_id)
+
+        # 默认选中"强推理"模型（第二个选项）
+        if self._model_combo.count() >= 2:
+            self._model_combo.setCurrentIndex(1)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -2736,7 +2777,10 @@ class CoderPage(QWidget):
         )
 
         self._lang_combo = QComboBox()
-        self._lang_combo.addItems(["python", "javascript", "html", "bash"])
+        self._lang_combo.addItems([
+            "python", "javascript", "html", "bash", "bat",
+            "java", "c", "cpp", "csharp", "go"
+        ])
         self._lang_combo.setFixedWidth(120)
         self._lang_combo.setStyleSheet(
             "QComboBox{background:#21262d;border:1px solid #30363d;"
@@ -2768,6 +2812,19 @@ class CoderPage(QWidget):
         tb_lay.addWidget(_make_label("语言:", "color:#8b949e;font-size:12px;"))
         tb_lay.addWidget(self._lang_combo)
         tb_lay.addSpacing(12)
+        tb_lay.addWidget(_make_label("模型:", "color:#8b949e;font-size:12px;"))
+        self._model_combo = QComboBox()
+        self._model_combo.setEditable(True)
+        self._model_combo.setFixedWidth(180)
+        self._model_combo.setPlaceholderText("使用默认模型")
+        self._model_combo.setStyleSheet(
+            "QComboBox{background:#21262d;border:1px solid #30363d;"
+            "border-radius:5px;padding:4px 8px;color:#e6edf3;font-size:12px;}"
+            "QComboBox QAbstractItemView{background:#21262d;color:#e6edf3;"
+            "selection-background-color:#1f6feb;}"
+        )
+        tb_lay.addWidget(self._model_combo)
+        tb_lay.addSpacing(12)
         tb_lay.addWidget(save_lbl)
         tb_lay.addWidget(self._save_path)
         tb_lay.addWidget(btn_browse)
@@ -2775,7 +2832,6 @@ class CoderPage(QWidget):
         # ── 任务输入区 ─────────────────────────
         task_widget = QWidget()
         task_widget.setStyleSheet("background:#0d1117;")
-        task_widget.setFixedHeight(110)
         task_lay = QVBoxLayout(task_widget)
         task_lay.setContentsMargins(16, 10, 16, 10)
         task_lay.setSpacing(8)
@@ -2814,6 +2870,7 @@ class CoderPage(QWidget):
         task_header.addWidget(self._btn_run)
 
         self._task_input = QLineEdit()
+        self._task_input.setMinimumHeight(36)
         self._task_input.setPlaceholderText(
             "例：写一个贪吃蛇游戏  /  写一个计算器  /  写一个文件批量重命名工具"
         )
@@ -2826,6 +2883,50 @@ class CoderPage(QWidget):
 
         task_lay.addLayout(task_header)
         task_lay.addWidget(self._task_input)
+
+        # 参考代码/上下文输入
+        ctx_header = QHBoxLayout()
+        ctx_lbl = QLabel("📎  参考代码 / 表格数据（可选）")
+        ctx_lbl.setStyleSheet("color:#8b949e;font-size:11px;")
+        self._ctx_toggle = QPushButton("展开")
+        self._ctx_toggle.setFixedSize(40, 20)
+        self._ctx_toggle.setStyleSheet(
+            "QPushButton{background:transparent;border:1px solid #30363d;"
+            "border-radius:3px;color:#8b949e;font-size:10px;}"
+            "QPushButton:hover{color:#58a6ff;border-color:#58a6ff;}"
+        )
+        self._ctx_toggle.clicked.connect(self._toggle_context)
+
+        self._btn_upload_table = QPushButton("📤 上传表格")
+        self._btn_upload_table.setFixedSize(70, 20)
+        self._btn_upload_table.setStyleSheet(
+            "QPushButton{background:transparent;border:1px solid #30363d;"
+            "border-radius:3px;color:#8b949e;font-size:10px;}"
+            "QPushButton:hover{color:#f0883e;border-color:#f0883e;}"
+        )
+        self._btn_upload_table.clicked.connect(self._upload_table)
+
+        ctx_header.addWidget(ctx_lbl)
+        ctx_header.addStretch()
+        ctx_header.addWidget(self._btn_upload_table)
+        ctx_header.addWidget(self._ctx_toggle)
+
+        self._context_input = QTextEdit()
+        self._context_input.setPlaceholderText(
+            "粘贴参考代码或文件内容，AI 生成时会参考这些上下文…\n"
+            "例如：已有的项目代码、API 文档、数据结构等"
+        )
+        self._context_input.setMaximumHeight(0)
+        self._context_input.setStyleSheet(
+            "QTextEdit{background:#21262d;border:1px solid #30363d;"
+            "border-radius:8px;padding:8px 12px;color:#e6edf3;font-size:12px;"
+            "font-family:Consolas,monospace;}"
+            "QTextEdit:focus{border-color:#58a6ff;}"
+        )
+        self._ctx_visible = False
+
+        task_lay.addLayout(ctx_header)
+        task_lay.addWidget(self._context_input)
 
         # ── 主体：日志 + 代码预览 ─────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -2953,12 +3054,12 @@ class CoderPage(QWidget):
         preset_lay.setContentsMargins(16, 6, 16, 6)
         preset_lay.addWidget(_make_label("快速任务：", "color:#8b949e;font-size:11px;"))
         presets = [
-            ("🐍 贪吃蛇",     "python", "写一个贪吃蛇游戏，用tkinter实现，有分数显示"),
-            ("🧮 计算器",     "python", "写一个图形界面计算器，支持加减乘除和括号"),
-            ("📝 记事本",     "python", "写一个简单记事本应用，可以打开保存文件"),
-            ("⏰ 番茄钟",     "python", "写一个番茄工作法计时器，25分钟工作5分钟休息"),
-            ("🎮 扫雷",       "python", "写一个扫雷游戏，10x10方格，随机30个地雷"),
-            ("📊 CSV查看器",  "python", "写一个CSV文件查看器，可以打开文件并表格展示"),
+            ("🐍 贪吃蛇",       "python", "写一个贪吃蛇游戏，用tkinter实现，有分数显示"),
+            ("🧮 计算器",       "python", "写一个图形界面计算器，支持加减乘除和括号"),
+            ("📝 记事本",       "python", "写一个简单记事本应用，可以打开保存文件"),
+            ("⏰ 番茄钟",       "python", "写一个番茄工作法计时器，25分钟工作5分钟休息"),
+            ("🎮 扫雷",         "python", "写一个扫雷游戏，10x10方格，随机30个地雷"),
+            ("📊 表格转网页",   "html",   "把参考代码中的表格数据做成一个精美的HTML数据看板网页，使用Chart.js绘制图表，包含数据表格、筛选排序功能，风格现代简洁，支持响应式布局"),
         ]
         for label, lang, task in presets:
             btn = QPushButton(label)
@@ -2974,11 +3075,42 @@ class CoderPage(QWidget):
             preset_lay.addWidget(btn)
         preset_lay.addStretch()
 
+        # 电脑工具快捷按钮
+        tool_bar = QWidget()
+        tool_bar.setStyleSheet(
+            "background:#161b22;border-top:1px solid #30363d;"
+        )
+        tool_lay = QHBoxLayout(tool_bar)
+        tool_lay.setContentsMargins(16, 6, 16, 6)
+        tool_lay.addWidget(_make_label("电脑工具：", "color:#8b949e;font-size:11px;"))
+        tool_presets = [
+            ("💻 电脑信息",     "bat", "写一个Windows批处理脚本，用systeminfo、wmic等命令查看并显示CPU型号、内存大小、磁盘使用量、操作系统版本"),
+            ("🌐 网络检测",     "bat", "写一个Windows批处理脚本，用ipconfig查看IP，ping测试百度和淘宝的连通性，netstat显示网络连接"),
+            ("🧹 清理临时文件", "bat", "写一个Windows批处理脚本，显示当前临时文件夹大小，用户按任意键后清理%%TEMP%%目录下的临时文件"),
+            ("📋 进程管理",     "bat", "写一个Windows批处理脚本，用tasklist列出所有进程并按内存排序显示前20个，支持输入进程名来结束进程"),
+            ("📁 批量重命名",   "bat", "写一个Windows批处理脚本，对指定文件夹下的文件批量重命名，支持添加前缀、序号编号、修改扩展名"),
+            ("🔒 文件加解密",   "python", "写一个文件加密解密工具，用AES加密指定文件，输入密码即可加密或解密"),
+        ]
+        for label, lang, task in tool_presets:
+            btn = QPushButton(label)
+            btn.setFixedHeight(26)
+            btn.setStyleSheet(
+                "QPushButton{background:#21262d;border:1px solid #30363d;"
+                "border-radius:12px;color:#8b949e;font-size:11px;padding:0 10px;}"
+                "QPushButton:hover{border-color:#f0883e;color:#e6edf3;}"
+            )
+            btn.clicked.connect(
+                lambda checked, l=lang, t=task: self._set_preset(l, t)
+            )
+            tool_lay.addWidget(btn)
+        tool_lay.addStretch()
+
         # 组装
         layout.addWidget(toolbar)
         layout.addWidget(task_widget)
         layout.addWidget(splitter, stretch=1)
         layout.addWidget(preset_bar)
+        layout.addWidget(tool_bar)
 
         # 内部状态
         self._current_session = None
@@ -2986,6 +3118,53 @@ class CoderPage(QWidget):
         self._current_files = {}
 
     # ── 操作方法 ────────────────────────────────
+    def _toggle_context(self):
+        self._ctx_visible = not self._ctx_visible
+        if self._ctx_visible:
+            self._context_input.setMaximumHeight(150)
+            self._ctx_toggle.setText("收起")
+        else:
+            self._context_input.setMaximumHeight(0)
+            self._ctx_toggle.setText("展开")
+
+    def _upload_table(self):
+        """上传表格文件，解析后填入参考代码框"""
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择表格文件",
+            "", "表格文件 (*.csv *.xlsx *.xls *.tsv);;所有文件 (*)"
+        )
+        if not path:
+            return
+
+        try:
+            from engine.coder import parse_table_file
+            result = parse_table_file(path)
+            if not result.get("ok"):
+                self._log_msg(f"❌ 表格解析失败：{result.get('error', '未知错误')}", "error")
+                return
+
+            headers = result["headers"]
+            col_types = result["col_types"]
+            total = result["total_rows"]
+
+            # 自动展开参考代码框
+            if not self._ctx_visible:
+                self._toggle_context()
+
+            # 填入 markdown 表格
+            self._context_input.setPlainText(result["context_text"])
+
+            self._log_msg(
+                f"✅ 表格加载成功：{Path(path).name}\n"
+                f"   {len(headers)} 列 × {total} 行 | "
+                + " | ".join(f"{h}({t})" for h, t in zip(headers, col_types)),
+                "info"
+            )
+
+        except Exception as e:
+            self._log_msg(f"❌ 表格加载失败：{e}", "error")
+
     def _set_preset(self, lang: str, task: str):
         idx = self._lang_combo.findText(lang)
         if idx >= 0:
@@ -3024,7 +3203,11 @@ class CoderPage(QWidget):
         self._iter_lbl.setText("")
         self._status_lbl.setText("🔄 运行中…")
 
-        self._worker = CoderWorker(self._agent_llm, task, lang, save_to)
+        self._worker = CoderWorker(
+            self._agent_llm, task, lang, save_to,
+            context=self._context_input.toPlainText().strip(),
+            model=self._model_combo.currentData() or self._model_combo.currentText().strip()
+        )
         self._worker.log.connect(self._log_msg)
         self._worker.done.connect(self._on_done)
         self._worker.error.connect(self._on_error)
