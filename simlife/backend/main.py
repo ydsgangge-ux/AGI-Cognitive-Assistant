@@ -27,7 +27,8 @@ from simlife.backend.character import (
     CharacterCard, WorldState, LogEntry, SceneEnum, SCENE_LABELS
 )
 from simlife.backend.world_engine import (
-    get_current_scene, get_day_seed, get_time_period_label, catchup_world_state
+    get_current_scene, get_day_seed, get_time_period_label, catchup_world_state,
+    _get_current_travel_destination,
 )
 from simlife.backend.event_engine import (
     load_event_library, load_scheduled_events, save_scheduled_events,
@@ -102,6 +103,14 @@ def _save_world_state(state: WorldState):
     path = DATA_DIR / "world_state.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump(state.model_dump(), f, ensure_ascii=False, indent=2)
+
+
+def _get_work_style_safe() -> str:
+    """安全获取工作模式字符串"""
+    if not character_card:
+        return "office"
+    ws = getattr(character_card.basic, "work_style", "office") or "office"
+    return ws
 
 
 def _tick():
@@ -244,6 +253,15 @@ def _tick():
                 mood_deltas.append(h.get("mood_delta", 0))
                 break
 
+    # 旅行心情加成
+    from simlife.backend.character import WorkStyle
+    travel_dest = None
+    _ws = _get_work_style_safe()
+    if _ws == "travel" and character_card:
+        travel_dest = _get_current_travel_destination(character_card, now.date())
+        if travel_dest:
+            mood_deltas.append(travel_dest.get("mood_bonus", 15))
+
     interaction_hours = None
     task_len = 0
     if agidpa_reader and agidpa_reader.is_available():
@@ -336,6 +354,13 @@ def api_world_state():
     from simlife.backend.birthday_engine import get_upcoming_birthdays
     upcoming_birthdays = get_upcoming_birthdays(char_bd, load_npc_cards(), days=14)
 
+    # 旅行信息
+    travel_info = None
+    if character_card and _get_work_style_safe() == "travel":
+        travel_dest = _get_current_travel_destination(character_card, now.date())
+        if travel_dest:
+            travel_info = travel_dest
+
     return {
         "scene": world_state.current_scene,
         "scene_label": SCENE_LABELS.get(
@@ -354,6 +379,7 @@ def api_world_state():
         "holiday": holiday_info,
         "birthday": birthday_info,
         "upcoming_birthdays": upcoming_birthdays,
+        "travel": travel_info,
     }
 
 

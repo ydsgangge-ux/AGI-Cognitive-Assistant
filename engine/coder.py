@@ -231,7 +231,7 @@ class CodingAgent:
     # 主入口
     # ══════════════════════════════════════════════
     def run(self, task: str, language: str = "python",
-            save_to: str = None) -> CodingSession:
+            save_to: str = None, context: str = "") -> CodingSession:
         session = CodingSession(
             session_id=str(uuid.uuid4())[:8],
             task=task,

@@ -350,7 +350,7 @@ class Renderer {
     ctx.fill();
   }
 
-  _getSkyColor() {
+    _getSkyColor() {
     const skyMap = {
       'HOME_SLEEPING': '#0a0a20',
       'HOME_MORNING': '#1a1520',
@@ -371,6 +371,14 @@ class Renderer {
       'STREET_WANDERING': '#87CEEB',
       'FRIEND_HANGOUT': '#f0e8d8',
       'OVERTIME': '#0a0a20',
+      // 旅行场景
+      'AIRPORT': '#e8e4e0',
+      'TOURING': '#87CEEB',
+      'HOTEL': '#2a2530',
+      'LOCAL_FOOD': '#f0e0c0',
+      'TRAIN_STATION': '#d8d4d0',
+      'SCENIC_DRIVE': '#87CEEB',
+      'RESTAURANT_LOCAL': '#f0e8d0',
     };
     return skyMap[this.scene] || '#1a1a2e';
   }
@@ -396,6 +404,14 @@ class Renderer {
       'STREET_WANDERING': { x: 300, y: 210 },
       'FRIEND_HANGOUT': { x: 280, y: 190 },
       'OVERTIME': { x: 240, y: 170 },
+      // 旅行场景
+      'AIRPORT': { x: 300, y: 200 },
+      'TOURING': { x: 300, y: 210 },
+      'HOTEL': { x: 280, y: 170 },
+      'LOCAL_FOOD': { x: 320, y: 200 },
+      'TRAIN_STATION': { x: 300, y: 200 },
+      'SCENIC_DRIVE': { x: 300, y: 200 },
+      'RESTAURANT_LOCAL': { x: 320, y: 190 },
     };
     return posMap[scene] || { x: 300, y: 180 };
   }
@@ -421,6 +437,14 @@ class Renderer {
       'STREET_WANDERING': 'walk',
       'FRIEND_HANGOUT': 'sit',
       'OVERTIME': 'work',
+      // 旅行场景
+      'AIRPORT': 'walk',
+      'TOURING': 'work',
+      'HOTEL': 'sit',
+      'LOCAL_FOOD': 'sit',
+      'TRAIN_STATION': 'walk',
+      'SCENIC_DRIVE': 'sit',
+      'RESTAURANT_LOCAL': 'sit',
     };
     return actionMap[scene] || 'stand';
   }
@@ -432,6 +456,11 @@ class Renderer {
       'CAFE': [{ x: 280, y: 180 }],
       'CAFE_WORKING': [{ x: 280, y: 180 }],
       'FRIEND_HANGOUT': [{ x: 360, y: 190 }],
+      // 旅行场景
+      'TOURING': [{ x: 200, y: 210 }, { x: 450, y: 220 }],
+      'AIRPORT': [{ x: 200, y: 200 }, { x: 420, y: 195 }],
+      'LOCAL_FOOD': [{ x: 250, y: 200 }],
+      'RESTAURANT_LOCAL': [{ x: 260, y: 190 }],
     };
     return npcPosMap[scene] || [];
   }
@@ -1178,6 +1207,293 @@ const SCENE_RENDERERS = {
     // 地毯
     c.fillStyle = 'rgba(80,60,80,0.3)';
     c.fillRect(200, 230, 160, 30);
+  },
+
+  // ── 旅行场景 ──
+
+  AIRPORT(r) {
+    const c = r.ctx;
+    // 明亮机场大厅
+    const wg = c.createLinearGradient(0, 0, 0, 260);
+    wg.addColorStop(0, '#e8e4e0'); wg.addColorStop(1, '#d8d4d0');
+    c.fillStyle = wg; c.fillRect(0, 0, W, 260);
+    // 地板
+    c.fillStyle = '#c0b8a8'; c.fillRect(0, 260, W, H - 260);
+
+    // 大玻璃窗
+    r.roundRect(40, 30, 250, 120, 4, '#c0d8e8');
+    // 窗外 - 天空 + 飞机
+    c.fillStyle = '#87CEEB';
+    c.fillRect(44, 34, 242, 112);
+    // 云
+    c.fillStyle = 'rgba(255,255,255,0.7)';
+    c.beginPath(); c.arc(150, 70, 20, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(180, 65, 14, 0, Math.PI * 2); c.fill();
+    // 小飞机
+    const planeOff = (r.time * 0.3) % 300;
+    c.fillStyle = '#555';
+    c.beginPath(); c.moveTo(60 + planeOff, 80); c.lineTo(80 + planeOff, 80);
+    c.lineTo(85 + planeOff, 76); c.lineTo(90 + planeOff, 80); c.lineTo(95 + planeOff, 80); c.fill();
+
+    // 航班信息屏
+    r.roundRect(350, 30, 240, 60, 3, '#1a1a2a');
+    c.fillStyle = '#f0a020'; c.font = '10px monospace';
+    c.fillText('DEPARTURES', 360, 48);
+    c.fillStyle = '#4ae04a'; c.font = '9px monospace';
+    c.fillText('CA123  北京  ON TIME   12:30', 360, 62);
+    c.fillText('MU567  东京  DELAYED  14:15', 360, 75);
+
+    // 登机口
+    r.roundRect(480, 130, 80, 50, 4, '#d0ccc8');
+    c.fillStyle = '#888'; c.font = '12px sans-serif';
+    c.fillText('GATE 12', 490, 160);
+
+    // 行李
+    r.roundRect(100, 220, 40, 30, 3, '#4a6a8a');
+    r.roundRect(100, 215, 40, 8, 2, '#5a7a9a');
+    // 拉杆箱
+    r.roundRect(160, 225, 25, 25, 3, '#e74c3c');
+    c.fillStyle = '#555'; c.fillRect(170, 220, 2, 8);
+
+    // 候车座椅
+    for (let i = 0; i < 3; i++) {
+      const sx = 240 + i * 80;
+      r.roundRect(sx, 210, 50, 5, 1, '#888');
+      c.fillStyle = '#777'; c.fillRect(sx + 5, 215, 4, 20);
+      c.fillRect(sx + 41, 215, 4, 20);
+    }
+  },
+
+  TOURING(r) {
+    const c = r.ctx;
+    // 天空
+    const sg = c.createLinearGradient(0, 0, 0, 180);
+    sg.addColorStop(0, '#4ab0e8'); sg.addColorStop(1, '#8ad0f0');
+    c.fillStyle = sg; c.fillRect(0, 0, W, 180);
+    // 云
+    c.fillStyle = 'rgba(255,255,255,0.8)';
+    const cOff = (r.time * 0.08) % W;
+    c.beginPath(); c.arc(100 + cOff % 600, 40, 18, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(400 + (cOff * 0.5) % 600, 55, 15, 0, Math.PI * 2); c.fill();
+
+    // 远处 - 标志性建筑剪影（寺庙/城堡）
+    c.fillStyle = '#8a8090';
+    r.roundRect(280, 80, 80, 100, 0, '#8a8090');
+    // 塔顶
+    c.beginPath(); c.moveTo(280, 80); c.lineTo(320, 30); c.lineTo(360, 80); c.fill();
+    // 屋檐
+    c.fillStyle = '#7a7080';
+    c.beginPath(); c.moveTo(265, 100); c.lineTo(375, 100); c.lineTo(370, 90); c.lineTo(270, 90); c.fill();
+
+    // 树
+    c.fillStyle = '#3a7a3a';
+    c.beginPath(); c.arc(100, 140, 22, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#5a3a1a'; c.fillRect(96, 155, 8, 30);
+    c.fillStyle = '#4a8a4a';
+    c.beginPath(); c.arc(500, 145, 18, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#5a3a1a'; c.fillRect(497, 158, 6, 25);
+
+    // 地面（石板路）
+    c.fillStyle = '#b0a898'; c.fillRect(0, 200, W, H - 200);
+    // 石板纹理
+    c.strokeStyle = 'rgba(0,0,0,0.06)'; c.lineWidth = 1;
+    for (let i = 0; i < 20; i++) {
+      const sx = (i * 35 + 10) % W;
+      c.beginPath(); c.moveTo(sx, 200); c.lineTo(sx + 15, H); c.stroke();
+    }
+
+    // 路灯
+    c.fillStyle = '#555'; c.fillRect(40, 100, 3, 100);
+    c.fillStyle = '#f0e8a0';
+    c.beginPath(); c.arc(41, 96, 10, 0, Math.PI * 2); c.fill();
+
+    // 相机标志（主角在拍照）
+    c.fillStyle = '#333';
+    c.beginPath(); c.arc(560, 195, 10, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#555';
+    c.beginPath(); c.arc(560, 195, 6, 0, Math.PI * 2); c.fill();
+  },
+
+  HOTEL(r) {
+    const c = r.ctx;
+    // 酒店房间 — 暖色
+    const wg = c.createLinearGradient(0, 0, 0, 220);
+    wg.addColorStop(0, '#2a2030'); wg.addColorStop(1, '#1e1a28');
+    c.fillStyle = wg; c.fillRect(0, 0, W, 220);
+    c.fillStyle = '#3a3040'; c.fillRect(0, 220, W, H - 220);
+
+    // 大窗户（夜景）
+    r.roundRect(350, 40, 160, 120, 4, '#1a2a4a');
+    // 窗外城市灯光
+    c.fillStyle = 'rgba(255,200,100,0.5)';
+    for (let i = 0; i < 15; i++) {
+      c.fillRect(360 + (i * 11) % 140, 60 + (i * 7) % 80, 3, 3);
+    }
+    // 窗帘
+    c.fillStyle = '#4a3a5a';
+    c.fillRect(345, 35, 12, 130);
+    c.fillRect(503, 35, 12, 130);
+
+    // 大床
+    r.roundRect(80, 160, 180, 50, 4, '#5a4a3a');
+    r.roundRect(80, 155, 180, 12, 4, '#e8e0d0');
+    r.roundRect(90, 158, 70, 8, 3, '#f0e8d8');
+
+    // 床头柜 + 灯
+    r.roundRect(270, 170, 30, 40, 3, '#4a3a2a');
+    c.fillStyle = 'rgba(255,180,100,0.6)';
+    c.beginPath(); c.arc(285, 168, 6, 0, Math.PI * 2); c.fill();
+
+    // 电视
+    r.roundRect(330, 130, 10, 50, 2, '#333');
+    r.roundRect(325, 120, 20, 5, 2, '#444');
+
+    // 笔记本电脑（在另一张小桌上）
+    r.roundRect(420, 170, 80, 40, 3, '#4a3a5a');
+    r.roundRect(435, 155, 50, 18, 2, '#333');
+    r.roundRect(437, 157, 46, 14, 1, '#4488cc');
+  },
+
+  LOCAL_FOOD(r) {
+    const c = r.ctx;
+    // 温暖的街头美食氛围
+    const wg = c.createLinearGradient(0, 0, 0, 220);
+    wg.addColorStop(0, '#f0d8a0'); wg.addColorStop(1, '#e8c888');
+    c.fillStyle = wg; c.fillRect(0, 0, W, 220);
+    c.fillStyle = '#c0a870'; c.fillRect(0, 220, W, H - 220);
+
+    // 灯笼
+    for (let i = 0; i < 4; i++) {
+      const lx = 80 + i * 150;
+      c.fillStyle = '#e74c3c';
+      c.beginPath(); c.arc(lx, 40, 16, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#f0a020';
+      c.beginPath(); c.arc(lx, 40, 10, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#c03030'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(lx, 24); c.lineTo(lx, 15); c.stroke();
+    }
+
+    // 摊位
+    r.roundRect(50, 140, 200, 80, 3, '#6a4a2a');
+    r.roundRect(50, 135, 200, 12, 4, '#7a5a3a');
+    // 蒸笼
+    for (let i = 0; i < 3; i++) {
+      r.roundRect(70 + i * 55, 110, 40, 28, 2, '#f0f0e8');
+      c.fillStyle = '#d0d0c0';
+      c.fillRect(70 + i * 55, 108, 40, 4);
+    }
+    // 蒸汽
+    c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 1;
+    const sOff = Math.sin(r.time * 0.04) * 2;
+    c.beginPath(); c.moveTo(90, 106); c.quadraticCurveTo(88, 98 + sOff, 92, 92); c.stroke();
+    c.beginPath(); c.moveTo(145, 106); c.quadraticCurveTo(143, 100 + sOff, 148, 94); c.stroke();
+
+    // 第二个摊位
+    r.roundRect(350, 150, 180, 70, 3, '#5a4a3a');
+    c.fillStyle = '#ff0'; c.font = '11px sans-serif';
+    c.fillText('🍜', 400, 180);
+    c.fillText('🍜', 440, 185);
+    c.fillText('🍜', 470, 178);
+
+    // 路面
+    c.fillStyle = '#a09880'; c.fillRect(0, 280, W, 20);
+  },
+
+  SCENIC_DRIVE(r) {
+    const c = r.ctx;
+    // 车窗视角 — 蓝天 + 流动的风景
+    const sg = c.createLinearGradient(0, 0, 0, 200);
+    sg.addColorStop(0, '#4ab0e8'); sg.addColorStop(1, '#8ad0f0');
+    c.fillStyle = sg; c.fillRect(0, 0, W, 200);
+    // 云（流动）
+    c.fillStyle = 'rgba(255,255,255,0.7)';
+    const drift = (r.time * 1.5) % W;
+    c.beginPath(); c.arc(W - drift, 50, 25, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(W - drift + 30, 45, 18, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(W - (drift * 0.7 + 300) % W, 70, 20, 0, Math.PI * 2); c.fill();
+
+    // 远山
+    c.fillStyle = '#7aaa7a';
+    c.beginPath(); c.moveTo(0, 200); c.lineTo(100, 120); c.lineTo(200, 160);
+    c.lineTo(350, 100); c.lineTo(500, 150); c.lineTo(640, 110); c.lineTo(640, 200); c.fill();
+    // 近山
+    c.fillStyle = '#5a8a5a';
+    c.beginPath(); c.moveTo(0, 200); c.lineTo(150, 140); c.lineTo(300, 170);
+    c.lineTo(450, 130); c.lineTo(640, 160); c.lineTo(640, 200); c.fill();
+
+    // 流动的路边树
+    const treeOff = (r.time * 2) % 80;
+    for (let i = 0; i < 10; i++) {
+      const tx = (i * 80 - treeOff) % (W + 40) - 20;
+      c.fillStyle = '#5a3a1a'; c.fillRect(tx + 4, 180, 6, 20);
+      c.fillStyle = '#4a8a3a';
+      c.beginPath(); c.arc(tx + 7, 170, 14, 0, Math.PI * 2); c.fill();
+    }
+
+    // 路面
+    c.fillStyle = '#666'; c.fillRect(0, 200, W, 80);
+    // 车道线
+    c.fillStyle = '#fff';
+    const lineOff = (r.time * 3) % 60;
+    for (let i = 0; i < 15; i++) {
+      c.fillRect(i * 60 - lineOff, 240, 30, 3);
+    }
+
+    // 车窗边框
+    c.strokeStyle = '#333'; c.lineWidth = 6;
+    c.strokeRect(0, 0, W, H);
+  },
+
+  RESTAURANT_LOCAL(r) {
+    SCENE_RENDERERS.CAFE(r);
+    const c = r.ctx;
+    // 覆盖为当地餐厅风格
+    c.fillStyle = 'rgba(200,160,80,0.1)';
+    c.fillRect(0, 0, W, H);
+    // 菜单板改为当地特色
+    r.roundRect(60, 40, 80, 50, 3, '#2a2a2a');
+    c.fillStyle = '#f0d8a8'; c.font = '9px sans-serif';
+    c.fillText('当地特色菜', 68, 58);
+    c.fillText('招牌推荐 ¥35', 68, 72);
+    c.fillText('时令鲜蔬 ¥28', 68, 84);
+  },
+
+  TRAIN_STATION(r) {
+    const c = r.ctx;
+    // 火车站风格
+    const wg = c.createLinearGradient(0, 0, 0, 260);
+    wg.addColorStop(0, '#d8d4d0'); wg.addColorStop(1, '#c8c4c0');
+    c.fillStyle = wg; c.fillRect(0, 0, W, 260);
+    c.fillStyle = '#999'; c.fillRect(0, 260, W, H - 260);
+
+    // 铁轨结构天花板
+    c.fillStyle = '#888';
+    for (let i = 0; i < 8; i++) {
+      c.fillRect(i * 85, 0, 4, 40);
+    }
+    c.fillRect(0, 35, W, 6);
+
+    // 大显示屏
+    r.roundRect(200, 60, 200, 50, 3, '#1a1a2a');
+    c.fillStyle = '#4ae04a'; c.font = '11px monospace';
+    c.fillText('G5  开往成都  15:30', 215, 82);
+    c.fillStyle = '#f0a020'; c.font = '10px monospace';
+    c.fillText('检票口 B3', 215, 98);
+
+    // 候车座椅
+    for (let i = 0; i < 5; i++) {
+      const sx = 40 + i * 120;
+      r.roundRect(sx, 180, 80, 5, 1, '#888');
+      c.fillStyle = '#777'; c.fillRect(sx + 5, 185, 4, 25);
+      c.fillRect(sx + 71, 185, 4, 25);
+    }
+
+    // 时钟
+    c.fillStyle = '#fff';
+    c.beginPath(); c.arc(550, 80, 20, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#333';
+    c.beginPath(); c.arc(550, 80, 18, 0, Math.PI * 2); c.stroke();
+    c.font = '12px monospace'; c.fillText('15:22', 536, 84);
   },
 
 };

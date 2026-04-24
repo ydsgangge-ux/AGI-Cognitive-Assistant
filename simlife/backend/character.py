@@ -1,6 +1,6 @@
 """
 人物卡数据模型 (Pydantic)
-支持多种工作模式：上班族 / 自由职业 / 学生 等
+支持多种工作模式：上班族 / 自由职业 / 学生 / 旅行博主 等
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -32,6 +32,14 @@ class SceneEnum(str, Enum):
     SUPERMARKET = "SUPERMARKET"
     STREET_WANDERING = "STREET_WANDERING"
     FRIEND_HANGOUT = "FRIEND_HANGOUT"
+    # ── 旅行 ──
+    AIRPORT = "AIRPORT"                    # 机场/车站
+    TOURING = "TOURING"                    # 景点游览/拍摄
+    HOTEL = "HOTEL"                        # 酒店
+    LOCAL_FOOD = "LOCAL_FOOD"              # 品尝当地美食
+    TRAIN_STATION = "TRAIN_STATION"        # 火车站
+    SCENIC_DRIVE = "SCENIC_DRIVE"          # 自驾/包车途中
+    RESTAURANT_LOCAL = "RESTAURANT_LOCAL"  # 当地餐厅
 
 
 SCENE_LABELS = {
@@ -59,6 +67,14 @@ SCENE_LABELS = {
     SceneEnum.SUPERMARKET: "超市",
     SceneEnum.STREET_WANDERING: "街头闲逛",
     SceneEnum.FRIEND_HANGOUT: "和朋友在外",
+    # 旅行
+    SceneEnum.AIRPORT: "在机场",
+    SceneEnum.TOURING: "游览景点",
+    SceneEnum.HOTEL: "在酒店",
+    SceneEnum.LOCAL_FOOD: "品尝美食",
+    SceneEnum.TRAIN_STATION: "在火车站",
+    SceneEnum.SCENIC_DRIVE: "在路上",
+    SceneEnum.RESTAURANT_LOCAL: "在当地餐厅",
 }
 
 # 工作场景集合（用于事件过滤等）
@@ -66,6 +82,8 @@ WORK_SCENES = {
     SceneEnum.OFFICE_WORKING, SceneEnum.OFFICE_MEETING, SceneEnum.OVERTIME,
     SceneEnum.HOME_WORKING, SceneEnum.CAFE_WORKING,
     SceneEnum.OUTDOOR_WORKING, SceneEnum.STUDIO_WORKING,
+    # 旅行博主的工作场景
+    SceneEnum.TOURING, SceneEnum.LOCAL_FOOD,
 }
 
 
@@ -74,6 +92,7 @@ class WorkStyle(str, Enum):
     FREELANCE = "freelance"     # 自由职业，地点灵活
     REMOTE = "remote"           # 远程办公（有公司但在家）
     STUDENT = "student"         # 学生
+    TRAVEL = "travel"           # 旅行博主/数字游民
 
 
 # 工作日工作场景映射（根据 work_style 决定"上班时"在哪个场景）
@@ -83,6 +102,7 @@ WORK_STYLE_SCENES = {
                           SceneEnum.OUTDOOR_WORKING, SceneEnum.STUDIO_WORKING],
     WorkStyle.REMOTE: [SceneEnum.HOME_WORKING, SceneEnum.CAFE],
     WorkStyle.STUDENT: [SceneEnum.OFFICE_WORKING, SceneEnum.CAFE, SceneEnum.HOME_WORKING],
+    WorkStyle.TRAVEL: [SceneEnum.TOURING, SceneEnum.LOCAL_FOOD, SceneEnum.HOTEL],
 }
 
 
@@ -100,10 +120,18 @@ def detect_work_style(occupation: str) -> WorkStyle:
     remote_keywords = [
         "远程", "remote", "居家办公", "在家办公",
     ]
+    travel_keywords = [
+        "旅游", "旅行", "travel", "导游", "旅行博主", "旅游博主",
+        "数字游民", "digital nomad", "背包客", "环游", "旅拍",
+        "vlog旅行", "旅行vlog", "旅行自媒体",
+    ]
     student_keywords = [
         "学生", "研究生", "博士生", "大学生", "高中生", "留学生",
         "本科", "硕士", "博士",
     ]
+    for kw in travel_keywords:
+        if kw in occ:
+            return WorkStyle.TRAVEL
     for kw in student_keywords:
         if kw in occ:
             return WorkStyle.STUDENT
@@ -212,6 +240,7 @@ class Wardrobe(BaseModel):
     formal: str = "略正式的着装"                      # 正式场合（约会/聚餐/会议）
     sport: str = "运动装"                            # 运动/健身
     sleep: str = "睡衣"                              # 睡觉
+    travel: str = "轻便旅行装"                       # 旅行（旅行博主专用）
     # 英文版（图片生成用）
     home_en: str = "comfortable home clothes"
     work_en: str = "business casual outfit"
@@ -220,6 +249,25 @@ class Wardrobe(BaseModel):
     formal_en: str = "smart casual outfit"
     sport_en: str = "athletic wear"
     sleep_en: str = "pajamas"
+    travel_en: str = "lightweight travel outfit with backpack and comfortable shoes"
+
+
+class TravelDestination(BaseModel):
+    """单个旅行目的地"""
+    city: str = ""                    # 目的地城市名（如"东京"）
+    city_en: str = ""                 # 英文名（如"Tokyo"）
+    country: str = ""                 # 国家（如"日本"）
+    start_date: str = ""              # 出发日期 "YYYY-MM-DD"
+    end_date: str = ""                # 返回日期 "YYYY-MM-DD"
+    spots: List[str] = Field(default_factory=list)  # 计划去的景点列表
+    purpose: str = ""                 # 旅行目的（如"拍樱花季vlog"）
+    mood_bonus: int = 15              # 旅行心情加成
+
+
+class TravelPlan(BaseModel):
+    """旅行计划（旅行博主角色使用）"""
+    enabled: bool = False
+    destinations: List[TravelDestination] = Field(default_factory=list)
 
 
 class CharacterCard(BaseModel):
@@ -236,6 +284,8 @@ class CharacterCard(BaseModel):
     life_goals: List[LifeGoal] = Field(default_factory=list)
     # 新增：角色衣柜（LLM 根据人物设定生成）
     wardrobe: Wardrobe = Field(default_factory=Wardrobe)
+    # 新增：旅行计划（旅行博主使用）
+    travel_plan: TravelPlan = Field(default_factory=TravelPlan)
 
 
 # 锚点表单（用户首次填写）

@@ -1,6 +1,6 @@
 """
 世界引擎 - 时间→场景映射 + 场景推算 + 离线补算
-支持节假日覆盖 + 天气影响 + 多种工作模式（上班族/自由职业/学生）
+支持节假日覆盖 + 天气影响 + 多种工作模式（上班族/自由职业/学生/旅行博主）
 """
 import random
 from datetime import datetime, timedelta, date
@@ -8,6 +8,7 @@ from typing import Optional, List, Tuple
 from .character import (
     CharacterCard, WorldState, SceneEnum, LogEntry, SCENE_LABELS,
     WorkStyle, WORK_STYLE_SCENES, detect_work_style,
+    TravelPlan, TravelDestination,
 )
 from .holiday_calendar import (
     get_holiday, is_public_holiday, is_workday_override,
@@ -140,6 +141,12 @@ def get_current_scene(
 
     minute = now.hour * 60 + now.minute
 
+    # ── 优先级3：旅行博主旅行日期间 → 走旅行场景 ──
+    if work_style == WorkStyle.TRAVEL:
+        dest = _get_current_travel_destination(card, today)
+        if dest:
+            return _travel_scene(card, sched, minute, seed, hour, now, dest, weather_service)
+
     if is_actually_workday:
         if work_style in (WorkStyle.FREELANCE, WorkStyle.REMOTE):
             return _freelance_workday_scene(card, sched, minute, seed, now.hour, weather_service)
@@ -150,6 +157,151 @@ def get_current_scene(
     else:
         # ── 周末逻辑 ──
         return _weekend_scene(card, sched, minute, seed, now.hour, weather_service, work_style)
+
+
+def _get_current_travel_destination(card: CharacterCard, today: date) -> Optional[dict]:
+    """检查今天是否在旅行中，返回目的地的 dict 表示"""
+    if not hasattr(card, "travel_plan"):
+        return None
+    plan = card.travel_plan
+    if not plan or not getattr(plan, "enabled", False):
+        return None
+    destinations = getattr(plan, "destinations", []) or []
+    for dest in destinations:
+        start = dest.start_date if dest.start_date else ""
+        end = dest.end_date if dest.end_date else ""
+        if not start or not end:
+            continue
+        try:
+            d_start = date.fromisoformat(start)
+            d_end = date.fromisoformat(end)
+            if d_start <= today <= d_end:
+                return {
+                    "city": dest.city or "",
+                    "city_en": dest.city_en or "",
+                    "country": dest.country or "",
+                    "spots": dest.spots or [],
+                    "purpose": dest.purpose or "",
+                    "start_date": start,
+                    "end_date": end,
+                    "mood_bonus": dest.mood_bonus or 15,
+                    "total_days": (d_end - d_start).days + 1,
+                    "day_index": (today - d_start).days + 1,
+                }
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _travel_scene(card, sched, minute, seed, hour, now, dest, weather_service):
+    """旅行博主旅行日场景推算"""
+    rng = random.Random(seed + 20)
+    day_index = dest["day_index"]
+    total_days = dest["total_days"]
+    spots = dest["spots"]
+    is_first_day = day_index == 1
+    is_last_day = day_index == total_days
+
+    # 首日：出发 → 机场 → 到达
+    if is_first_day:
+        if minute < sched["wake_up"]:
+            return SceneEnum.HOME_SLEEPING, SCENE_LABELS[SceneEnum.HOME_SLEEPING]
+        elif minute < sched["leave_home"] + 30:
+            return SceneEnum.HOME_MORNING, SCENE_LABELS[SceneEnum.HOME_MORNING]
+        elif minute < sched["leave_home"] + 90:
+            return SceneEnum.AIRPORT, f"在机场，准备飞{dest['city']}"
+        elif minute < sched["lunch_end"]:
+            return SceneEnum.SCENIC_DRIVE, f"前往{dest['city']}的路上"
+        elif minute < sched["sleep"]:
+            return SceneEnum.TOURING, f"到达{dest['city']}，初步逛逛"
+        else:
+            return SceneEnum.HOTEL, SCENE_LABELS[SceneEnum.HOTEL]
+
+    # 末日：收拾 → 返程
+    if is_last_day:
+        if minute < sched["wake_up"]:
+            return SceneEnum.HOTEL, SCENE_LABELS[SceneEnum.HOTEL]
+        elif minute < sched["leave_home"]:
+            return SceneEnum.HOME_MORNING, f"在{dest['city']}最后收拾行李"
+        elif minute < sched["leave_home"] + 60:
+            return SceneEnum.SCENIC_DRIVE, f"前往{dest['city']}机场"
+        elif minute < sched["lunch_end"]:
+            return SceneEnum.AIRPORT, f"在{dest['city']}机场候机"
+        elif minute < sched["arrive_home"] if sched.get("arrive_home", 0) > 0 else sched["sleep"]:
+            return SceneEnum.COMMUTE_TO_HOME, "回家的路上"
+        elif minute < sched["sleep"]:
+            return SceneEnum.HOME_EVENING, "到家了，整理行李"
+        else:
+            return SceneEnum.HOME_SLEEPING, SCENE_LABELS[SceneEnum.HOME_SLEEPING]
+
+    # 中间日常：根据景点和时段分配
+    if minute < sched["wake_up"]:
+        return SceneEnum.HOTEL, SCENE_LABELS[SceneEnum.HOTEL]
+    elif minute < sched["leave_home"]:
+        return SceneEnum.HOME_MORNING, f"在{dest['city']}的酒店醒来"
+    elif minute < sched["lunch_start"]:
+        # 上午：去一个景点
+        spot_idx = ((day_index - 2) * 2 + 0) % max(len(spots), 1)
+        spot = spots[spot_idx] if spots else dest["city"]
+        if rng.random() < 0.15:
+            return SceneEnum.LOCAL_FOOD, f"在{dest['city']}吃了个当地早餐"
+        return SceneEnum.TOURING, f"在{dest['city']}游览{spot}"
+    elif minute < sched["lunch_end"]:
+        # 午餐
+        return SceneEnum.LOCAL_FOOD, f"在{dest['city']}品尝当地美食"
+    elif minute < sched["leave_work"]:
+        # 下午：去另一个景点或自由活动
+        spot_idx = ((day_index - 2) * 2 + 1) % max(len(spots), 1)
+        spot = spots[spot_idx] if spots else dest["city"]
+        options = [
+            (SceneEnum.TOURING, 0.55),
+            (SceneEnum.LOCAL_FOOD, 0.15),
+            (SceneEnum.STREET_WANDERING, 0.15),
+            (SceneEnum.RESTAURANT_LOCAL, 0.15),
+        ]
+        # 天气不好时减少户外
+        if weather_service and weather_service.get_scene_hint():
+            options = [
+                (SceneEnum.HOTEL, 0.30),
+                (SceneEnum.RESTAURANT_LOCAL, 0.25),
+                (SceneEnum.LOCAL_FOOD, 0.20),
+                (SceneEnum.CAFE, 0.25),
+            ]
+        scenes, weights = zip(*options)
+        pick = rng.choices(scenes, weights=weights, k=1)[0]
+        if pick == SceneEnum.TOURING:
+            return SceneEnum.TOURING, f"在{dest['city']}游览{spot}"
+        elif pick == SceneEnum.LOCAL_FOOD:
+            return SceneEnum.LOCAL_FOOD, f"在{dest['city']}吃小吃"
+        elif pick == SceneEnum.STREET_WANDERING:
+            return SceneEnum.STREET_WANDERING, f"在{dest['city']}街头漫步"
+        elif pick == SceneEnum.RESTAURANT_LOCAL:
+            return SceneEnum.RESTAURANT_LOCAL, f"在{dest['city']}一家特色餐厅"
+        else:
+            return SceneEnum.HOTEL, f"在{dest['city']}的酒店休息"
+    elif minute < sched["sleep"]:
+        # 晚间
+        evening_options = [
+            (SceneEnum.RESTAURANT_LOCAL, 0.30),
+            (SceneEnum.HOTEL, 0.25),
+            (SceneEnum.STREET_WANDERING, 0.20),
+            (SceneEnum.LOCAL_FOOD, 0.15),
+            (SceneEnum.CAFE, 0.10),
+        ]
+        scenes, weights = zip(*evening_options)
+        pick = rng.choices(scenes, weights=weights, k=1)[0]
+        if pick == SceneEnum.RESTAURANT_LOCAL:
+            return SceneEnum.RESTAURANT_LOCAL, f"在{dest['city']}吃晚餐"
+        elif pick == SceneEnum.HOTEL:
+            return SceneEnum.HOTEL, f"在{dest['city']}的酒店放松"
+        elif pick == SceneEnum.STREET_WANDERING:
+            return SceneEnum.STREET_WANDERING, f"在{dest['city']}的夜市闲逛"
+        elif pick == SceneEnum.LOCAL_FOOD:
+            return SceneEnum.LOCAL_FOOD, f"在{dest['city']}吃宵夜"
+        else:
+            return SceneEnum.CAFE, f"在{dest['city']}一家咖啡馆"
+    else:
+        return SceneEnum.HOTEL, SCENE_LABELS[SceneEnum.HOTEL]
 
 
 def _office_workday_scene(card, sched, minute, seed, hour, weather_service):
@@ -437,6 +589,12 @@ def catchup_world_state(
                 "这几天一直在复习",
                 "好像去图书馆了好几次",
                 "和同学一起吃了顿火锅",
+            ]
+        elif work_style == WorkStyle.TRAVEL:
+            daily_activities = [
+                "好像去旅行了，发了几条朋友圈",
+                "在国外拍了不少素材",
+                "朋友圈全是旅行照片",
             ]
         else:
             daily_activities = [

@@ -319,5 +319,135 @@
       "刷到一个很酷的教程，想学但怕自己坚持不下来",
       "看到别人的作品突然燃起了学画画的冲动"
     ]
+  },
+  {
+    "id": "travel_flight_delay",
+    "label": "航班延误了两个小时",
+    "trigger_condition": "",
+    "probability_per_day": 0.06,
+    "mood_delta": -12,
+    "consequences": [],
+    "log_templates": [
+      "航班延误了，在机场百无聊赖地刷手机",
+      "登机口前坐了快两个小时，腿都麻了"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_great_footage",
+    "label": "拍到了超棒的素材",
+    "trigger_condition": "",
+    "probability_per_day": 0.06,
+    "mood_delta": 20,
+    "consequences": [],
+    "log_templates": [
+      "今天光线特别好，拍到的素材回放了好几遍",
+      "偶遇了一场当地节日，镜头里的画面太美了"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_lost_way",
+    "label": "在一个陌生的地方迷路了",
+    "trigger_condition": "",
+    "probability_per_day": 0.05,
+    "mood_delta": -8,
+    "consequences": [],
+    "log_templates": [
+      "跟着导航走结果导航也不靠谱，绕了半小时才找到路",
+      "小巷子里七拐八拐完全分不清方向，最后问了个当地人才找回来"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_local_friend",
+    "label": "在旅途中认识了新朋友",
+    "trigger_condition": "",
+    "probability_per_day": 0.04,
+    "mood_delta": 15,
+    "consequences": [],
+    "log_templates": [
+      "在一个咖啡馆和隔壁桌的人聊了起来，加了联系方式",
+      "同住一家青旅的旅友邀请一起逛夜市"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_brand_collab",
+    "label": "收到了一个品牌合作邀请",
+    "trigger_condition": "",
+    "probability_per_day": 0.03,
+    "mood_delta": 25,
+    "consequences": [],
+    "log_templates": [
+      "一个酒店品牌私信想合作推广，看了下条件还不错",
+      "旅游局邀请做一期推广，正好赶上现在的行程"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_rain",
+    "label": "旅途中遇到大雨",
+    "trigger_condition": "",
+    "probability_per_day": 0.05,
+    "mood_delta": -10,
+    "consequences": [],
+    "log_templates": [
+      "刚到景点就下起了大雨，只能在屋檐下等",
+      "没带伞，淋了一身跑到最近的一家便利店"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_viral_post",
+    "label": "发的旅行视频火了",
+    "trigger_condition": "",
+    "probability_per_day": 0.02,
+    "mood_delta": 30,
+    "consequences": [],
+    "log_templates": [
+      "昨天发的旅行vlog播放量直接翻了五倍，评论区炸了",
+      "一条随手拍的日落视频被好多人转发"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_home_sick",
+    "label": "突然有点想家",
+    "trigger_condition": "",
+    "probability_per_day": 0.04,
+    "mood_delta": -8,
+    "consequences": [],
+    "log_templates": [
+      "吃到一家味道很像家里的餐厅，突然想家了",
+      "看到别人家的窗户亮着灯，想起了家里的猫"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_hidden_gem",
+    "label": "发现了一个冷门宝藏地点",
+    "trigger_condition": "",
+    "probability_per_day": 0.04,
+    "mood_delta": 18,
+    "consequences": [],
+    "log_templates": [
+      "跟着当地人的推荐找到了一家隐藏的小店，好吃到哭",
+      "偏离了常规路线，发现了一个几乎没有游客的绝美角度"
+    ],
+    "applicable_styles": ["travel"]
+  },
+  {
+    "id": "travel_equipment_issue",
+    "label": "拍摄设备出了问题",
+    "trigger_condition": "",
+    "probability_per_day": 0.03,
+    "mood_delta": -15,
+    "consequences": [],
+    "log_templates": [
+      "相机存储卡突然满了，只好删了一些旧素材腾空间",
+      "充电宝没电了，手机只剩12%的电，赶紧找地方充电"
+    ],
+    "applicable_styles": ["travel"]
   }
 ]

@@ -5582,8 +5582,10 @@ class MainWindow(QMainWindow):
         # 检测工具调用中的图片结果，自动显示图片气泡
         import os
         for step in result.get("tool_steps", []):
-            if step.get("tool") == "generate_image" and step.get("result", {}).get("ok"):
-                img_path = step["result"].get("image_path", "")
+            tool_name = step.get("tool", "")
+            step_result = step.get("result") or {}
+            if tool_name in ("generate_image", "generate_image_comfy") and step_result.get("ok"):
+                img_path = step_result.get("image_path", "")
                 if img_path and os.path.isfile(img_path):
                     self.chat_page._show_image_bubble(img_path, is_user=False)
         # 更新状态栏

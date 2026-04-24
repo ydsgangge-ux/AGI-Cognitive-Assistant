@@ -1228,7 +1228,10 @@ def get_news_sources(country: str = "", language: str = "", category: str = "") 
 
 @register_tool(
     name="generate_image",
-    description="使用 pollinations.ai 生成图片。完全免费，无需 API Key。输入英文画面描述即可生成 AI 图片",
+    description=(
+        "在线生成图片（pollinations.ai），质量一般、速度慢（10-30秒）。"
+        "仅在 generate_image_comfy 不可用时作为备选。优先使用 generate_image_comfy。"
+    ),
     parameters={
         "prompt": {"type": "string", "description": "英文画面描述，如 'a cat sitting on a rainbow, digital art'", "required": True},
         "width": {"type": "integer", "description": "图片宽度（像素），默认 1024"},
@@ -1270,6 +1273,284 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, use_simli
             }
         else:
             return {"ok": False, "error": "图片生成或下载失败"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ═══════════════════════════════════════════════════
+# 图片生成工具（ComfyUI 本地后端，高质量 SDXL）
+# ═══════════════════════════════════════════════════
+
+_WORKFLOW_JSON = str(Path(__file__).parent.parent / "workflow_api.json")
+
+
+def _load_comfyui_config() -> dict:
+    """从 config.json 读取 ComfyUI 配置，未配置时使用默认值"""
+    try:
+        from desktop.config import load_config
+        cfg = load_config()
+    except Exception:
+        cfg = {}
+    return {
+        "url": cfg.get("comfyui_url", "http://127.0.0.1:8188"),
+        "output_dir": cfg.get("comfyui_output", ""),
+    }
+
+
+def _comfyui_url() -> str:
+    return _load_comfyui_config()["url"]
+
+
+def _comfyui_output_dir() -> str:
+    cfg = _load_comfyui_config()
+    if cfg["output_dir"]:
+        return cfg["output_dir"]
+    # 兜底：尝试常见路径
+    import sys
+    if sys.platform == "win32":
+        candidates = [r"D:\ComfyUI_windows_portable\ComfyUI\output",
+                       r"C:\ComfyUI_windows_portable\ComfyUI\output"]
+    else:
+        candidates = [str(Path.home() / "ComfyUI" / "output")]
+    for c in candidates:
+        if Path(c).is_dir():
+            return c
+    return candidates[0]
+
+
+def _parse_comfy_workflow() -> Optional[Dict]:
+    """
+    加载并解析 workflow_api.json，自动定位关键节点。
+    返回 dict: {positive_node_id, negative_node_id, sampler_node_id, seed_node_id, output_node_id, workflow}
+    """
+    try:
+        with open(_WORKFLOW_JSON, "r", encoding="utf-8") as f:
+            workflow = json.load(f)
+    except Exception as e:
+        print(f"[ComfyUI] 无法加载 workflow: {e}")
+        return None
+
+    # 自动定位 KSampler 节点
+    sampler_id = None
+    for nid, node in workflow.items():
+        if isinstance(node, dict) and node.get("class_type") in ("KSampler", "KSamplerAdvanced"):
+            sampler_id = nid
+            break
+
+    if not sampler_id:
+        print("[ComfyUI] workflow 中未找到 KSampler 节点")
+        return None
+
+    sampler_inputs = workflow[sampler_id].get("inputs", {})
+    positive_id = str(sampler_inputs.get("positive", [None])[0])
+    negative_id = str(sampler_inputs.get("negative", [None])[0])
+
+    # 找 SaveImage 节点（输出）
+    output_id = None
+    for nid, node in workflow.items():
+        if isinstance(node, dict) and node.get("class_type") == "SaveImage":
+            output_id = nid
+            break
+
+    return {
+        "positive_id": str(positive_id),
+        "negative_id": str(negative_id),
+        "sampler_id": sampler_id,
+        "output_id": output_id,
+        "workflow": workflow,
+    }
+
+
+def _check_comfyui_alive() -> bool:
+    """检查 ComfyUI 是否在线"""
+    try:
+        import requests
+        resp = requests.get(f"{_comfyui_url()}/system_stats", timeout=3)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
+    """
+    轮询 ComfyUI 等待生成完成。
+    返回输出图片的文件名（如 ComfyUI_00001_.png），超时返回 None。
+    """
+    import requests, time
+
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            resp = requests.get(f"{_comfyui_url()}/history/{prompt_id}", timeout=5)
+            if resp.status_code == 200:
+                history = resp.json()
+                if prompt_id in history:
+                    outputs = history[prompt_id].get("outputs", {})
+                    for node_id, node_out in outputs.items():
+                        if "images" in node_out and node_out["images"]:
+                            return node_out["images"][0].get("filename")
+        except Exception:
+            pass
+        time.sleep(2)
+
+    return None
+
+
+@register_tool(
+    name="generate_image_comfy",
+    description=(
+        "首选图片生成工具。使用本地 ComfyUI（SDXL Turbo）生成高质量写实图片，"
+        "5-10秒出图，1024x1024。适用于生成自拍、场景分享、写实风格画面。"
+        "当用户想看你的样子、环境、周围场景时优先使用此工具。"
+    ),
+    parameters={
+        "prompt": {
+            "type": "string",
+            "description": "英文画面描述，如 'a cat sitting on a rainbow, digital art, 8k'",
+            "required": True,
+        },
+        "negative_prompt": {
+            "type": "string",
+            "description": "负向提示词（排除内容），不填则使用 workflow 默认值",
+            "required": False,
+        },
+    },
+    risk="medium",
+)
+def generate_image_comfy(prompt: str, negative_prompt: str = "") -> Dict:
+    try:
+        import requests
+        import random
+        import shutil
+        from datetime import datetime
+        from engine.image_gen import get_image_dir
+
+        # 0. 注入穿着：SimLife 动态穿着优先，avatar_prompt 作为外貌参考补充
+        simlife_outfit_injected = False
+        try:
+            from engine.simlife_client import SimLifeClient, get_outfit_en_from_wardrobe
+            _sl = SimLifeClient()
+            character = _sl._read_character()
+            if character:
+                state = _sl.get_state(use_api=True) or _sl._read_file_state()
+                if state:
+                    current_scene = state.get("current_scene", "") or state.get("scene", "")
+                    outfit_en = get_outfit_en_from_wardrobe(character, current_scene)
+                    if outfit_en and outfit_en.lower() not in prompt.lower():
+                        prompt = f"{prompt}, wearing {outfit_en}"
+                        print(f"[ComfyUI] 已注入 SimLife 穿着({current_scene}): {outfit_en}")
+                        simlife_outfit_injected = True
+                    elif outfit_en:
+                        print(f"[ComfyUI] SimLife 穿着已存在于 prompt 中，跳过")
+                        simlife_outfit_injected = True
+                    else:
+                        print(f"[ComfyUI] SimLife wardrobe 中未找到场景 '{current_scene}' 对应穿着")
+        except Exception as e:
+            print(f"[ComfyUI] 注入 SimLife 穿着失败: {e}")
+
+        # avatar_prompt：仅作为外貌参考（SimLife 未提供穿着时才注入）
+        if not simlife_outfit_injected:
+            try:
+                from desktop.config import PERSONALITY_FILE
+                import json
+                if Path(PERSONALITY_FILE).exists():
+                    personality = json.loads(Path(PERSONALITY_FILE).read_text(encoding="utf-8"))
+                    avatar = personality.get("avatar_prompt", "").strip()
+                    if avatar and avatar.lower() not in prompt.lower():
+                        prompt = f"{avatar}, {prompt}"
+                        print(f"[ComfyUI] 已注入 avatar_prompt（外貌参考）: {avatar[:60]}...")
+                    elif avatar:
+                        print(f"[ComfyUI] avatar_prompt 已存在于 prompt 中，跳过注入")
+            except Exception as e:
+                print(f"[ComfyUI] 注入 avatar_prompt 失败: {e}")
+
+        # 0.6 注入旅行目的地信息（旅行博主模式下，添加当前所在城市的场景描述）
+        try:
+            from engine.simlife_client import SimLifeClient
+            _sl = SimLifeClient()
+            character = _sl._read_character()
+            if character:
+                ws = character.get("basic", {}).get("work_style", "")
+                if ws == "travel":
+                    from datetime import date
+                    plan = character.get("travel_plan", {})
+                    if plan and plan.get("enabled"):
+                        today = date.today()
+                        for dest in plan.get("destinations", []):
+                            start = dest.get("start_date", "")
+                            end = dest.get("end_date", "")
+                            if start and end:
+                                try:
+                                    if date.fromisoformat(start) <= today <= date.fromisoformat(end):
+                                        city_en = dest.get("city_en", dest.get("city", ""))
+                                        country = dest.get("country", "")
+                                        location_hint = f"in {city_en}"
+                                        if country:
+                                            location_hint = f"in {city_en}, {country}"
+                                        if location_hint.lower() not in prompt.lower():
+                                            prompt = f"{prompt}, {location_hint}"
+                                            print(f"[ComfyUI] 已注入旅行目的地: {location_hint}")
+                                        break
+                                except (ValueError, TypeError):
+                                    continue
+        except Exception as e:
+            print(f"[ComfyUI] 注入旅行目的地失败: {e}")
+
+        # 1. 解析 workflow
+        parsed = _parse_comfy_workflow()
+        if not parsed:
+            return {"ok": False, "error": "无法加载 workflow_api.json，请确认文件存在于项目根目录"}
+
+        workflow = parsed["workflow"]
+
+        # 2. 替换正向提示词
+        workflow[parsed["positive_id"]]["inputs"]["text"] = prompt
+
+        # 3. 替换负向提示词（如果提供了的话）
+        if negative_prompt.strip():
+            workflow[parsed["negative_id"]]["inputs"]["text"] = negative_prompt
+
+        # 4. 随机种子
+        workflow[parsed["sampler_id"]]["inputs"]["seed"] = random.randint(1, 10**12)
+
+        # 5. 发送任务到 ComfyUI
+        resp = requests.post(
+            f"{_comfyui_url()}/prompt",
+            json={"prompt": workflow},
+            timeout=10,
+        )
+        result = resp.json()
+
+        if "error" in result:
+            return {"ok": False, "error": f"ComfyUI 返回错误: {result['error'].get('message', result['error'])}"}
+
+        prompt_id = result.get("prompt_id")
+        if not prompt_id:
+            return {"ok": False, "error": "ComfyUI 未返回 prompt_id"}
+
+        # 6. 轮询等待生成完成（最多 120 秒）
+        output_filename = _wait_for_comfyui(prompt_id, timeout=120)
+        if not output_filename:
+            return {"ok": False, "error": "图片生成超时（120秒），ComfyUI 可能卡住了"}
+
+        # 7. 从 ComfyUI output 目录复制到 AGI 的 images 目录
+        comfy_output = Path(_comfyui_output_dir()) / output_filename
+        if not comfy_output.exists():
+            return {"ok": False, "error": f"生成完成但找不到图片: {comfy_output}"}
+
+        dest_dir = get_image_dir()
+        dest_path = dest_dir / f"comfy_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{output_filename}"
+        shutil.copy2(str(comfy_output), str(dest_path))
+
+        size_kb = dest_path.stat().st_size // 1024
+        print(f"[ComfyUI] 图片已保存: {dest_path} ({size_kb}KB)")
+        return {
+            "ok": True,
+            "image_path": str(dest_path),
+            "prompt": prompt,
+            "size": f"{size_kb}KB",
+            "message": f"ComfyUI 图片已生成并保存到: {dest_path} ({size_kb}KB)",
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

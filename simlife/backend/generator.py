@@ -1,6 +1,6 @@
 """
 AI 生成器 - 生成人物卡 + NPC卡 + Activity描述 + 事件队列
-支持多种工作模式：上班族 / 自由职业 / 学生
+支持多种工作模式：上班族 / 自由职业 / 学生 / 旅行博主
 """
 import json
 import sys
@@ -79,6 +79,8 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
         prompt = _build_freelance_prompt(name, age, city, occupation, personality, extra_context)
     elif work_style == "student":
         prompt = _build_student_prompt(name, age, city, occupation, personality, extra_context)
+    elif work_style == "travel":
+        prompt = _build_travel_prompt(name, age, city, occupation, personality, extra_context)
     else:
         prompt = _build_office_prompt(name, age, city, occupation, personality, extra_context)
 
@@ -111,8 +113,15 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
         if "work_end" not in card.get("daily_schedule", {}):
             card["daily_schedule"]["work_end"] = card["daily_schedule"].get("leave_work", "18:00")
         # 兼容旧数据：通勤信息
-        if work_style in ("freelance", "remote") and "commute" not in card:
+        if work_style in ("freelance", "remote", "travel") and "commute" not in card:
             card["commute"] = {"method": "", "line": "", "duration_minutes": 0}
+        # 旅行博主：确保有 travel_plan
+        if work_style == "travel" and "travel_plan" not in card:
+            card["travel_plan"] = {"enabled": True, "destinations": []}
+        # 兼容旧数据：wardrobe 缺少 travel 字段
+        if "travel" not in card.get("wardrobe", {}):
+            card.setdefault("wardrobe", {})["travel"] = "轻便旅行装"
+            card.setdefault("wardrobe", {})["travel_en"] = "lightweight travel outfit with backpack"
         # ── 自动生成生日：性格→星座→随机日期 ──
         if "birth_date" not in card.get("basic", {}) or not card["basic"].get("birth_date"):
             from .birthday_engine import auto_generate_birthday
@@ -424,6 +433,149 @@ def _build_student_prompt(name, age, city, occupation, personality, extra_contex
 只返回JSON，不要其他内容。所有地点必须是{city}真实存在的。wardrobe 要符合学生的性别和风格，不要生成过于成熟的职业装。"""
 
 
+def _build_travel_prompt(name, age, city, occupation, personality, extra_context):
+    """旅行博主生成模板"""
+    return f"""为一个名叫"{name}"的虚拟角色生成详细的人物设定卡。
+
+基本信息：
+- 年龄：{age}
+- 基地城市：{city}（旅行出发地和平时居住地）
+- 职业：{occupation}（旅行博主/旅游自媒体，常年全世界旅行拍视频）
+- 性格关键词：{personality}{extra_context}
+
+重要：这是一个旅行博主，生活节奏不固定，经常在不同城市和国家之间穿梭。
+没有固定公司，工作时间就是旅行和拍摄时间。{city}是她的基地城市，不旅行时住在那里。
+
+请生成以下信息，返回JSON格式：
+{{
+  "basic": {{
+    "age": {age},
+    "city": "{city}",
+    "district": "一个{city}真实的区名",
+    "occupation": "{occupation}",
+    "work_style": "travel",
+    "company_name": "",
+    "company_area": "",
+    "work_location_weights": {{"home": 20, "cafe": 10, "outdoor": 60, "studio": 10}}
+  }},
+  "home": {{
+    "type": "合理的户型（可能不大，因为大部分时间在外面）",
+    "description": "30字以内的住处描述，可以有点凌乱有生活感",
+    "has_roommate": false,
+    "pets": "如果有的话会更有趣，没有写空字符串"
+  }},
+  "family": {{
+    "parents_location": "一个合理的城市",
+    "contact_frequency": "合理的联系频率",
+    "notes": "家人对常年旅行这个职业的态度，一个小细节"
+  }},
+  "daily_schedule": {{
+    "wake_up": "合理的起床时间（旅行时可能比平时晚或早起赶行程）",
+    "leave_home": "09:00",
+    "arrive_work": "10:00",
+    "lunch_break_start": "12:00",
+    "lunch_break_end": "13:30",
+    "leave_work": "18:00",
+    "arrive_home": "19:00",
+    "sleep": "合理的睡觉时间",
+    "work_start": "10:00",
+    "work_end": "18:00"
+  }},
+  "commute": {{
+    "method": "",
+    "line": "",
+    "duration_minutes": 0
+  }},
+  "locations": {{
+    "home_address_hint": "一个{city}真实的路名附近",
+    "company_landmark": "",
+    "favorite_cafe": "常去的咖啡馆名",
+    "supermarket": "一个真实的超市名",
+    "park": "一个真实的公园名",
+    "weekend_hangout": "一个真实的商圈/街道名",
+    "frequent_outdoor_spots": "常去拍摄或取景的地方"
+  }},
+  "habits": {{
+    "morning_drink": "早上的饮品（旅途中可能是当地特色咖啡或茶）",
+    "lunch_style": "午餐习惯（旅行时喜欢尝试当地美食）",
+    "evening_routine": "晚上的放松方式（整理素材、剪辑视频）",
+    "weekend_morning": "不旅行时周末早上的习惯"
+  }},
+  "current_context": "最近在忙什么旅行项目，30字以内",
+  "pixel_appearance": {{
+    "hair_color": "#十六进制颜色",
+    "hair_style": "发型",
+    "default_outfit_color": "#十六进制颜色"
+  }},
+  "life_goals": [
+    {{"category": "事业", "description": "一个与{occupation}直接相关的目标（如粉丝量、去过多少国家、合作了多少品牌等）", "target_date": "", "progress": 0, "priority": 1}},
+    {{"category": "生活", "description": "一个个人生活目标（如学一门新语言、考潜水证、学冲浪等）", "target_date": "", "progress": 0, "priority": 2}},
+    {{"category": "健康", "description": "一个健康目标（旅行博主经常作息不规律，可能是调整作息等）", "target_date": "", "progress": 0, "priority": 3}},
+    {{"category": "旅行", "description": "一个旅行目标（如去南极、走完丝绸之路、自驾环游等）", "target_date": "", "progress": 0, "priority": 4}}
+  ],
+  "travel_plan": {{
+    "enabled": true,
+    "destinations": [
+      {{
+        "city": "一个真实的旅行目的地城市",
+        "city_en": "English city name",
+        "country": "国家名",
+        "start_date": "从明天开始的一个日期，格式YYYY-MM-DD",
+        "end_date": "4-7天后的日期，格式YYYY-MM-DD",
+        "spots": ["该城市3-5个真实景点名"],
+        "purpose": "这次旅行的目的（拍vlog、探店、体验文化等）",
+        "mood_bonus": 15
+      }},
+      {{
+        "city": "另一个不同的国家城市",
+        "city_en": "English city name",
+        "country": "国家名",
+        "start_date": "10-15天后的日期",
+        "end_date": "14-18天后的日期",
+        "spots": ["该城市3-5个真实景点名"],
+        "purpose": "旅行目的",
+        "mood_bonus": 18
+      }},
+      {{
+        "city": "第三个目的地",
+        "city_en": "English city name",
+        "country": "国家名",
+        "start_date": "20-25天后的日期",
+        "end_date": "24-30天后的日期",
+        "spots": ["该城市3-5个真实景点名"],
+        "purpose": "旅行目的",
+        "mood_bonus": 20
+      }}
+    ]
+  }},
+  "wardrobe": {{
+    "home": "在基地城市家穿的舒适衣物（中文描述）",
+    "work": "见品牌方或正式工作时的着装",
+    "casual": "出门闲逛的穿搭",
+    "outdoor": "旅行拍摄时的穿搭（防晒、舒适、便于活动）",
+    "formal": "品牌活动或正式场合的着装",
+    "sport": "运动健身的服装",
+    "sleep": "睡衣",
+    "travel": "旅行标志性穿搭（如带有摄影师风格：马甲+工装裤+运动鞋）",
+    "home_en": "English description for image generation",
+    "work_en": "English work outfit description",
+    "casual_en": "English casual outfit",
+    "outdoor_en": "English travel photography outfit with utility vest and cargo pants",
+    "formal_en": "English formal outfit",
+    "sport_en": "English sport outfit",
+    "sleep_en": "English sleepwear",
+    "travel_en": "English travel outfit with camera bag, utility vest, comfortable sneakers and sunglasses"
+  }}
+}}
+
+只返回JSON，不要其他内容。
+- 基地城市{city}的地点必须真实存在。
+- travel_plan 里的目的地城市和景点必须是真实存在的。
+- 日期从明天开始依次排列，每次旅行4-7天，之间间隔3-5天。
+- wardrobe 的 travel 穿搭要体现旅行博主特色（实用、便于拍摄、有辨识度）。
+- life_goals 要具体有趣，贴合旅行博主这个职业。"""
+
+
 def generate_npc_cards(character_card: dict) -> list:
     """根据主角人物卡生成 NPC 网络（根据工作模式调整）"""
     llm = get_llm_client()
@@ -715,6 +867,14 @@ def generate_activity_description(
             "OUTDOOR_WORKING": "在外面忙工作的事",
             "STUDIO_WORKING": "在工作室里忙碌",
             "OVERTIME": "还在加班",
+            # 旅行场景
+            "AIRPORT": "在机场候机",
+            "TOURING": "在景点拍素材",
+            "HOTEL": "在酒店整理照片",
+            "LOCAL_FOOD": "在吃当地美食",
+            "TRAIN_STATION": "在火车站等车",
+            "SCENIC_DRIVE": "坐在车上拍窗外风景",
+            "RESTAURANT_LOCAL": "在当地餐厅吃饭",
         }
         return defaults.get(scene, "在忙自己的事")
 
@@ -737,6 +897,8 @@ def generate_future_events(
         style_hint = "她是自由职业者，事件可能涉及找灵感、客户沟通、作品创作、自我提升等。"
     elif work_style == "student":
         style_hint = "她是学生，事件可能涉及考试、社团、作业、同学社交等。"
+    elif work_style == "travel":
+        style_hint = "她是旅行博主，事件可能涉及航班变化、拍摄素材、当地见闻、品牌合作、粉丝互动等。"
     else:
         style_hint = "她是上班族，事件可能涉及工作项目、同事关系、加班、通勤等。"
 

@@ -57,6 +57,14 @@ _SCENE_WARDROBE_MAP = {
     "STREET_WANDERING": "casual",
     "FRIEND_HANGOUT": "formal",
     "OVERTIME": "work",
+    # 旅行场景
+    "AIRPORT": "travel",
+    "TOURING": "travel",
+    "HOTEL": "home",
+    "LOCAL_FOOD": "casual",
+    "TRAIN_STATION": "travel",
+    "SCENIC_DRIVE": "travel",
+    "RESTAURANT_LOCAL": "casual",
 }
 
 
