@@ -24,8 +24,8 @@
 - **分层记忆系统** — SQLite + 向量检索，三级存储（大纲/细纲/片段）+ 关联网络 + 两阶段检索
 - **用户画像** — 逐步积累性格特征，检测异常行为，身份验证
 - **28 个内置工具** — 文件操作、系统控制、网页搜索、浏览器自动化、OCR、编程智能体、Office 文件、股票、新闻、**AI 图片生成**
-- **AI 图片生成** — 使用 pollinations.ai（免费，无需 API Key）自动生成人物自拍和周边风景；定时主动生成（约 3 小时间隔）；聊天气泡展示图片；人格绑定的头像提示词，支持 AI 自动生成
-- **SimLife 生活模拟** — 虚拟生活系统：实时场景引擎（工作/居家/通勤/外出）、每日事件、心情系统、NPC 互动、天气集成（Open-Meteo 免费）、节假日日历。随主程序自动启动，无需单独开服务器。首次使用通过内置 Web 界面初始化（`http://127.0.0.1:87659`）
+- **AI 图片生成** — 双后端：① pollinations.ai（免费，无需 API Key）自动生成；② **ComfyUI 本地生成**（SDXL/NoobAI 等模型，支持 LoRA，4 步极速出图）。支持动态穿着注入（SimLife 衣柜）、旅行场景注入、风格切换（二次元/写实）。自动配置工具 `setup_comfyui.py` 一键检测路径、端口、模型
+- **SimLife 生活模拟** — 虚拟生活系统：实时场景引擎（工作/居家/通勤/外出/旅游）、每日事件、心情系统、NPC 互动、天气集成（Open-Meteo 免费）、节假日日历、行程管理。随主程序自动启动，无需单独开服务器。首次使用通过内置 Web 界面初始化（`http://127.0.0.1:87659`）
 - **成长引擎** — 人格漂移 + 主动学习 + 体验认知（去重合并 + 活跃度衰减）— AGI 在对话中不断进化
 - **手机端 Web 客户端** — 内置 Web 服务（FastAPI），手机浏览器直接聊天，与桌面端共享同一个 Agent 实例和记忆
 - **主动对话** — AGI 自主发起话题，用户回复后完整记忆链存储（系统→用户→AI 三方合一）
@@ -82,6 +82,8 @@ agi_app/
 ├── server.py                # 手机端 Web 服务（FastAPI，共享 Agent 实例）
 ├── install.bat / install.sh # 一键安装脚本
 ├── launch.bat / launch.sh   # 启动脚本
+├── setup_comfyui.py         # ComfyUI 自动检测与配置工具
+├── workflow_api.json        # ComfyUI workflow（模型/LoRA/采样参数）
 ├── build.py                 # PyInstaller 打包脚本
 ├── requirements.txt         # Python 依赖
 │
@@ -210,9 +212,44 @@ agi_app/
 | **Office** | `create_word` · `create_excel` · `create_pptx` · `create_pdf` · `read_office_file` |
 | **金融** | `get_stock_info` · `search_stock` |
 | **新闻** | `get_news` · `get_news_sources` |
-| **图片** | `generate_image`（pollinations.ai，免费，无需 API Key） |
+| **图片** | `generate_image`（pollinations.ai，免费）· `generate_image_comfy`（ComfyUI 本地） |
 
 所有高风险工具（`run_command`、`run_python`）执行前需要用户明确确认。
+
+---
+
+## ComfyUI 本地图片生成
+
+支持通过本地 ComfyUI 生成高质量图片，适用于角色自拍、场景画面等。
+
+### 快速配置
+
+```bash
+# 1. 安装并启动 ComfyUI（https://github.com/comfyanonymous/ComfyUI）
+# 2. 下载模型到 ComfyUI/models/checkpoints/ 目录
+# 3. 双击运行自动配置工具
+python setup_comfyui.py
+```
+
+`setup_comfyui.py` 会自动检测：ComfyUI 安装路径、运行端口、可用模型、workflow 匹配，并让你选择生成风格（二次元/写实/无）。
+
+### 支持的模型
+
+不限制特定模型，`workflow_api.json` 就是标准 ComfyUI 导出格式。你可以在 ComfyUI 中搭建自己的 workflow 后导出替换。
+
+| 推荐 | 说明 |
+|------|------|
+| NoobAI + sdxl_lightning LoRA | 二次元动漫，4 步出图 |
+| SDXL Turbo | 写实风格，4 步出图 |
+| Flux / SD 1.5 / 其他 | 修改 workflow_api.json 即可 |
+
+### 智能注入
+
+出图时自动追加：
+1. **风格前缀** — 根据 config 中的 `comfyui_style` 追加（anime: `illustration, anime style, pixiv` / realistic: `photorealistic, 8k uhd`）
+2. **外貌特征** — avatar_prompt（五官、发型、体型）
+3. **动态穿着** — SimLife 衣柜根据当前场景/时间自动匹配
+4. **旅行场景** — 旅游博主模式下自动注入所在城市
 
 ---
 
@@ -312,8 +349,8 @@ python build.py linux     # → dist/AGI-Desktop
 | Linux/macOS | `~/.agi-desktop/` |
 
 核心文件：
-- `config.json` — 用户设置（API Key、快捷键等）
-- `personality.json` — 人格配置
+- `config.json` — 用户设置（API Key、快捷键、ComfyUI 配置等）
+- `personality.json` — 人格配置（含 avatar_prompt 外貌设定）
 - `memory.db` — SQLite 数据库（记忆/关联/用户画像/人脸/成长）
 
 ---
@@ -360,7 +397,7 @@ Python 3.14 暂不兼容 PyQt6-WebEngine，需使用 Python 3.12 或 3.13。VRM 
 - **浏览器**：Playwright（可选）
 - **金融**：yfinance
 - **文章**：newspaper3k
-- **图片**：pollinations.ai（免费 AI 图片生成）
+- **图片**：pollinations.ai（免费）/ ComfyUI（本地，可选）
 - **虚拟形象**：Three.js + three-vrm + PyQt6-WebEngine（可选）
 
 ---

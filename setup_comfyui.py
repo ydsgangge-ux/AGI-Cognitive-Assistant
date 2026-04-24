@@ -201,7 +201,7 @@ def check_workflow_model() -> str:
     return ""
 
 
-def save_config(comfyui_url: str, comfyui_output: str, comfyui_model: str = ""):
+def save_config(comfyui_url: str, comfyui_output: str, comfyui_model: str = "", comfyui_style: str = ""):
     """将 ComfyUI 配置写入 config.json"""
     cfg = {}
     if CONFIG_FILE.exists():
@@ -214,6 +214,10 @@ def save_config(comfyui_url: str, comfyui_output: str, comfyui_model: str = ""):
     cfg["comfyui_output"] = comfyui_output
     if comfyui_model:
         cfg["comfyui_model"] = comfyui_model
+    if comfyui_style:
+        cfg["comfyui_style"] = comfyui_style
+    else:
+        cfg.pop("comfyui_style", None)
 
     CONFIG_FILE.write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2),
@@ -311,23 +315,38 @@ def main():
     else:
         print_warn("无法读取 workflow_api.json")
 
-    # 7. 确定端口
-    print_header("第五步：确定连接端口")
+    # 8. 选择生成风格
+    print_header("第五步：选择生成风格")
+    print("  1. anime    - 二次元/动漫风格（追加 illustration, anime style, pixiv）")
+    print("  2. realistic - 写实/照片风格（追加 photorealistic, 8k uhd, dslr）")
+    print("  3. 无       - 不追加任何风格词")
+    try:
+        style_input = input("  请选择 (1/2/3，默认1): ").strip()
+        style_map = {"1": "anime", "2": "realistic", "3": "", "anime": "anime", "realistic": "realistic"}
+        comfyui_style = style_map.get(style_input, "anime")
+    except (ValueError, KeyboardInterrupt):
+        comfyui_style = "anime"
+    style_label = {"anime": "二次元", "realistic": "写实", "": "无"}.get(comfyui_style, "未知")
+    print_ok(f"生成风格: {style_label}")
+
+    # 9. 确定端口
+    print_header("第六步：确定连接端口")
     print_ok(f"端口: {port}")
     comfyui_url = f"http://127.0.0.1:{port}"
 
-    # 8. 保存配置
+    # 10. 保存配置
     print_header("保存配置")
     comfyui_model = ""
     if models and wf_model in [m["name"] for m in models]:
         comfyui_model = wf_model
 
-    save_config(comfyui_url, output_dir, comfyui_model)
+    save_config(comfyui_url, output_dir, comfyui_model, comfyui_style)
 
-    # 9. 最终确认
+    # 11. 最终确认
     print_header("配置完成!")
     print(f"  ComfyUI URL:    {comfyui_url}")
     print(f"  Output 目录:    {output_dir}")
+    print(f"  生成风格:       {style_label}")
     if comfyui_model:
         print(f"  使用模型:       {comfyui_model}")
     print()

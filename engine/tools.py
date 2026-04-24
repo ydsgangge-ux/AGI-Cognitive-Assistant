@@ -1294,7 +1294,21 @@ def _load_comfyui_config() -> dict:
     return {
         "url": cfg.get("comfyui_url", "http://127.0.0.1:8188"),
         "output_dir": cfg.get("comfyui_output", ""),
+        "style": cfg.get("comfyui_style", ""),
     }
+
+
+# 风格关键词预设（追加到 prompt 最前面，保证权重最高）
+_STYLE_PREFIX = {
+    "anime": "illustration, anime style, pixiv, high quality, detailed",
+    "realistic": "photorealistic, 8k uhd, dslr, soft lighting, high quality",
+}
+
+
+def _get_style_prefix() -> str:
+    """根据 config.json 的 comfyui_style 返回风格前缀"""
+    style = _load_comfyui_config()["style"]
+    return _STYLE_PREFIX.get(style, "")
 
 
 def _comfyui_url() -> str:
@@ -1399,14 +1413,14 @@ def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
 @register_tool(
     name="generate_image_comfy",
     description=(
-        "首选图片生成工具。使用本地 ComfyUI（SDXL Turbo）生成高质量写实图片，"
-        "5-10秒出图，1024x1024。适用于生成自拍、场景分享、写实风格画面。"
+        "首选图片生成工具。使用本地 ComfyUI 生成图片，"
+        "适用于生成自拍、场景分享、各种风格画面。"
         "当用户想看你的样子、环境、周围场景时优先使用此工具。"
     ),
     parameters={
         "prompt": {
             "type": "string",
-            "description": "英文画面描述，如 'a cat sitting on a rainbow, digital art, 8k'",
+            "description": "英文画面描述，使用逗号分隔的标签/关键词格式。人数用 1girl/1boy/2girls 等，构图用 solo/full body/upper body 等，服装外貌用具体描述如 white_shirt/black_dress/long_hair。示例: '1girl, solo, full body, long_hair, white_shirt, standing, indoors, cafe, warm_lighting'",
             "required": True,
         },
         "negative_prompt": {
@@ -1425,8 +1439,28 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "") -> Dict:
         from datetime import datetime
         from engine.image_gen import get_image_dir
 
-        # 0. 注入穿着：SimLife 动态穿着优先，avatar_prompt 作为外貌参考补充
-        simlife_outfit_injected = False
+        # 0. 注入风格前缀（anime/realistic，权重最高放最前）
+        style_prefix = _get_style_prefix()
+        if style_prefix:
+            prompt = f"{style_prefix}, {prompt}"
+            print(f"[ComfyUI] 已注入风格前缀: {style_prefix}")
+
+        # 0.5 注入 avatar_prompt（五官/发型/体型等外貌特征，始终注入）
+        try:
+            from desktop.config import PERSONALITY_FILE
+            import json
+            if Path(PERSONALITY_FILE).exists():
+                personality = json.loads(Path(PERSONALITY_FILE).read_text(encoding="utf-8"))
+                avatar = personality.get("avatar_prompt", "").strip()
+                if avatar and avatar.lower() not in prompt.lower():
+                    prompt = f"{avatar}, {prompt}"
+                    print(f"[ComfyUI] 已注入 avatar_prompt: {avatar[:60]}...")
+                elif avatar:
+                    print(f"[ComfyUI] avatar_prompt 已存在于 prompt 中，跳过注入")
+        except Exception as e:
+            print(f"[ComfyUI] 注入 avatar_prompt 失败: {e}")
+
+        # 0.6 注入 SimLife 动态穿着（追加在末尾，权重更高，自然覆盖 avatar 中的旧衣服）
         try:
             from engine.simlife_client import SimLifeClient, get_outfit_en_from_wardrobe
             _sl = SimLifeClient()
@@ -1439,30 +1473,12 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "") -> Dict:
                     if outfit_en and outfit_en.lower() not in prompt.lower():
                         prompt = f"{prompt}, wearing {outfit_en}"
                         print(f"[ComfyUI] 已注入 SimLife 穿着({current_scene}): {outfit_en}")
-                        simlife_outfit_injected = True
                     elif outfit_en:
                         print(f"[ComfyUI] SimLife 穿着已存在于 prompt 中，跳过")
-                        simlife_outfit_injected = True
                     else:
                         print(f"[ComfyUI] SimLife wardrobe 中未找到场景 '{current_scene}' 对应穿着")
         except Exception as e:
             print(f"[ComfyUI] 注入 SimLife 穿着失败: {e}")
-
-        # avatar_prompt：仅作为外貌参考（SimLife 未提供穿着时才注入）
-        if not simlife_outfit_injected:
-            try:
-                from desktop.config import PERSONALITY_FILE
-                import json
-                if Path(PERSONALITY_FILE).exists():
-                    personality = json.loads(Path(PERSONALITY_FILE).read_text(encoding="utf-8"))
-                    avatar = personality.get("avatar_prompt", "").strip()
-                    if avatar and avatar.lower() not in prompt.lower():
-                        prompt = f"{avatar}, {prompt}"
-                        print(f"[ComfyUI] 已注入 avatar_prompt（外貌参考）: {avatar[:60]}...")
-                    elif avatar:
-                        print(f"[ComfyUI] avatar_prompt 已存在于 prompt 中，跳过注入")
-            except Exception as e:
-                print(f"[ComfyUI] 注入 avatar_prompt 失败: {e}")
 
         # 0.6 注入旅行目的地信息（旅行博主模式下，添加当前所在城市的场景描述）
         try:
