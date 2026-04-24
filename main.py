@@ -378,6 +378,24 @@ class AGIApp:
             self.float_win.refresh_simlife_state()
 
     # ── 全局主动发言（主窗口/悬浮窗共享）────────────────
+    def _is_simlife_sleeping(self) -> bool:
+        """检查 SimLife 角色是否在睡觉（凌晨或 SLEEPING 场景）"""
+        # 凌晨 0:00-6:59 视为夜间，不主动打扰
+        hour = datetime.now().hour
+        if hour < 7:
+            return True
+        # 检查 SimLife 当前场景
+        if self.agent and self.agent.simlife:
+            try:
+                state = self.agent.simlife.get_state(use_api=True) or self.agent.simlife._read_file_state()
+                if state:
+                    scene = state.get("current_scene", "") or state.get("scene", "")
+                    if "SLEEPING" in scene:
+                        return True
+            except Exception:
+                pass
+        return False
+
     def _update_chat_time(self):
         """用户在任一窗口发消息时调用，重置空闲计时"""
         self._last_chat_time = time.time()
@@ -396,6 +414,10 @@ class AGIApp:
             return
         # 主窗口或悬浮窗至少有一个可见
         if not self.main_win.isVisible() and not self.float_win.isVisible():
+            return
+
+        # SimLife 睡觉时不主动发言
+        if self._is_simlife_sleeping():
             return
 
         # 每日上限5条
@@ -489,6 +511,10 @@ class AGIApp:
     def _check_image_gen(self):
         """定时检查是否该生成图片"""
         if not self.agent:
+            return
+
+        # SimLife 睡觉时不主动生图
+        if self._is_simlife_sleeping():
             return
 
         # 每日上限3张

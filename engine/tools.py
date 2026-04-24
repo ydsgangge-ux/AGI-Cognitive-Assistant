@@ -1416,6 +1416,8 @@ def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
         "首选图片生成工具。使用本地 ComfyUI 生成图片，"
         "适用于生成自拍、场景分享、各种风格画面。"
         "当用户想看你的样子、环境、周围场景时优先使用此工具。"
+        "注意：如果用户要求看风景、场景、环境，不要在 prompt 中添加人物，"
+        "同时将 no_human 参数设为 true。"
     ),
     parameters={
         "prompt": {
@@ -1428,10 +1430,15 @@ def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
             "description": "负向提示词（排除内容），不填则使用 workflow 默认值",
             "required": False,
         },
+        "no_human": {
+            "type": "boolean",
+            "description": "是否生成纯风景/静物图（不包含人物）。当用户要求看风景、景色、场景、环境、食物、物品时设为 true，此时不要在 prompt 中添加 1girl/1boy/solo 等人物标签",
+            "required": False,
+        },
     },
     risk="medium",
 )
-def generate_image_comfy(prompt: str, negative_prompt: str = "") -> Dict:
+def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool = False) -> Dict:
     try:
         import requests
         import random
@@ -1445,40 +1452,102 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "") -> Dict:
             prompt = f"{style_prefix}, {prompt}"
             print(f"[ComfyUI] 已注入风格前缀: {style_prefix}")
 
-        # 0.5 注入 avatar_prompt（五官/发型/体型等外貌特征，始终注入）
-        try:
-            from desktop.config import PERSONALITY_FILE
-            import json
-            if Path(PERSONALITY_FILE).exists():
-                personality = json.loads(Path(PERSONALITY_FILE).read_text(encoding="utf-8"))
-                avatar = personality.get("avatar_prompt", "").strip()
-                if avatar and avatar.lower() not in prompt.lower():
-                    prompt = f"{avatar}, {prompt}"
-                    print(f"[ComfyUI] 已注入 avatar_prompt: {avatar[:60]}...")
-                elif avatar:
-                    print(f"[ComfyUI] avatar_prompt 已存在于 prompt 中，跳过注入")
-        except Exception as e:
-            print(f"[ComfyUI] 注入 avatar_prompt 失败: {e}")
+        # 0.1 判断是否包含人物主体（纯风景/静物时不注入 avatar 和穿着）
+        prompt_lower = prompt.lower()
+        # no_human 参数优先（工具描述已引导 LLM 拍风景时设为 true）
+        if no_human:
+            has_person = False
+            # 从 prompt 中移除常见人物标签
+            import re as _re
+            _human_tags_remove = ("1girl", "1boy", "2girls", "2boys", "3girls", "3boys",
+                                  "solo", "girl", "boy", "woman", "man",
+                                  "selfie", "portrait", "looking at viewer")
+            for tag in _human_tags_remove:
+                prompt = _re.sub(rf'\b{_re.escape(tag)}\b\s*,?\s*', '', prompt, flags=_re.IGNORECASE)
+            prompt_lower = prompt.lower()
+            print(f"[ComfyUI] no_human=true，已清除人物标签")
+        else:
+            _person_indicators = (
+                # 人称
+                "1girl", "1boy", "2girls", "2boys", "3girls", "3boys",
+                "solo", "duo", "trio",
+                "girl", "boy", "woman", "man", "person", "people",
+                "child", "kid", "teen", "elder", "lady", "gentleman",
+                # 身体部位
+                "hair", "eye", "eyes", "face", "skin", "hand", "hands",
+                "smile", "expression", "lips", "mouth", "body",
+                # 动作/姿态
+                "sitting", "standing", "walking", "lying", "looking",
+                "selfie", "portrait", "upper body", "full body",
+                # 明确无人
+                "no humans",
+            )
+            has_person = any(tag in prompt_lower for tag in _person_indicators)
+            if "no humans" in prompt_lower:
+                has_person = False
 
-        # 0.6 注入 SimLife 动态穿着（追加在末尾，权重更高，自然覆盖 avatar 中的旧衣服）
-        try:
-            from engine.simlife_client import SimLifeClient, get_outfit_en_from_wardrobe
-            _sl = SimLifeClient()
-            character = _sl._read_character()
-            if character:
-                state = _sl.get_state(use_api=True) or _sl._read_file_state()
-                if state:
-                    current_scene = state.get("current_scene", "") or state.get("scene", "")
-                    outfit_en = get_outfit_en_from_wardrobe(character, current_scene)
-                    if outfit_en and outfit_en.lower() not in prompt.lower():
-                        prompt = f"{prompt}, wearing {outfit_en}"
-                        print(f"[ComfyUI] 已注入 SimLife 穿着({current_scene}): {outfit_en}")
-                    elif outfit_en:
-                        print(f"[ComfyUI] SimLife 穿着已存在于 prompt 中，跳过")
-                    else:
-                        print(f"[ComfyUI] SimLife wardrobe 中未找到场景 '{current_scene}' 对应穿着")
-        except Exception as e:
-            print(f"[ComfyUI] 注入 SimLife 穿着失败: {e}")
+        # 0.5 注入 avatar_prompt（五官/发型/体型，仅有人物时注入）
+        if has_person:
+            try:
+                from desktop.config import PERSONALITY_FILE
+                import json
+                if Path(PERSONALITY_FILE).exists():
+                    personality = json.loads(Path(PERSONALITY_FILE).read_text(encoding="utf-8"))
+                    avatar = personality.get("avatar_prompt", "").strip()
+                    if avatar and avatar.lower() not in prompt_lower:
+                        prompt = f"{avatar}, {prompt}"
+                        print(f"[ComfyUI] 已注入 avatar_prompt: {avatar[:60]}...")
+                    elif avatar:
+                        print(f"[ComfyUI] avatar_prompt 已存在于 prompt 中，跳过注入")
+            except Exception as e:
+                print(f"[ComfyUI] 注入 avatar_prompt 失败: {e}")
+        else:
+            print(f"[ComfyUI] 检测为风景/静物图，跳过 avatar 和穿着注入")
+
+        # 0.6 注入 SimLife 动态穿着（仅有人物时注入，追加末尾权重更高）
+        if has_person:
+            try:
+                from engine.simlife_client import SimLifeClient, get_outfit_en_from_wardrobe
+                _sl = SimLifeClient()
+                character = _sl._read_character()
+                if character:
+                    state = _sl.get_state(use_api=True) or _sl._read_file_state()
+                    if state:
+                        current_scene = state.get("current_scene", "") or state.get("scene", "")
+                        outfit_en = get_outfit_en_from_wardrobe(character, current_scene)
+                        if outfit_en and outfit_en.lower() not in prompt.lower():
+                            prompt = f"{prompt}, wearing {outfit_en}"
+                            print(f"[ComfyUI] 已注入 SimLife 穿着({current_scene}): {outfit_en}")
+                        elif outfit_en:
+                            print(f"[ComfyUI] SimLife 穿着已存在于 prompt 中，跳过")
+                        else:
+                            print(f"[ComfyUI] SimLife wardrobe 中未找到场景 '{current_scene}' 对应穿着")
+            except Exception as e:
+                print(f"[ComfyUI] 注入 SimLife 穿着失败: {e}")
+
+        # 0.7 随机姿势/拍摄角度（避免画面呆板，人物和风景各用不同的池）
+        _pose_angles_person = [
+            "hand on hip", "leaning forward", "arms crossed", "head tilt", "looking away",
+            "stretching", "adjusting hair", "hand resting on chin", "turning back",
+            "dynamic pose", "looking up", "looking down", "side glance",
+            "from side", "from above", "dutch angle", "over shoulder shot",
+            "cowboy shot", "headshot", "close-up on face",
+        ]
+        _pose_angles_scene = [
+            "wide angle", "bird eye view", "low angle shot", "aerial view",
+            "golden hour lighting", "rule of thirds", "dramatic sky",
+            "leading lines", "depth of field", "long shot", "panoramic",
+            "vibrant colors", "soft focus", "sunrise", "sunset glow",
+        ]
+        _pool = _pose_angles_person if has_person else _pose_angles_scene
+        _angle_blacklist = ("from above", "from below", "wide angle", "close-up", "low angle")
+        _has_angle = any(a in prompt_lower for a in _angle_blacklist)
+        if not _has_angle:
+            import random
+            _chosen = random.sample(_pool, min(2, len(_pool)))
+            _angle_str = ", ".join(_chosen)
+            prompt = f"{prompt}, {_angle_str}"
+            print(f"[ComfyUI] 已追加姿势/角度: {_angle_str}")
 
         # 0.6 注入旅行目的地信息（旅行博主模式下，添加当前所在城市的场景描述）
         try:
@@ -1518,6 +1587,33 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "") -> Dict:
             return {"ok": False, "error": "无法加载 workflow_api.json，请确认文件存在于项目根目录"}
 
         workflow = parsed["workflow"]
+
+        # 1.1 动态调整分辨率（人物竖屏 / 风景横屏 / 默认正方形）
+        _portrait_tags = (
+            "selfie", "portrait", "full body", "upper body", "headshot",
+            "cowboy shot", "bust shot", "standing",
+        )
+        _landscape_tags = (
+            "landscape", "scenery", "cityscape", "panorama", "panoramic",
+            "aerial view", "bird eye", "skyline", "horizon",
+            "mountain", "ocean", "sea", "river", "field", "forest",
+            "view from window", "sunset", "sunrise",
+        )
+        is_portrait = any(t in prompt_lower for t in _portrait_tags)
+        is_landscape = any(t in prompt_lower for t in _landscape_tags)
+        if is_portrait and not is_landscape:
+            _w, _h = 768, 1024
+        elif is_landscape and not is_portrait:
+            _w, _h = 1024, 768
+        else:
+            _w, _h = 832, 832
+        # 找 EmptyLatentImage 节点并修改分辨率
+        for nid, node in workflow.items():
+            if isinstance(node, dict) and node.get("class_type") == "EmptyLatentImage":
+                node["inputs"]["width"] = _w
+                node["inputs"]["height"] = _h
+                print(f"[ComfyUI] 分辨率: {_w}x{_h}")
+                break
 
         # 2. 替换正向提示词
         workflow[parsed["positive_id"]]["inputs"]["text"] = prompt
