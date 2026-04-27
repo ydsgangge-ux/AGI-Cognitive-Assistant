@@ -407,6 +407,12 @@ class AGIApp:
         if self._pending_proactive_msg and self.agent:
             self.agent._proactive_context = self._pending_proactive_msg
             self._pending_proactive_msg = None
+        # 更新用户最后活跃时间（用于离线消息计算）
+        try:
+            from simlife.offline_messages import _save_last_online
+            _save_last_online()
+        except Exception:
+            pass
 
     def _check_proactive(self):
         """每分钟检查是否该主动发言"""
@@ -761,6 +767,12 @@ class AGIApp:
 
     def _quit(self):
         self.hotkey.unregister_all()
+        # 退出时保存用户最后活跃时间（用于离线消息计算）
+        try:
+            from simlife.offline_messages import _save_last_online
+            _save_last_online()
+        except Exception:
+            pass
         self.app.quit()
 
     # ── 运行 ─────────────────────────────────────

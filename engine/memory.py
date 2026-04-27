@@ -167,6 +167,15 @@ class MemoryStore:
                 conn.execute("ALTER TABLE memories ADD COLUMN user_id TEXT DEFAULT 'default'")
                 conn.commit()
 
+        # 迁移：interactions 表添加 user_id 列 + 索引
+        with guarded_connect(self.db_path) as conn:
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(interactions)").fetchall()]
+            if "user_id" not in cols:
+                conn.execute("ALTER TABLE interactions ADD COLUMN user_id TEXT DEFAULT 'default'")
+                conn.commit()
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_user ON interactions(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_time ON interactions(timestamp)")
+
     def add(self, node: MemoryNode, user_id: str = "default") -> str:
         """添加记忆节点"""
         if not node.id:
@@ -279,6 +288,39 @@ class MemoryStore:
                 (*params, top_k)
             ).fetchall()
         return [self._row_to_node(r) for r in rows if r]
+
+    def log_interaction(
+        self,
+        user_input: str,
+        response: str,
+        user_id: str = "default",
+    ):
+        """记录每轮对话到 interactions 表（启动恢复用）"""
+        with guarded_connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO interactions (id, user_input, response, timestamp, user_id) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    str(uuid.uuid4())[:12],
+                    user_input[:2000],
+                    response[:2000],
+                    datetime.now().isoformat(),
+                    user_id,
+                )
+            )
+            conn.commit()
+
+    def get_recent_interactions(
+        self, limit: int = 10, user_id: str = "default"
+    ) -> List[tuple]:
+        """取最近 N 条对话记录（时间倒序），用于启动时恢复上下文"""
+        with guarded_connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT user_input, response FROM interactions "
+                "WHERE user_id=? ORDER BY timestamp DESC LIMIT ?",
+                (user_id, limit)
+            ).fetchall()
+        return rows
 
     def get_by_date_range(
         self,

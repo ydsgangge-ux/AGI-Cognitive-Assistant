@@ -168,6 +168,11 @@ class BasicInfo(BaseModel):
     work_location_weights: dict = Field(default_factory=lambda: {
         "home": 50, "cafe": 25, "outdoor": 15, "studio": 10
     })
+    # 外貌特征（用于图片生成时注入简短描述）
+    nationality: str = ""         # 国籍/种族，如 "chinese", "japanese", "korean"
+    hair_color: str = ""          # 发色，如 "black", "brown", "blonde"
+    eye_color: str = ""           # 眼睛颜色，如 "brown", "blue", "green"
+    body_type: str = ""           # 身材描述，如 "tall and slender", "petite", "average"
 
 
 class HomeInfo(BaseModel):

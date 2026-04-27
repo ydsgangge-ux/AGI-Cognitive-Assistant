@@ -174,10 +174,29 @@ class ConsciousnessAgent:
         except Exception:
             pass
 
+        # 启动时恢复最近 5 轮对话上下文
+        self._restore_recent_conversation()
+
     def _log(self, tag: str, content: str):
         if self.verbose:
             print(f"\n{'─'*50}")
             print(f"[A层·{tag}] {content}")
+
+    def _restore_recent_conversation(self):
+        """从 interactions 表恢复最近 5 轮对话到 conversation_history"""
+        try:
+            user_id = (self.auth.user_id if self.auth and self.auth.is_verified()
+                       else "default")
+            rows = self.memory.store.get_recent_interactions(limit=10, user_id=user_id)
+            for row in reversed(rows):  # 时间倒序→反转为正序
+                if row[0]:
+                    self.conversation_history.append({"role": "user", "content": row[0]})
+                if row[1]:
+                    self.conversation_history.append({"role": "assistant", "content": row[1]})
+            if self.conversation_history:
+                self._log("启动", f"已恢复 {len(self.conversation_history)} 条对话上下文")
+        except Exception:
+            pass  # 首次启动无数据，静默跳过
 
     def process(self, user_input: str) -> Dict[str, Any]:
         """完整交互流水线 v3"""
@@ -528,6 +547,12 @@ class ConsciousnessAgent:
         self.conversation_history.append({"role": "assistant", "content": response})
         if len(self.conversation_history) > HISTORY_STORE_LIMIT:
             self.conversation_history = self.conversation_history[-HISTORY_STORE_LIMIT:]
+
+        # 记录到 interactions 表（启动恢复用）
+        try:
+            self.memory.store.log_interaction(user_input, response, user_id=current_uid)
+        except Exception:
+            pass
 
         return {
             "id":               interaction_id,

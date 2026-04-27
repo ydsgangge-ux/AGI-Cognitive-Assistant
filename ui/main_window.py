@@ -4761,6 +4761,9 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self._tabs)
 
+        # 初始标签可见性（游客隐藏隐私标签）
+        self._update_tab_visibility()
+
     def _build_personality_page(self) -> QWidget:
         """表单式人格设定页（含说明 + 深层思维 + 滑块性格）"""
         from desktop.config import PERSONALITY_FILE
@@ -5342,6 +5345,18 @@ class MainWindow(QMainWindow):
             self._status_auth.setCursor(Qt.CursorShape.ArrowCursor)
             self.chat_page.add_ai_message(f"✅ 欢迎回来，{name}")
         self._update_personality_auth()
+        self._update_tab_visibility()
+
+    def _update_tab_visibility(self):
+        """根据认证状态控制隐私相关标签的显隐"""
+        from engine.auth import AuthState
+        verified = bool(
+            hasattr(self, '_auth') and self._auth and self._auth.is_verified()
+        )
+        # 记忆关联网络(7)、主动学习(8) 需要登录才能查看
+        if hasattr(self, '_tabs'):
+            self._tabs.setTabVisible(7, verified)
+            self._tabs.setTabVisible(8, verified)
 
     def _on_auth_click(self):
         if not hasattr(self, "_auth") or self._auth is None:
@@ -5362,6 +5377,7 @@ class MainWindow(QMainWindow):
                     "color:#f85149;font-size:11px;text-decoration:underline;")
                 self.chat_page.add_ai_message("🔒 已锁定，切换为游客模式。")
                 self._update_personality_auth()
+                self._update_tab_visibility()
             return
         self._show_unlock_dialog()
 

@@ -154,7 +154,11 @@ def _build_office_prompt(name, age, city, occupation, personality, extra_context
     "work_style": "office",
     "company_name": "一个合理的公司名",
     "company_area": "一个合理的商务区名",
-    "work_location_weights": {{"home": 0, "cafe": 0, "outdoor": 0, "studio": 0}}
+    "work_location_weights": {{"home": 0, "cafe": 0, "outdoor": 0, "studio": 0}},
+    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
+    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
+    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
+    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
   }},
   "home": {{
     "type": "合理的户型",
@@ -258,7 +262,11 @@ def _build_freelance_prompt(name, age, city, occupation, personality, extra_cont
       "cafe": "咖啡馆工作的频率权重（整数0-100）",
       "outdoor": "户外工作（拍摄/采访等）的频率权重（整数0-100）",
       "studio": "工作室的频率权重（整数0-100）"
-    }}
+    }},
+    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
+    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
+    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
+    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
   }},
   "home": {{
     "type": "合理的户型（自由职业者可能有一间书房或工作区）",
@@ -356,7 +364,11 @@ def _build_student_prompt(name, age, city, occupation, personality, extra_contex
     "work_style": "student",
     "company_name": "所在学校名",
     "company_area": "学校所在区域",
-    "work_location_weights": {{"home": 40, "cafe": 25, "outdoor": 5, "studio": 0}}
+    "work_location_weights": {{"home": 40, "cafe": 25, "outdoor": 5, "studio": 0}},
+    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
+    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
+    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
+    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
   }},
   "home": {{
     "type": "宿舍/出租屋",
@@ -456,7 +468,11 @@ def _build_travel_prompt(name, age, city, occupation, personality, extra_context
     "work_style": "travel",
     "company_name": "",
     "company_area": "",
-    "work_location_weights": {{"home": 20, "cafe": 10, "outdoor": 60, "studio": 10}}
+    "work_location_weights": {{"home": 20, "cafe": 10, "outdoor": 60, "studio": 10}},
+    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
+    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
+    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
+    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
   }},
   "home": {{
     "type": "合理的户型（可能不大，因为大部分时间在外面）",
