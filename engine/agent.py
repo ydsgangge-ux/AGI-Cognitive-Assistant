@@ -68,8 +68,13 @@ PERCEPTION_PROMPT = """你是{name}，你是一个有真实身体和生活的普
   "topic_tags": ["话题标签1", "话题标签2", "话题标签3"],
   "needs_deep_memory": true或false（是否需要从记忆中检索深层信息）,
   "task_type": "chat（普通对话）或 task（需要工具操作电脑/文件/网络的任务）",
-  "task_description": "如果是task，简述需要做什么"
+  "task_description": "如果是task，简述需要做什么",
+  "complexity": "simple 或 complex（simple=闲聊/简单问答/打招呼/感谢，直接回答即可；complex=需要深度推理/分析/多步思考/创作/代码/数学等）
 }}
+
+complexity 判断标准：
+- simple：打招呼、闲聊、感谢、简单事实问答（"你好""谢谢""几点了""今天星期几"）、简单翻译、单个词语解释
+- complex：需要推理分析的问题、创作、编程、数学计算、多步逻辑、需要工具的任务、涉及深层记忆的回溯
 
 只输出JSON，不要其他内容。"""
 
@@ -163,6 +168,7 @@ class ConsciousnessAgent:
         self.cognition   = cognition_store
         self.auth        = auth_manager       # 身份验证管理器
         self.simlife     = simlife_client     # SimLife 生活状态客户端
+        self._cfg        = {}                 # 延迟加载配置
         self.conversation_history: List[Dict] = []
         self.current_emotion = EmotionState()
         self._verify_pending = False
@@ -246,7 +252,8 @@ class ConsciousnessAgent:
         self._log(
             "感知",
             f"情绪={emotion.primary.value}({emotion.intensity:.2f}) | "
-            f"任务={task_type} | {perception.get('initial_thoughts','')}"
+            f"任务={task_type} | 复杂度={perception.get('complexity', '?')} | "
+            f"{perception.get('initial_thoughts','')}"
         )
 
         # ② 记忆检索（两阶段：大纲→定向展开）
@@ -333,10 +340,18 @@ class ConsciousnessAgent:
             f"涟漪{len(search_results.get('ripples',[]))}）"
         )
 
-        # ③ 推理
-        reasoning = self._reason(user_input, emotion, memory_context, task_type,
-                                 profile_context, current_uid=current_uid)
-        self._log("推理", reasoning.get("inner_reasoning", ""))
+        # ③ 推理（感知层决定是否需要深度思考）
+        thinking_mode = self._get_config("thinking_mode", "auto")  # auto / always_on / always_off
+        perception_complexity = perception.get("complexity", "complex")
+        reasoning = self._reason(
+            user_input, emotion, memory_context, task_type,
+            profile_context, current_uid=current_uid,
+            thinking_mode=thinking_mode,
+            complexity=perception_complexity,
+        )
+        did_think = self._should_think(thinking_mode, perception_complexity, task_type)
+        think_tag = "⏱️思考模式" if did_think else "⚡快速模式"
+        self._log("推理", f"{think_tag} | {reasoning.get('inner_reasoning', '')}")
 
         storage_decision = reasoning.get("storage_decision", {})
         need_tools = reasoning.get("need_tools", False) or task_type == "task"
@@ -405,7 +420,7 @@ class ConsciousnessAgent:
 
             exec_result = self.b.execute_task(
                 task=tool_task, context=context, use_tools=True,
-                max_tokens=_max_tokens
+                max_tokens=_max_tokens, user_input=user_input
             )
             tool_steps  = exec_result.get("steps", [])
             tools_used  = exec_result.get("tools_used", [])
@@ -646,7 +661,7 @@ class ConsciousnessAgent:
                     simlife_context=simlife_context,
                 )
                 self_perception = self.b.generate(
-                    prompt, max_tokens=150, temperature=0.7
+                    prompt, max_tokens=150, temperature=0.7, thinking=False
                 ).strip()
                 self._log("自我感知", self_perception[:200])
             except Exception as e:
@@ -661,7 +676,7 @@ class ConsciousnessAgent:
             personality=self.personality.to_prompt_description(),
             user_input=user_input
         )
-        raw = self.b.generate(prompt, max_tokens=500, temperature=0.4)
+        raw = self.b.generate(prompt, max_tokens=500, temperature=0.4, thinking=False)
         return self._parse_json(raw, {
             "emotion":          {"primary": "neutral", "intensity": 0.3, "valence": 0.0},
             "initial_thoughts": "",
@@ -671,8 +686,31 @@ class ConsciousnessAgent:
             "task_description": ""
         })
 
+    def _get_config(self, key, default=None):
+        """从配置文件读取值，带缓存"""
+        if not self._cfg:
+            try:
+                from desktop.config import load_config
+                self._cfg = load_config()
+            except Exception:
+                self._cfg = {}
+        return self._cfg.get(key, default)
+
+    @staticmethod
+    def _should_think(thinking_mode: str, complexity: str, task_type: str) -> bool:
+        """根据模式、感知复杂度和任务类型决定是否开启思考模式"""
+        if thinking_mode == "always_on":
+            return True
+        if thinking_mode == "always_off":
+            return False
+        # auto 模式：感知层 simple → 不思考，complex → 思考；task 类型强制思考
+        if task_type == "task":
+            return True
+        return complexity != "simple"
+
     def _reason(self, user_input, emotion, memory_context, task_type,
-                profile_context: str = "", current_uid: str = "default") -> Dict:
+                profile_context: str = "", current_uid: str = "default",
+                thinking_mode: str = "auto", complexity: str = "complex") -> Dict:
         emotion_desc = (
             f"{emotion.primary.value}（强度{emotion.intensity:.1f}，"
             f"{'正面' if emotion.valence > 0 else '负面' if emotion.valence < 0 else '中性'}）"
@@ -720,7 +758,8 @@ class ConsciousnessAgent:
             recent_context=recent_context,
             current_time=datetime.now().strftime("%Y年%m月%d日 %H:%M")
         )
-        raw = self.b.generate(prompt, max_tokens=800, temperature=0.5)
+        raw = self.b.generate(prompt, max_tokens=800, temperature=0.5,
+                             thinking=self._should_think(thinking_mode, complexity, task_type))
         return self._parse_json(raw, {
             "inner_reasoning":  "需要认真考虑",
             "response_intent":  "给出真实的回应",
@@ -770,7 +809,7 @@ class ConsciousnessAgent:
                 prompt = lang_inst + "\n\n" + prompt
         except Exception:
             pass
-        return self.b.generate(prompt, max_tokens=1200, temperature=0.75)
+        return self.b.generate(prompt, max_tokens=1200, temperature=0.75, thinking=False)
 
     def _parse_json(self, raw: str, fallback: Dict) -> Dict:
         try:
@@ -877,7 +916,7 @@ class ConsciousnessAgent:
 直接输出要说的话，或者null。"""
 
         try:
-            result = self.b.generate(prompt, max_tokens=100, temperature=1.0)
+            result = self.b.generate(prompt, max_tokens=100, temperature=1.0, thinking=False)
             result = result.strip()
             if not result or "null" in result.lower():
                 return None

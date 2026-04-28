@@ -196,6 +196,46 @@ else
     fi
 fi
 
+# websocket-client / sounddevice / SoundFile (语音识别 STT 依赖，可选)
+STT_OK=true
+if python3 -c "import websocket" 2>/dev/null; then
+    echo " [OK] websocket-client - already installed"
+else
+    echo " [..] websocket-client - installing..."
+    if python3 -m pip install websocket-client -q 2>/dev/null; then
+        echo " [OK] websocket-client - installed"
+    else
+        echo " [!!] websocket-client - FAILED"
+        STT_OK=false
+    fi
+fi
+
+if python3 -c "import sounddevice" 2>/dev/null; then
+    echo " [OK] sounddevice     - already installed"
+else
+    echo " [..] sounddevice     - installing..."
+    if python3 -m pip install sounddevice SoundFile -q 2>/dev/null; then
+        echo " [OK] sounddevice     - installed"
+    else
+        echo " [!!] sounddevice     - FAILED (STT 录音不可用，文件识别仍可用)"
+        STT_OK=false
+    fi
+fi
+
+# paho-mqtt (传感器模块 Sensor Agent 依赖，可选)
+SENSOR_OK=true
+if python3 -c "import paho.mqtt" 2>/dev/null; then
+    echo " [OK] paho-mqtt      - already installed"
+else
+    echo " [..] paho-mqtt      - installing..."
+    if python3 -m pip install paho-mqtt -q 2>/dev/null; then
+        echo " [OK] paho-mqtt      - installed"
+    else
+        echo " [!!] paho-mqtt      - FAILED (传感器模块将被禁用，不影响主程序)"
+        SENSOR_OK=false
+    fi
+fi
+
 # PyQt6-WebEngine (VRM 虚拟形象模块依赖，可选)
 if python3 -c "from PyQt6.QtWebEngineWidgets import QWebEngineView" 2>/dev/null; then
     echo " [OK] PyQt6-WebEngine - already installed"
@@ -219,6 +259,14 @@ fi
 if ! $TTS_OK; then
     echo " [WARN] edge-tts failed. Voice synthesis will be unavailable."
     echo "         Fix: pip install edge-tts"
+fi
+if ! $STT_OK; then
+    echo " [WARN] STT (speech-to-text) packages failed. Voice input will be unavailable."
+    echo "         Fix: pip install websocket-client sounddevice SoundFile"
+fi
+if ! $SENSOR_OK; then
+    echo " [WARN] paho-mqtt failed. Sensor module will be disabled."
+    echo "         Fix: pip install paho-mqtt"
 fi
 
 # Create launch script

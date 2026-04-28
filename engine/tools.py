@@ -1446,15 +1446,13 @@ def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
         "当用户想看你的样子、环境、周围场景时优先使用此工具。"
         "注意：如果用户要求看风景、场景、环境，不要在 prompt 中添加人物，"
         "同时将 no_human 参数设为 true。"
-        "关键规则：当用户明确给出提示词要求画图时（如'帮我画一个XXX''按这个提示词画图''生成图片sun, 1girl...'），"
-        "你必须在 prompt 最前面加上 [NO_INJECT] 标记（注意是 prompt 值的开头），"
-        "此时系统不会注入任何角色外貌、姿势等信息，完全按照用户的 prompt 生成。"
-        "当是你自己要拍照或拍风景时（如'让我看看你''拍张照'），不要加 [NO_INJECT]，让系统自动注入你的角色特征。"
+        "当用户明确点击工具面板画图（对话中包含工具名），系统会自动跳过角色特征注入。"
+        "当是你自己要拍照或拍风景时（如'让我看看你''拍张照'），直接生成 prompt 即可，系统会自动注入你的角色特征。"
     ),
     parameters={
         "prompt": {
             "type": "string",
-            "description": "英文画面描述，使用逗号分隔的标签/关键词格式。人数用 1girl/1boy/2girls 等，构图用 solo/full body/upper body 等，服装外貌用具体描述如 white_shirt/black_dress/long_hair。示例: '1girl, solo, full body, long_hair, white_shirt, standing, indoors, cafe, warm_lighting'。用户指定画图时必须在开头加 [NO_INJECT]，如 '[NO_INJECT] sun, 1girl, lens_flare...'",
+            "description": "英文画面描述，使用逗号分隔的标签/关键词格式。人数用 1girl/1boy/2girls 等，构图用 solo/full body/upper body 等，服装外貌用具体描述如 white_shirt/black_dress/long_hair。示例: '1girl, solo, full body, long_hair, white_shirt, standing, indoors, cafe, warm_lighting'",
             "required": True,
         },
         "negative_prompt": {
@@ -1489,11 +1487,20 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
         from datetime import datetime
         from engine.image_gen import get_image_dir
 
-        # 0.0 检测 [NO_INJECT] 标记（用户指定画图，跳过角色特征注入）
-        no_inject = prompt.strip().startswith("[NO_INJECT]")
+        # 0.0 判断是否跳过角色特征注入
+        # 策略：用户原始消息包含"generate_image_comfy"（点击工具面板）→ 跳过注入
+        #       其他情况（系统自主调用、自然对话触发）→ 注入角色特征
+        _raw_input = getattr(generate_image_comfy, '_user_raw_input', '') or ''
+        no_inject = 'generate_image_comfy' in _raw_input
+        # 兼容：LLM 也可能加 [NO_INJECT]，仅当用户消息也匹配时才生效
+        if not no_inject and prompt.strip().startswith("[NO_INJECT]"):
+            prompt = prompt.strip().replace("[NO_INJECT]", "").strip().lstrip(",").strip()
+            # LLM 单方面加的 [NO_INJECT]，用户消息没有工具名，忽略
         if no_inject:
             prompt = prompt.strip().replace("[NO_INJECT]", "").strip().lstrip(",").strip()
-            print(f"[ComfyUI] 检测到 [NO_INJECT] 标记，跳过角色特征注入")
+            print(f"[ComfyUI] 用户主动指定画图，跳过角色特征注入")
+        else:
+            print(f"[ComfyUI] 系统自主调用，将注入角色特征")
 
         # 0.0.1 风格冲突清理（anime ↔ realistic，两个模式都需要）
         _current_style = _load_comfyui_config()["style"]
@@ -2170,12 +2177,15 @@ def add_schedule(content: str, date: str, category: str = "personal", source: st
 # 工具执行入口
 # ═══════════════════════════════════════════════════
 
-def execute_tool(name: str, params: dict) -> Dict:
-    """执行指定工具，返回结果"""
+def execute_tool(name: str, params: dict, user_input: str = "") -> Dict:
+    """执行指定工具，返回结果。user_input 用于传递用户原始消息（供工具内部判断上下文）"""
     if name not in TOOL_REGISTRY:
         return {"ok": False, "error": f"工具 '{name}' 不存在"}
     try:
         func = TOOL_REGISTRY[name]["function"]
+        # 注入用户原始消息到函数属性，供 generate_image_comfy 等工具使用
+        if user_input and hasattr(func, '_user_raw_input') is not False:
+            func._user_raw_input = user_input
         result = func(**params)
         return result
     except TypeError as e:
@@ -2477,3 +2487,301 @@ def analyze_audio_tool(audio_path: str, question: str = "") -> Dict:
                 "tip": "音频分析需要 Gemini 等支持音频的模型，请在设置中配置多模态模型"}
     result = client.analyze(audio_path, question or "请转录并描述这个音频的内容。")
     return result
+
+
+# ═══════════════════════════════════════════════════
+# 语音识别工具（STT）
+# ═══════════════════════════════════════════════════
+
+@register_tool(
+    name="stt_tool",
+    description=(
+        "语音识别工具。将音频文件转成文字。"
+        "支持讯飞在线、DeepSeek Whisper、本地 Whisper 三种后端。"
+        "当用户发送语音消息或需要转录音频时使用。"
+    ),
+    parameters={
+        "audio_path": {"type": "string",
+                       "description": "音频文件路径（wav/mp3/m4a/ogg等），支持绝对路径和相对路径",
+                       "required": True},
+        "language":   {"type": "string",
+                       "description": "语言代码，默认 zh（中文）。支持 en、ja、ko 等"},
+    },
+    risk="low"
+)
+def stt_tool(audio_path: str, language: str = "zh") -> Dict:
+    """
+    语音识别：音频文件 → 文字
+    以工具插件形式运行，不修改 agent.py 主逻辑
+    """
+    try:
+        from engine.stt_engine import STTEngine
+        from desktop.config import load_config
+
+        cfg = load_config()
+        engine = STTEngine(cfg)
+        engine.language = language
+
+        if not engine.is_available():
+            return {
+                "ok": False,
+                "error": "语音识别不可用",
+                "tip": STTEngine.install_guide()
+            }
+
+        result = engine.recognize_file(audio_path)
+        return result
+
+    except Exception as e:
+        return {"ok": False, "error": f"语音识别异常: {e}"}
+
+
+@register_tool(
+    name="stt_record",
+    description=(
+        "录制一段语音并识别为文字。"
+        "会打开麦克风录制指定时长的音频，然后转成文字。"
+        "需要安装 sounddevice 或 pyaudio。"
+    ),
+    parameters={
+        "duration": {"type": "integer",
+                     "description": "录制时长（秒），默认 5 秒，最大 30 秒"},
+    },
+    risk="low"
+)
+def stt_record(duration: int = 5) -> Dict:
+    """
+    录音 + 语音识别
+    """
+    try:
+        duration = max(1, min(30, duration))
+
+        from engine.stt_engine import STTEngine, record_audio
+        from desktop.config import load_config
+
+        cfg = load_config()
+        engine = STTEngine(cfg)
+
+        if not engine.is_available():
+            return {
+                "ok": False,
+                "error": "语音识别不可用",
+                "tip": STTEngine.install_guide()
+            }
+
+        # 录制音频
+        audio_path = record_audio(duration=duration)
+        if not audio_path:
+            return {"ok": False, "error": "录音失败，请检查麦克风或安装 sounddevice: pip install sounddevice"}
+
+        # 识别
+        result = engine.recognize_file(audio_path)
+
+        # 清理临时文件
+        try:
+            os.unlink(audio_path)
+        except Exception:
+            pass
+
+        return result
+
+    except Exception as e:
+        return {"ok": False, "error": f"录音识别异常: {e}"}
+
+
+# ═══════════════════════════════════════════════════
+# 语音合成工具（TTS）
+# ═══════════════════════════════════════════════════
+
+@register_tool(
+    name="tts_tool",
+    description=(
+        "语音合成工具。将文字转成语音并播放。"
+        "使用微软 Edge TTS（高质量在线合成）或 pyttsx3（离线兜底）。"
+        "当需要将回复朗读出来时使用。"
+    ),
+    parameters={
+        "text":    {"type": "string", "description": "要朗读的文字", "required": True},
+        "voice":   {"type": "string", "description": "声音ID，如 zh-CN-XiaoxiaoNeural（默认），zh-CN-YunjianNeural（男声）"},
+        "save_to": {"type": "string", "description": "保存到文件路径（可选，不填则直接播放）"},
+    },
+    risk="low"
+)
+def tts_tool(text: str, voice: str = "", save_to: str = "") -> Dict:
+    """
+    语音合成：文字 → 语音播放/保存
+    复用现有 TTSEngine（edge-tts / pyttsx3）
+    """
+    try:
+        from engine.tts_engine import get_tts
+        import tempfile
+
+        tts = get_tts()
+
+        if not tts.is_available():
+            return {
+                "ok": False,
+                "error": "语音合成不可用",
+                "tip": tts.install_guide()
+            }
+
+        if voice:
+            tts.set_voice(voice)
+
+        if save_to:
+            # 保存到文件
+            import asyncio
+            try:
+                import edge_tts
+
+                async def _save():
+                    communicate = edge_tts.Communicate(text=text, voice=tts.voice)
+                    await communicate.save(save_to)
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(_save())
+                finally:
+                    loop.close()
+
+                size = os.path.getsize(save_to) if os.path.exists(save_to) else 0
+                return {"ok": True, "saved_to": save_to, "size_bytes": size}
+            except Exception as e:
+                return {"ok": False, "error": f"保存失败: {e}"}
+        else:
+            # 异步播放（不阻塞工具调用）
+            result_holder = {"done": False, "ok": False, "error": ""}
+            done_event = threading.Event()
+
+            def _on_done():
+                result_holder["done"] = True
+                result_holder["ok"] = True
+                done_event.set()
+
+            def _on_error(err):
+                result_holder["error"] = err
+                done_event.set()
+
+            tts.speak(text, on_done=_on_done, on_error=_on_error)
+
+            # 等待播放开始（最多等 2 秒）
+            done_event.wait(timeout=2)
+
+            return {
+                "ok": True,
+                "message": f"语音合成已开始播放（{tts.get_backend_name()}）",
+                "text_preview": text[:100],
+                "backend": tts.get_backend_name()
+            }
+
+    except Exception as e:
+        return {"ok": False, "error": f"语音合成异常: {e}"}
+
+
+# ═══════════════════════════════════════════════════
+# 传感器数据工具（Sensor Agent）
+# ═══════════════════════════════════════════════════
+
+@register_tool(
+    name="sensor_status",
+    description=(
+        "查询机器人/机器狗的传感器状态。"
+        "返回电量、温度、姿态、速度、障碍物距离等数据的自然语言描述。"
+        "当需要了解机器人当前物理状态时使用。"
+        "无硬件时使用模拟数据。"
+    ),
+    parameters={
+        "detailed": {"type": "boolean",
+                     "description": "是否返回详细数据（JSON），默认 false 返回文字摘要"},
+    },
+    risk="low"
+)
+def sensor_status(detailed: bool = False) -> Dict:
+    """
+    查询传感器状态
+    以工具插件形式运行，不修改 agent.py 主逻辑
+    """
+    try:
+        from engine.sensor_agent import get_sensor_agent
+        from desktop.config import load_config
+
+        cfg = load_config()
+        agent = get_sensor_agent(cfg)
+
+        if not agent.is_available():
+            return {"ok": False, "error": "传感器模块未启用"}
+
+        if detailed:
+            data = agent.get_all_sensors()
+            # 截断过大的数据
+            data_str = json.dumps(data, ensure_ascii=False, default=str)
+            if len(data_str) > 5000:
+                data_str = data_str[:5000] + "...(已截断)"
+            return {
+                "ok": True,
+                "data": json.loads(data_str),
+                "formatted": agent.get_status_text()
+            }
+        else:
+            return {
+                "ok": True,
+                "status_text": agent.get_status_text(),
+                "source": "模拟" if agent.mock_mode else "硬件"
+            }
+
+    except Exception as e:
+        return {"ok": False, "error": f"传感器查询异常: {e}"}
+
+
+@register_tool(
+    name="sensor_command",
+    description=(
+        "向机器人/机器狗发送控制指令。"
+        "支持行走、坐下、站立、停止、转向等基本动作。"
+    ),
+    parameters={
+        "command": {"type": "string",
+                    "description": "控制指令：walk/sit/stand/stop/turn_left/turn_right/speed_up/speed_down",
+                    "required": True},
+        "params":  {"type": "string",
+                    "description": "附加参数（JSON 格式），如 {\"speed\": 0.5, \"duration\": 3}"},
+    },
+    risk="medium"
+)
+def sensor_command(command: str, params: str = "") -> Dict:
+    """
+    发送控制指令到机器人
+    """
+    try:
+        from engine.sensor_agent import get_sensor_agent
+        from desktop.config import load_config
+
+        cfg = load_config()
+        agent = get_sensor_agent(cfg)
+
+        if not agent.is_available():
+            return {"ok": False, "error": "传感器模块未启用"}
+
+        param_dict = {}
+        if params:
+            try:
+                param_dict = json.loads(params)
+            except Exception:
+                return {"ok": False, "error": "params 必须是有效的 JSON 格式"}
+
+        result = agent.send_command(command, param_dict)
+        return result
+
+    except Exception as e:
+        return {"ok": False, "error": f"指令发送异常: {e}"}
+
+
+# 更新工具依赖清单
+TOOL_DEPS.update({
+    "stt_tool":     ["websocket-client"],     # 讯飞
+    "stt_record":   ["sounddevice"],           # 录音
+    "tts_tool":     ["edge_tts", "pyttsx3"],   # 已在 requirements.txt
+    "sensor_status": ["paho.mqtt"],            # MQTT
+    "sensor_command": ["paho.mqtt"],           # MQTT
+})

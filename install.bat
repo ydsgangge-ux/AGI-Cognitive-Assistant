@@ -287,6 +287,55 @@ if errorlevel 1 (
     echo   [OK] pydantic         - already installed
 )
 
+::: websocket-client / sounddevice / SoundFile (语音识别 STT 依赖，可选)
+set "STT_OK=1"
+%PYTHON_CMD% -c "import websocket" >nul 2>&1
+if errorlevel 1 (
+    echo   [..] websocket-client - installing...
+    %PYTHON_CMD% -m pip install websocket-client --quiet 2>nul
+    %PYTHON_CMD% -c "import websocket" >nul 2>&1
+    if errorlevel 1 (
+        echo   [!!] websocket-client - FAILED
+        set "STT_OK=0"
+    ) else (
+        echo   [OK] websocket-client - installed
+    )
+) else (
+    echo   [OK] websocket-client - already installed
+)
+
+%PYTHON_CMD% -c "import sounddevice" >nul 2>&1
+if errorlevel 1 (
+    echo   [..] sounddevice     - installing...
+    %PYTHON_CMD% -m pip install sounddevice SoundFile --quiet 2>nul
+    %PYTHON_CMD% -c "import sounddevice" >nul 2>&1
+    if errorlevel 1 (
+        echo   [!!] sounddevice     - FAILED (STT 录音不可用，文件识别仍可用)
+        set "STT_OK=0"
+    ) else (
+        echo   [OK] sounddevice     - installed
+    )
+) else (
+    echo   [OK] sounddevice     - already installed
+)
+
+::: paho-mqtt (传感器模块 Sensor Agent 依赖，可选)
+set "SENSOR_OK=1"
+%PYTHON_CMD% -c "import paho.mqtt" >nul 2>&1
+if errorlevel 1 (
+    echo   [..] paho-mqtt      - installing...
+    %PYTHON_CMD% -m pip install paho-mqtt --quiet 2>nul
+    %PYTHON_CMD% -c "import paho.mqtt" >nul 2>&1
+    if errorlevel 1 (
+        echo   [!!] paho-mqtt      - FAILED (传感器模块将被禁用，不影响主程序)
+        set "SENSOR_OK=0"
+    ) else (
+        echo   [OK] paho-mqtt      - installed
+    )
+) else (
+    echo   [OK] paho-mqtt      - already installed
+)
+
 ::: PyQt6-WebEngine (VRM 虚拟形象模块依赖，可选)
 set "VRM_OK=1"
 %PYTHON_CMD% -c "from PyQt6.QtWebEngineWidgets import QWebEngineView" >nul 2>&1
@@ -315,6 +364,14 @@ if "%OFFICE_OK%"=="1" (
 if "%TTS_OK%"=="0" (
     echo   [WARN] edge-tts failed. Voice synthesis will be unavailable.
     echo         Fix: pip install edge-tts
+)
+if "%STT_OK%"=="0" (
+    echo   [WARN] STT (speech-to-text) packages failed. Voice input will be unavailable.
+    echo         Fix: pip install websocket-client sounddevice SoundFile
+)
+if "%SENSOR_OK%"=="0" (
+    echo   [WARN] paho-mqtt failed. Sensor module will be disabled.
+    echo         Fix: pip install paho-mqtt
 )
 
 :: ---- 4. Verify PyQt6 ----

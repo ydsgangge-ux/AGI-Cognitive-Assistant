@@ -45,3 +45,16 @@ PyJWT>=2.8.0
 
 # News tools (optional - requires API key from newsapi.org)
 # newsapi-python>=0.2.7
+
+# Voice dialog - Speech recognition (STT)
+websocket-client>=1.6.0
+sounddevice>=0.4.6
+
+# Voice dialog - Audio recording (cross-platform)
+SoundFile>=0.10.3
+
+# Sensor agent - Robot communication (optional)
+paho-mqtt>=2.0.0
+
+# Sensor agent - Serial communication (optional, for robot SDK)
+# pyserial>=3.5

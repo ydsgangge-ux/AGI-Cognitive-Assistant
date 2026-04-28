@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QScrollArea, QFrame, QStatusBar,
     QSizePolicy, QApplication, QFileDialog,
     QGridLayout, QSpacerItem, QMessageBox,
-    QTextBrowser, QProgressBar
+    QTextBrowser, QProgressBar, QSpinBox
 )
 
 from desktop.config import APP_NAME, load_config, save_config, DARK_QSS
@@ -1714,6 +1714,223 @@ class SettingsPage(QWidget):
         tts_status_lbl.setStyleSheet(f"color:{tts_status_color};font-size:11px;")
         tts_lay.addWidget(tts_status_lbl, 3, 1)
 
+        # ── 思考模式（Thinking Mode）──
+        think_box = QGroupBox("🧠 思考模式（Thinking Mode）")
+        think_lay = QGridLayout(think_box)
+
+        think_desc = QLabel(
+            "让模型在推理阶段进行深度思考，提升回答质量。\n"
+            "自动模式：感知层判断问题简单就跳过思考，复杂才深度推理。\n"
+            "不支持思考的厂商（Groq/百度/讯飞/Ollama）会自动忽略。"
+        )
+        think_desc.setStyleSheet("color:#8b949e;font-size:11px;")
+        think_desc.setWordWrap(True)
+        think_lay.addWidget(think_desc, 0, 0, 1, 2)
+
+        think_lay.addWidget(QLabel("思考模式："), 1, 0)
+        self._thinking_mode = QComboBox()
+        self._thinking_mode.setStyleSheet(COMBO_STYLE)
+        self._thinking_mode.addItem("自动（推荐）— 感知层判断简单/复杂", "auto")
+        self._thinking_mode.addItem("始终开启 — 所有推理都深度思考", "always_on")
+        self._thinking_mode.addItem("始终关闭 — 追求速度", "always_off")
+        saved_mode = self._cfg.get("thinking_mode", "auto")
+        for i in range(self._thinking_mode.count()):
+            if self._thinking_mode.itemData(i) == saved_mode:
+                self._thinking_mode.setCurrentIndex(i); break
+        think_lay.addWidget(self._thinking_mode, 1, 1)
+
+        think_lay.addWidget(QLabel("思考深度："), 2, 0)
+        self._thinking_effort = QComboBox()
+        self._thinking_effort.setStyleSheet(COMBO_STYLE)
+        self._thinking_effort.addItem("低（Low）", "low")
+        self._thinking_effort.addItem("中（Medium）", "medium")
+        self._thinking_effort.addItem("高（High）", "high")
+        self._thinking_effort.addItem("最大（Max）", "max")
+        saved_effort = self._cfg.get("thinking_effort", "high")
+        for i in range(self._thinking_effort.count()):
+            if self._thinking_effort.itemData(i) == saved_effort:
+                self._thinking_effort.setCurrentIndex(i); break
+        think_lay.addWidget(self._thinking_effort, 2, 1)
+
+        think_lay.addWidget(QLabel("思考预算："), 3, 0)
+        budget_row = QHBoxLayout()
+        self._thinking_budget = QSpinBox()
+        self._thinking_budget.setRange(1024, 32768)
+        self._thinking_budget.setSingleStep(1024)
+        self._thinking_budget.setValue(self._cfg.get("thinking_budget", 8000))
+        self._thinking_budget.setSuffix(" tokens")
+        self._thinking_budget.setStyleSheet(
+            "QSpinBox{background:#21262d;border:1px solid #30363d;"
+            "border-radius:5px;padding:5px 8px;color:#e6edf3;}"
+        )
+        budget_row.addWidget(self._thinking_budget)
+        budget_lbl = QLabel("（Claude/Gemini/通义/智谱用，DeepSeek/OpenAI 忽略）")
+        budget_lbl.setStyleSheet("color:#8b949e;font-size:11px;")
+        budget_row.addWidget(budget_lbl)
+        budget_row.addStretch()
+        think_lay.addLayout(budget_row, 3, 1)
+
+        # ── 语音识别（STT）──
+        stt_box = QGroupBox("🎤 语音识别（STT）")
+        stt_lay = QGridLayout(stt_box)
+
+        stt_desc = QLabel(
+            "语音输入功能。将麦克风录音转成文字发送给 AI。\n"
+            "选择识别引擎，配置对应的参数。"
+        )
+        stt_desc.setStyleSheet("color:#8b949e;font-size:11px;")
+        stt_desc.setWordWrap(True)
+        stt_lay.addWidget(stt_desc, 0, 0, 1, 2)
+
+        # STT Provider 选择
+        stt_lay.addWidget(QLabel("识别引擎："), 1, 0)
+        self._stt_provider = QComboBox()
+        self._stt_provider.setStyleSheet(COMBO_STYLE)
+        self._stt_provider.addItem("DeepSeek Whisper（在线，复用主 API Key）", "deepseek")
+        self._stt_provider.addItem("讯飞语音识别（在线，中文最优）", "xunfei")
+        self._stt_provider.addItem("本地 Whisper（离线，需下载模型）", "whisper_local")
+        saved_stt = self._cfg.get("stt_provider", "deepseek")
+        for i in range(self._stt_provider.count()):
+            if self._stt_provider.itemData(i) == saved_stt:
+                self._stt_provider.setCurrentIndex(i); break
+        self._stt_provider.currentIndexChanged.connect(self._on_stt_provider_changed)
+        stt_lay.addWidget(self._stt_provider, 1, 1)
+
+        # 讯飞凭证区域（默认隐藏）
+        self._stt_xunfei_widget = QWidget()
+        xunfei_lay = QGridLayout(self._stt_xunfei_widget)
+        xunfei_lay.setContentsMargins(0, 0, 0, 0)
+
+        xunfei_lay.addWidget(QLabel("APPID："), 0, 0)
+        self._xunfei_app_id = QLineEdit(self._cfg.get("xunfei_app_id", ""))
+        self._xunfei_app_id.setPlaceholderText("讯飞开放平台 APPID")
+        xunfei_lay.addWidget(self._xunfei_app_id, 0, 1)
+
+        xunfei_lay.addWidget(QLabel("API Key："), 1, 0)
+        self._xunfei_api_key = QLineEdit(self._cfg.get("xunfei_api_key", ""))
+        self._xunfei_api_key.setPlaceholderText("讯飞 API Key")
+        xunfei_lay.addWidget(self._xunfei_api_key, 1, 1)
+
+        xunfei_lay.addWidget(QLabel("API Secret："), 2, 0)
+        self._xunfei_api_secret = QLineEdit(self._cfg.get("xunfei_api_secret", ""))
+        self._xunfei_api_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self._xunfei_api_secret.setPlaceholderText("讯飞 API Secret")
+        xunfei_lay.addWidget(self._xunfei_api_secret, 2, 1)
+
+        xunfei_link = QLabel('<a href="https://www.xfyun.cn/services/voicedictation" style="color:#58a6ff;">免费申请讯飞语音 API →</a>')
+        xunfei_link.setOpenExternalLinks(True)
+        xunfei_link.setStyleSheet("font-size:11px;")
+        xunfei_lay.addWidget(xunfei_link, 3, 1)
+
+        stt_lay.addWidget(self._stt_xunfei_widget, 2, 0, 1, 2)
+
+        # 本地 Whisper 模型选择（默认隐藏）
+        self._stt_whisper_widget = QWidget()
+        whisper_lay = QHBoxLayout(self._stt_whisper_widget)
+        whisper_lay.setContentsMargins(0, 0, 0, 0)
+        whisper_lay.addWidget(QLabel("模型："))
+        self._whisper_model = QComboBox()
+        self._whisper_model.setStyleSheet(COMBO_STYLE)
+        for m in ["tiny", "base", "small", "medium", "large"]:
+            size_info = {"tiny": "~39MB", "base": "~74MB", "small": "~244MB",
+                         "medium": "~769MB", "large": "~1.5GB"}.get(m, "")
+            self._whisper_model.addItem(f"{m} ({size_info})", m)
+        saved_model = self._cfg.get("whisper_model", "base")
+        for i in range(self._whisper_model.count()):
+            if self._whisper_model.itemData(i) == saved_model:
+                self._whisper_model.setCurrentIndex(i); break
+        whisper_lay.addWidget(self._whisper_model)
+        whisper_lay.addStretch()
+        stt_lay.addWidget(self._stt_whisper_widget, 3, 0, 1, 2)
+
+        # STT 状态检测
+        try:
+            import sounddevice
+            stt_status = "✅ sounddevice 已安装（录音可用）"
+            stt_status_color = "#3fb950"
+        except ImportError:
+            stt_status = "⚠️ 未安装 sounddevice，运行：pip install sounddevice SoundFile"
+            stt_status_color = "#d29922"
+        stt_status_lbl = QLabel(stt_status)
+        stt_status_lbl.setStyleSheet(f"color:{stt_status_color};font-size:11px;")
+        stt_lay.addWidget(stt_status_lbl, 4, 1)
+
+        # 初始化讯飞/Whisper 区域的可见性
+        self._on_stt_provider_changed(self._stt_provider.currentIndex())
+
+        # ── 传感器模块（Sensor Agent）──
+        sensor_box = QGroupBox("🤖 传感器模块（Sensor Agent）")
+        sensor_lay = QGridLayout(sensor_box)
+
+        sensor_desc = QLabel(
+            "对接机器狗/机器人硬件传感器。\n"
+            "无硬件时可开启模拟模式测试功能。"
+        )
+        sensor_desc.setStyleSheet("color:#8b949e;font-size:11px;")
+        sensor_desc.setWordWrap(True)
+        sensor_lay.addWidget(sensor_desc, 0, 0, 1, 2)
+
+        sensor_lay.addWidget(QLabel("启用传感器："), 1, 0)
+        self._sensor_enable = QCheckBox("启用传感器模块")
+        self._sensor_enable.setChecked(self._cfg.get("sensor_enabled", False))
+        sensor_lay.addWidget(self._sensor_enable, 1, 1)
+
+        sensor_lay.addWidget(QLabel("模拟模式："), 2, 0)
+        self._sensor_mock = QCheckBox("使用模拟数据（无硬件时）")
+        self._sensor_mock.setChecked(self._cfg.get("sensor_mock", True))
+        sensor_lay.addWidget(self._sensor_mock, 2, 1)
+
+        sensor_lay.addWidget(QLabel("设备类型："), 3, 0)
+        self._sensor_type = QComboBox()
+        self._sensor_type.setStyleSheet(COMBO_STYLE)
+        self._sensor_type.addItem("机器狗", "robot_dog")
+        self._sensor_type.addItem("机械臂", "robot_arm")
+        self._sensor_type.addItem("自定义", "custom")
+        saved_stype = self._cfg.get("sensor_type", "robot_dog")
+        for i in range(self._sensor_type.count()):
+            if self._sensor_type.itemData(i) == saved_stype:
+                self._sensor_type.setCurrentIndex(i); break
+        sensor_lay.addWidget(self._sensor_type, 3, 1)
+
+        sensor_lay.addWidget(QLabel("MQTT 地址："), 4, 0)
+        mqtt_row = QHBoxLayout()
+        self._sensor_mqtt_host = QLineEdit(self._cfg.get("sensor_mqtt_host", "localhost"))
+        self._sensor_mqtt_host.setPlaceholderText("localhost")
+        self._sensor_mqtt_host.setMaximumWidth(180)
+        mqtt_row.addWidget(self._sensor_mqtt_host)
+        mqtt_row.addWidget(QLabel("端口："))
+        self._sensor_mqtt_port = QLineEdit(str(self._cfg.get("sensor_mqtt_port", 1883)))
+        self._sensor_mqtt_port.setMaximumWidth(80)
+        mqtt_row.addWidget(self._sensor_mqtt_port)
+        mqtt_row.addStretch()
+        sensor_lay.addLayout(mqtt_row, 4, 1)
+
+        sensor_lay.addWidget(QLabel("推送间隔："), 5, 0)
+        interval_row = QHBoxLayout()
+        self._sensor_interval = QSpinBox()
+        self._sensor_interval.setRange(5, 300)
+        self._sensor_interval.setValue(self._cfg.get("sensor_push_interval", 30))
+        self._sensor_interval.setSuffix(" 秒")
+        self._sensor_interval.setStyleSheet(
+            "QSpinBox{background:#21262d;border:1px solid #30363d;"
+            "border-radius:5px;padding:5px 8px;color:#e6edf3;}"
+        )
+        interval_row.addWidget(self._sensor_interval)
+        interval_row.addStretch()
+        sensor_lay.addLayout(interval_row, 5, 1)
+
+        # MQTT 状态检测
+        try:
+            import paho.mqtt
+            sensor_status = "✅ paho-mqtt 已安装"
+            sensor_status_color = "#3fb950"
+        except ImportError:
+            sensor_status = "⚠️ 未安装 paho-mqtt，运行：pip install paho-mqtt"
+            sensor_status_color = "#d29922"
+        sensor_status_lbl = QLabel(sensor_status)
+        sensor_status_lbl.setStyleSheet(f"color:{sensor_status_color};font-size:11px;")
+        sensor_lay.addWidget(sensor_status_lbl, 6, 1)
+
         # 新闻 API（NewsAPI）
         news_box = QGroupBox("📰 新闻 API（NewsAPI）")
         news_lay = QGridLayout(news_box)
@@ -1746,6 +1963,9 @@ class SettingsPage(QWidget):
         layout.addWidget(hotkey_box)
         layout.addWidget(win_box)
         layout.addWidget(tts_box)
+        layout.addWidget(think_box)
+        layout.addWidget(stt_box)
+        layout.addWidget(sensor_box)
         layout.addWidget(news_box)
         layout.addWidget(ocr_box)
         layout.addWidget(btn_save)
@@ -1844,6 +2064,12 @@ class SettingsPage(QWidget):
             self._ollama_status.setText("❌ Not running. Run: ollama serve")
             self._ollama_status.setStyleSheet("font-size:11px;color:#f85149;")
 
+    def _on_stt_provider_changed(self, idx: int):
+        """切换 STT 引擎时显示/隐藏对应的配置区域"""
+        provider = self._stt_provider.itemData(idx) or "deepseek"
+        self._stt_xunfei_widget.setVisible(provider == "xunfei")
+        self._stt_whisper_widget.setVisible(provider == "whisper_local")
+
     def _toggle_autostart(self, state):
         from desktop.system import AutoStart
         if state == Qt.CheckState.Checked.value:
@@ -1868,7 +2094,24 @@ class SettingsPage(QWidget):
         self._cfg["tts_enabled"]       = self._tts_enable.isChecked()
         self._cfg["tts_voice"]         = self._tts_voice.currentData()
         self._cfg["tts_rate"]          = self._tts_rate.value()
-        self._cfg["ocr_language"]      = self._ocr_lang.text().strip()
+        # STT 语音识别
+        self._cfg["stt_provider"]      = self._stt_provider.currentData() or "deepseek"
+        self._cfg["xunfei_app_id"]     = self._xunfei_app_id.text().strip()
+        self._cfg["xunfei_api_key"]    = self._xunfei_api_key.text().strip()
+        self._cfg["xunfei_api_secret"] = self._xunfei_api_secret.text().strip()
+        self._cfg["whisper_model"]     = self._whisper_model.currentData() or "base"
+        # 传感器模块
+        self._cfg["sensor_enabled"]    = self._sensor_enable.isChecked()
+        self._cfg["sensor_mock"]       = self._sensor_mock.isChecked()
+        self._cfg["sensor_type"]       = self._sensor_type.currentData() or "robot_dog"
+        self._cfg["sensor_mqtt_host"]  = self._sensor_mqtt_host.text().strip()
+        self._cfg["sensor_mqtt_port"]  = int(self._sensor_mqtt_port.text() or 1883)
+        self._cfg["sensor_push_interval"] = self._sensor_interval.value()
+        # 思考模式
+        self._cfg["thinking_mode"]     = self._thinking_mode.currentData() or "auto"
+        self._cfg["thinking_effort"]   = self._thinking_effort.currentData() or "high"
+        self._cfg["thinking_budget"]   = self._thinking_budget.value()
+        # OCR      = self._ocr_lang.text().strip()
         self._cfg["newsapi_key"]       = self._newsapi_key.text().strip()
         # 多模态 Vision 配置
         self._cfg["vision_provider"]   = self._vision_provider.currentData() or ""

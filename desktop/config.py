@@ -48,6 +48,24 @@ DEFAULT_CONFIG = {
     "vrm_enabled":       True,   # 是否启用 VRM 虚拟形象面板
     "vrm_width":         220,    # VRM 面板宽度 (px)
     "vrm_height":        220,    # VRM 面板高度 (px)
+    # ── 语音识别（STT）──
+    "stt_provider":      "deepseek",  # "deepseek" | "xunfei" | "whisper_local"
+    "stt_language":      "zh",        # 识别语言
+    "xunfei_app_id":     "",          # 讯飞开放平台 APPID
+    "xunfei_api_key":    "",          # 讯飞 API Key
+    "xunfei_api_secret": "",          # 讯飞 API Secret
+    "whisper_model":     "base",      # 本地 Whisper 模型：tiny/base/small/medium/large
+    # ── 传感器模块（Sensor Agent）──
+    "sensor_enabled":    False,  # 是否启用传感器模块
+    "sensor_mock":       True,   # 模拟模式（无硬件时使用模拟数据）
+    "sensor_type":       "robot_dog",  # "robot_dog" | "robot_arm" | "custom"
+    "sensor_mqtt_host":  "localhost",
+    "sensor_mqtt_port":  1883,
+    "sensor_push_interval": 30,  # 推送间隔（秒）
+    # ── 思考模式（Thinking Mode）──
+    "thinking_mode":      "auto",  # "auto" / "always_on" / "always_off"
+    "thinking_effort":    "high", # 思考深度：low/medium/high/max
+    "thinking_budget":    8000,   # 思考 token 预算（Claude/Gemini/通义/智谱）
 }
 
 
