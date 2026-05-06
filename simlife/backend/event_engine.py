@@ -12,6 +12,10 @@ EVENT_LIB_PATH = Path(__file__).parent.parent / "data" / "event_library.json"
 SCHEDULED_PATH = Path(__file__).parent.parent / "data" / "scheduled_events.json"
 HISTORY_PATH = Path(__file__).parent.parent / "data" / "event_history.json"
 
+# 每日事件缓存：{date_str: {events: [...], date: str}}
+# 每天只 roll 一次概率，缓存命中事件及其分配的触发时间
+_daily_event_cache: Dict[str, dict] = {}
+
 
 def load_event_library() -> List[dict]:
     """加载预设事件库"""
@@ -316,9 +320,15 @@ def check_daily_micro_events(
     层一：日常微变化。根据当天种子决定是否触发微小事件。
     每次调用只返回0-1个事件（或不返回）。
     覆盖全部 15 个场景，每个场景 4-18 条模板。
+    睡眠时段(0:00-6:59)不触发微事件。
     """
     now = datetime.now()
     hour = now.hour
+
+    # 睡眠时段不触发
+    if hour < 7:
+        return None
+
     rng = random.Random(today_seed + hash(scene) + hour * 7)
 
     if rng.random() > 0.35:
@@ -336,6 +346,71 @@ def check_daily_micro_events(
     return evt
 
 
+def _refresh_daily_event_cache(
+    character_card: dict,
+    today_seed: int,
+) -> dict:
+    """
+    每天只 roll 一次概率，为命中事件分配触发时间，缓存结果。
+    确定性：同一天同一种子 + 同一角色 = 相同结果。
+    """
+    global _daily_event_cache
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+
+    if today_str in _daily_event_cache:
+        return _daily_event_cache[today_str]
+
+    # 清理旧缓存
+    _daily_event_cache = {k: v for k, v in _daily_event_cache.items() if k == today_str}
+
+    library = load_event_library()
+    is_weekday = now.weekday() < 5
+    current_style = character_card.get("basic", {}).get("work_style", "office")
+
+    scheduled_events = []
+    rng = random.Random(today_seed)
+
+    for evt in library:
+        # ── 过滤：生活模式 ──
+        evt_styles = evt.get("applicable_styles", [])
+        if evt_styles and current_style not in evt_styles:
+            continue
+
+        # ── 过滤：触发条件 ──
+        cond = evt.get("trigger_condition", "")
+        if "weekday" in cond and not is_weekday:
+            continue
+
+        # ── 过滤：适用时段 ──
+        hours = evt.get("applicable_hours", [7, 23])
+        hour_start, hour_end = hours[0], min(hours[1], 23)
+
+        # ── 概率判定 ──
+        prob = evt.get("probability_per_day", 0.02)
+        if rng.random() < prob:
+            start_min = hour_start * 60
+            end_min = hour_end * 60
+            trigger_minute = rng.randint(start_min, end_min)
+
+            templates = evt.get("log_templates", [evt.get("label", "")])
+            scheduled_events.append({
+                "id": evt["id"],
+                "trigger_minute": trigger_minute,
+                "label": rng.choice(templates),
+                "mood_delta": evt.get("mood_delta", 0),
+                "consequences": evt.get("consequences", []),
+                "source": "random",
+                "needs_commute_scene": "commute_to_work" in cond,
+            })
+
+    _daily_event_cache[today_str] = {
+        "date": today_str,
+        "events": scheduled_events,
+    }
+    return _daily_event_cache[today_str]
+
+
 def check_random_events(
     character_card: dict,
     scene: str,
@@ -346,44 +421,30 @@ def check_random_events(
 ) -> Optional[dict]:
     """
     层三：随机突发事件。低概率，影响大。
-    加入时间因素作为种子的一部分，避免启动时一次性全部触发。
+    每天只 roll 一次概率（通过缓存），按分配的时间窗口触发。
+    一天大约触发 1~3 个随机事件，不会刷屏。
     """
-    library = load_event_library()
     now = now or datetime.now()
-    is_weekday = now.weekday() < 5
+    current_minute = now.hour * 60 + now.minute
 
-    eligible = []
-    for evt in library:
-        # 检查是否已经触发过
+    # 获取今日缓存（首次调用时自动生成）
+    cache = _refresh_daily_event_cache(character_card, today_seed)
+
+    # 遍历缓存事件，找到当前时间应该触发的
+    for evt in cache["events"]:
         if evt["id"] in already_triggered:
             continue
-        # 检查触发条件
-        cond = evt.get("trigger_condition", "")
-        if "weekday" in cond and not is_weekday:
+        # 通勤事件需要场景匹配
+        if evt.get("needs_commute_scene") and scene != "COMMUTE_TO_WORK":
             continue
-        if "commute_to_work" in cond and scene != "COMMUTE_TO_WORK":
-            continue
-        eligible.append(evt)
-
-    if not eligible:
-        return None
-
-    # 种子包含日期+小时+分钟，不同时间触发不同事件，不会一次性全触发
-    time_salt = now.hour * 60 + now.minute
-    rng = random.Random(today_seed + time_salt)
-    for evt in eligible:
-        prob = evt.get("probability_per_day", 0.02)
-        if rng.random() < prob:
-            # 从日志模板中随机选一条
-            templates = evt.get("log_templates", [evt.get("label", "")])
-            result = {
+        if current_minute >= evt["trigger_minute"]:
+            return {
                 "id": evt["id"],
-                "label": rng.choice(templates),
-                "mood_delta": evt.get("mood_delta", 0),
-                "consequences": evt.get("consequences", []),
+                "label": evt["label"],
+                "mood_delta": evt["mood_delta"],
+                "consequences": evt["consequences"],
                 "source": "random",
             }
-            return result
 
     return None
 
