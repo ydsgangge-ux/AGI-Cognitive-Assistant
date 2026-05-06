@@ -44,6 +44,26 @@ from simlife.backend.world_engine import get_holiday_info, get_festive_log_entry
 from simlife.backend.birthday_engine import (
     check_birthdays_today, get_birthday_mood,
 )
+from simlife.backend.life_arc_engine import LifeArc
+
+# ── 故事NPC卡司（非现代世界） ────────────────────────────────
+STORY_CAST_FILE = DATA_DIR / "story_cast.json"
+
+
+def _load_story_cast() -> list:
+    if STORY_CAST_FILE.exists():
+        try:
+            with open(STORY_CAST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_story_cast(cast: list):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(STORY_CAST_FILE, "w", encoding="utf-8") as f:
+        json.dump(cast, f, ensure_ascii=False, indent=2)
 
 # ── 全局状态 ───────────────────────────────────────────
 character_card: Optional[CharacterCard] = None
@@ -51,6 +71,9 @@ world_state: Optional[WorldState] = None
 agidpa_reader: Optional[AGIDPAReader] = None
 weather_service: Optional[WeatherService] = None
 last_tick_scene: Optional[str] = None
+last_tick_time: float = 0  # 上次 tick 时间戳，用于节流
+current_world_id: str = "modern"  # 当前世界观
+TICK_THROTTLE_SECONDS = 60  # tick 节流间隔（秒）
 
 # ── App ───────────────────────────────────────────────
 app = FastAPI(title="SimLife", version="1.0.0")
@@ -113,12 +136,215 @@ def _get_work_style_safe() -> str:
     return ws
 
 
-def _tick():
-    """核心时钟：计算当前场景、检查事件、更新状态"""
-    global character_card, world_state, agidpa_reader, last_tick_scene
+def _is_non_modern_world() -> bool:
+    """检查当前是否为非现代世界"""
+    try:
+        from simlife.worlds.world_manager import get_current_world_id
+        global current_world_id
+        current_world_id = get_current_world_id()
+        return current_world_id != "modern"
+    except Exception:
+        return False
+
+
+def _get_arc_summary() -> Optional[dict]:
+    """获取当前主线的摘要信息，供 API 返回"""
+    try:
+        from simlife.backend.life_arc_engine import load_life_arc
+        arc = load_life_arc()
+        if not arc:
+            return None
+        return {
+            "title": arc.title,
+            "description": arc.description,
+            "progress_percent": arc.progress_percent,
+            "current_stage": arc.current_stage.name if arc.current_stage else None,
+            "current_stage_desc": arc.current_stage.description if arc.current_stage else None,
+            "stages_completed": arc.stages_completed,
+            "total_stages": arc.total_stages,
+            "days_elapsed": arc.days_elapsed,
+            "duration_days": arc.duration_days,
+            "stages": [
+                {"name": s.name, "status": s.status, "duration_days": s.duration_days}
+                for s in arc.stages
+            ],
+        }
+    except Exception:
+        return None
+
+
+def _tick_non_modern():
+    """非现代世界的 tick：人生大纲模式
+    - 主线（LifeArc）：月级别目标，分阶段推进
+    - 每天：根据当前主线阶段生成计划
+    - 每次 tick：按时间推进计划节点
+    - 非现代世界不使用 event_library / npc_cards / scheduled_events / weather
+    """
+    global character_card, world_state, last_tick_scene, current_world_id
 
     if not character_card or not world_state:
         return
+
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+
+    # ── 主线管理 ──
+    from simlife.backend.life_arc_engine import (
+        load_life_arc, save_life_arc, advance_arc, get_stage_hint,
+        archive_life_arc,
+    )
+
+    arc = load_life_arc()
+
+    # 没有主线或主线已完成 → 生成新的
+    if not arc or arc.completed:
+        if arc:
+            archive_life_arc(arc)
+            print(f"[SimLife] 主线「{arc.title}」已完成，已归档")
+        try:
+            from simlife.backend.generator import generate_life_arc
+            arc_data = generate_life_arc(character_card.model_dump())
+            arc = LifeArc(arc_data)
+            save_life_arc(arc)
+            print(f"[SimLife] 新主线「{arc.title}」（{arc.total_stages} 个阶段，共 {arc.duration_days} 天）")
+        except Exception as e:
+            print(f"[SimLife] 主线生成失败: {e}")
+            arc = None
+
+    # 推进主线阶段（基于天数自动推进）
+    arc_hint = ""
+    if arc:
+        changed = advance_arc(arc)
+        if changed:
+            save_life_arc(arc)
+            if arc.completed:
+                stage_name = "全部完成"
+            else:
+                stage_name = arc.current_stage.name if arc.current_stage else "?"
+            print(f"[SimLife] 主线推进 → {stage_name}")
+        arc_hint = get_stage_hint(arc)
+
+    # ── NPC卡司管理 ──
+    story_cast = _load_story_cast()
+    if not story_cast:
+        try:
+            from simlife.backend.generator import generate_story_cast
+            story_cast = generate_story_cast(character_card.model_dump())
+            _save_story_cast(story_cast)
+            cast_names = [c["name"] for c in story_cast]
+            print(f"[SimLife] 已生成NPC卡司：{'、'.join(cast_names)}")
+        except Exception as e:
+            print(f"[SimLife] NPC卡司生成失败: {e}")
+            story_cast = []
+
+    # ── 新的一天：生成全天计划 ──
+    if world_state.today_date != today or not world_state.day_plan:
+        world_state.today_date = today
+        world_state.day_plan_progress = 0
+
+        yesterday_summary = ""
+        if world_state.today_log:
+            yesterday_summary = "；".join([l.event for l in world_state.today_log[-5:]])
+
+        world_state.today_log = []
+        world_state.today_events_triggered = []
+
+        try:
+            from simlife.backend.generator import generate_day_plan
+            plan = generate_day_plan(
+                character_card.model_dump(),
+                mood=world_state.mood,
+                yesterday_summary=yesterday_summary,
+                arc_hint=arc_hint,
+                cast=story_cast,
+            )
+            world_state.day_plan = plan
+            print(f"[SimLife] 已生成全天计划（{len(plan)} 个节点）")
+        except Exception as e:
+            print(f"[SimLife] 全天计划生成失败: {e}")
+            world_state.day_plan = []
+
+    # ── 推进计划节点 ──
+    plan = world_state.day_plan or []
+    if not plan:
+        world_state.last_updated = now.isoformat()
+        _save_world_state(world_state)
+        return
+
+    # 用户在场景中时冻结推进
+    user_in_scene = False
+    try:
+        profile = _load_user_profile()
+        if profile.get("entered"):
+            user_in_scene = True
+    except Exception:
+        pass
+
+    if user_in_scene:
+        world_state.last_updated = now.isoformat()
+        _save_world_state(world_state)
+        return
+
+    # 找到当前时间应该推进到的节点
+    progress = world_state.day_plan_progress
+    new_progress = progress
+
+    for i in range(progress, len(plan)):
+        node = plan[i]
+        node_time = node.get("time", "23:59")
+        if current_time >= node_time:
+            label = node.get("label", "")
+            activity = node.get("activity", "")
+            mood_delta = node.get("mood_delta", 0)
+            new_scene = node.get("scene", "日常")
+
+            if new_scene != world_state.current_scene or label:
+                world_state.today_log.append(LogEntry(time=node_time, event=f"→ {label}"))
+
+            if activity:
+                world_state.today_log.append(LogEntry(time=node_time, event=activity))
+
+            world_state.current_scene = new_scene
+            world_state.current_activity = activity
+            world_state.mood = max(0, min(100, world_state.mood + mood_delta))
+            last_tick_scene = world_state.current_scene
+
+            new_progress = i + 1
+        else:
+            break
+
+    if new_progress != progress:
+        world_state.day_plan_progress = new_progress
+
+    # 限制日志数量
+    if len(world_state.today_log) > 50:
+        world_state.today_log = world_state.today_log[-50:]
+
+    world_state.last_updated = now.isoformat()
+    _save_world_state(world_state)
+
+
+def _tick():
+    """核心时钟：计算当前场景、检查事件、更新状态"""
+    global character_card, world_state, agidpa_reader, last_tick_scene, last_tick_time
+
+    if not character_card or not world_state:
+        return
+
+    # 节流：60秒内不重复执行
+    import time as _time
+    now_ts = _time.time()
+    if now_ts - last_tick_time < TICK_THROTTLE_SECONDS:
+        return
+    last_tick_time = now_ts
+
+    # 非现代世界走 LLM 路径
+    if _is_non_modern_world():
+        _tick_non_modern()
+        return
+
+    # ── 以下为现代世界逻辑（原有）──
 
     # ── 检查用户是否在场景中（冻结场景推进） ──
     user_in_scene = False
@@ -405,7 +631,23 @@ def api_world_state():
 
     # 天气信息
     weather_data = {"label": "多云", "emoji": "⛅", "temp": ""}
-    if weather_service:
+    if _is_non_modern_world():
+        # 非现代世界：用世界观的地点和气候，不调用真实天气 API
+        try:
+            ws = load_world_setting(current_world_id) if current_world_id != "modern" else None
+            if ws:
+                regions = ws.get("geography", {}).get("regions", [])
+                location_name = regions[0].get("name", "") if regions else ws.get("world_name", "")
+                climate = regions[0].get("climate", "") if regions else ""
+                weather_data = {
+                    "label": climate or "晴朗",
+                    "emoji": "",
+                    "temp": "",
+                    "location": location_name,
+                }
+        except Exception:
+            pass
+    elif weather_service:
         w = weather_service.get_weather()
         weather_data = {
             "label": w.get("label", "多云"),
@@ -434,32 +676,77 @@ def api_world_state():
     # 旅行信息
     travel_info = None
     if character_card and _get_work_style_safe() == "travel":
-        travel_dest = _get_current_travel_destination(character_card, now.date())
+        travel_dest = _get_current_travel_destination(character_card, datetime.now().date())
         if travel_dest:
             travel_info = travel_dest
 
     # 用户入驻状态
     user_profile = _load_user_profile()
 
+    # 世界观信息
+    world_info = None
+    if _is_non_modern_world():
+        try:
+            from simlife.worlds.world_manager import load_world_setting
+            ws = load_world_setting(current_world_id)
+            if ws:
+                world_info = {
+                    "world_id": current_world_id,
+                    "world_name": ws.get("world_name", ""),
+                    "world_type": ws.get("world_type", ""),
+                }
+        except Exception:
+            pass
+
+    # NPC卡司（非现代世界）
+    story_cast = _load_story_cast() if _is_non_modern_world() else []
+
+    # 场景标签
+    if _is_non_modern_world():
+        # 非现代世界：场景名由 LLM 生成，直接使用
+        scene_label = world_state.current_scene
+    else:
+        try:
+            scene_label = SCENE_LABELS.get(
+                SceneEnum(world_state.current_scene), world_state.current_scene
+            )
+        except ValueError:
+            scene_label = world_state.current_scene
+
+    # 日志
+    # 现代世界返回全部日志，异世界只返回已推进的节点日志
+    if _is_non_modern_world():
+        # 异世界模式：日志已由 _tick_non_modern 填充到 today_log
+        latest_log = [
+            {"time": l.time, "event": l.event}
+            for l in world_state.today_log[-20:]
+        ]
+    else:
+        latest_log = [
+            {"time": l.time, "event": l.event}
+            for l in world_state.today_log[-20:]
+        ]
+
     return {
         "scene": world_state.current_scene,
-        "scene_label": SCENE_LABELS.get(
-            SceneEnum(world_state.current_scene), world_state.current_scene
-        ),
+        "scene_label": scene_label,
         "activity": world_state.current_activity,
         "mood": world_state.mood,
         "active_npcs": world_state.active_npcs,
         "today_date": world_state.today_date,
         "time_label": get_time_period_label(),
-        "latest_log": [
-            {"time": l.time, "event": l.event}
-            for l in world_state.today_log[-20:]
-        ],
+        "latest_log": latest_log,
         "weather": weather_data,
         "holiday": holiday_info,
         "birthday": birthday_info,
         "upcoming_birthdays": upcoming_birthdays,
         "travel": travel_info,
+        "world": world_info,
+        "is_story_mode": _is_non_modern_world(),
+        "story_cast": story_cast if _is_non_modern_world() else None,
+        "day_plan": (world_state.day_plan if _is_non_modern_world() else None),
+        "day_plan_progress": world_state.day_plan_progress if _is_non_modern_world() else None,
+        "life_arc": _get_arc_summary() if _is_non_modern_world() else None,
         "user": {
             "entered": user_profile.get("entered", False),
             "name": user_profile.get("name", ""),
@@ -511,22 +798,55 @@ def api_setup_generate(data: dict):
         character_card = CharacterCard(**card_data)
         _save_character_card(character_card)
 
-        # 生成 NPC
-        npc_data = generate_npc_cards(card_data)
-        if npc_data:
-            from simlife.backend.npc_engine import save_npc_cards
-            save_npc_cards(npc_data)
+        # 非现代世界：生成NPC卡司（而非现代NPC卡）
+        if _is_non_modern_world():
+            try:
+                from simlife.backend.generator import generate_story_cast
+                story_cast = generate_story_cast(character_card.model_dump())
+                _save_story_cast(story_cast)
+                cast_names = [c["name"] for c in story_cast]
+                print(f"[SimLife] 已生成NPC卡司：{'、'.join(cast_names)}")
+            except Exception as e:
+                print(f"[SimLife] NPC卡司生成失败: {e}")
+        else:
+            # 现代世界：生成社交NPC
+            npc_data = generate_npc_cards(card_data)
+            if npc_data:
+                from simlife.backend.npc_engine import save_npc_cards
+                save_npc_cards(npc_data)
 
         # 初始化世界状态
         global world_state
         now = datetime.now()
-        scene, label = get_current_scene(character_card, now)
-        world_state = WorldState(
-            last_updated=now.isoformat(),
-            current_scene=scene.value,
-            current_activity=f"世界开始了，{label}",
-            today_date=now.strftime("%Y-%m-%d"),
-        )
+        if _is_non_modern_world():
+            # 非现代世界：用世界观地点作为初始场景
+            ws = None
+            try:
+                from simlife.worlds.world_manager import load_world_setting
+                ws = load_world_setting(current_world_id)
+            except Exception:
+                pass
+            init_scene = "住处"
+            init_activity = "新的一天开始了"
+            if ws:
+                regions = ws.get("geography", {}).get("regions", [])
+                if regions:
+                    init_scene = regions[0].get("name", "住处")
+                init_activity = f"在「{ws.get('world_name', '')}」中开始了新的旅程"
+            world_state = WorldState(
+                last_updated=now.isoformat(),
+                current_scene=init_scene,
+                current_activity=init_activity,
+                today_date=now.strftime("%Y-%m-%d"),
+            )
+        else:
+            scene, label = get_current_scene(character_card, now)
+            world_state = WorldState(
+                last_updated=now.isoformat(),
+                current_scene=scene.value,
+                current_activity=f"世界开始了，{label}",
+                today_date=now.strftime("%Y-%m-%d"),
+            )
         _save_world_state(world_state)
 
         return {"status": "ok", "card": character_card.model_dump()}
@@ -538,7 +858,63 @@ def api_setup_generate(data: dict):
 
 @app.get("/api/npcs")
 def api_get_npcs():
+    if _is_non_modern_world():
+        return {"npcs": _load_story_cast()}
     return {"npcs": load_npc_cards()}
+
+
+@app.get("/api/story/cast")
+def api_get_story_cast():
+    """获取剧情NPC卡司（非现代世界）"""
+    return {"cast": _load_story_cast()}
+
+
+@app.post("/api/story/expand/{node_index}")
+def api_expand_node(node_index: int):
+    """展开某个 day_plan 节点为小说段落"""
+    if not world_state or not world_state.day_plan:
+        raise HTTPException(400, "没有日计划数据")
+    if node_index < 0 or node_index >= len(world_state.day_plan):
+        raise HTTPException(400, "节点索引无效")
+
+    plan = world_state.day_plan
+    node = plan[node_index]
+
+    # 如果已经展开过，直接返回缓存
+    if node.get("expanded"):
+        return {"text": node["expanded"]}
+
+    # 只展开已到达或已过去的节点
+    if node_index > world_state.day_plan_progress:
+        raise HTTPException(400, "该节点尚未到达")
+
+    try:
+        from simlife.backend.generator import expand_node
+        cast = _load_story_cast()
+        arc_hint = ""
+        arc = load_life_arc()
+        if arc:
+            from simlife.backend.life_arc_engine import get_stage_hint
+            arc_hint = get_stage_hint(arc)
+
+        # 前面节点作为上文衔接
+        prev_nodes = [plan[i] for i in range(max(0, node_index - 2), node_index)]
+
+        text = expand_node(
+            character_card.model_dump(),
+            node,
+            cast=cast,
+            arc_context=arc_hint,
+            prev_nodes=prev_nodes,
+        )
+
+        # 缓存到 day_plan
+        world_state.day_plan[node_index]["expanded"] = text
+        _save_world_state(world_state)
+
+        return {"text": text}
+    except Exception as e:
+        raise HTTPException(500, f"展开失败: {e}")
 
 
 @app.get("/api/events/history")
@@ -557,7 +933,10 @@ def api_reset():
     global character_card, world_state
     try:
         # 删除数据文件
-        for f in ["character_card.json", "world_state.json", "user_profile.json"]:
+        for f in ["character_card.json", "world_state.json", "user_profile.json",
+                   "story_cast.json", "life_arc.json", "life_arc_history.json",
+                   "event_history.json", "npc_cards.json", "scheduled_events.json",
+                   "weather_cache.json"]:
             p = DATA_DIR / f
             if p.exists():
                 p.unlink()

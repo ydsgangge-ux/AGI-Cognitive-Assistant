@@ -4,6 +4,7 @@ AI 生成器 - 生成人物卡 + NPC卡 + Activity描述 + 事件队列
 支持多世界观：现代世界（默认）+ 自定义世界（fantasy/scifi/...）
 """
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -1000,6 +1001,374 @@ def generate_activity_description(
             "RESTAURANT_LOCAL": "在当地餐厅吃饭",
         }
         return defaults.get(scene, "在忙自己的事")
+
+
+def generate_life_arc(character_card: dict) -> dict:
+    """
+    根据世界观 + 角色信息，LLM 推算一个月级别的人生主线。
+    返回字典，可直接用于创建 LifeArc 对象。
+    """
+    llm = get_llm_client()
+
+    name = character_card.get("basic", {}).get("name", "")
+    occupation = character_card.get("basic", {}).get("occupation", "")
+    personality = character_card.get("basic", {}).get("personality_traits", [])
+    traits_str = "、".join(personality[:3]) if personality else "未设定"
+    age = character_card.get("basic", {}).get("age", "")
+
+    prompt = f"""你是人生模拟器的叙事系统。请为角色「{name}」（{occupation}，{age}岁，性格：{traits_str}）规划一段为期约30天的人生主线任务。
+
+要求：
+1. 主线要有起承转合，符合角色身份和性格
+2. 分为 4-7 个阶段，每个阶段持续 3-10 天不等
+3. 阶段之间要有逻辑递进关系（如：准备→出发→探索→高潮→收尾）
+4. 每个阶段给出 2-4 个可能发生的关键事件
+5. 总时长控制在 25-40 天
+6. 内容要符合世界观设定，有冒险感但不离谱
+7. 标题用 10-20 字概括
+
+返回 JSON，不要其他内容：
+{{
+  "title": "主线标题",
+  "description": "主线概述（50-100字）",
+  "duration_days": 30,
+  "stages": [
+    {{
+      "name": "阶段名（5-10字）",
+      "description": "阶段描述（20-50字）",
+      "duration_days": 5,
+      "key_events": ["事件1", "事件2", "事件3"]
+    }}
+  ]
+}}"""
+
+    world_context = _get_world_context()
+    if world_context:
+        prompt = world_context + "\n\n" + prompt
+
+    try:
+        response = llm.generate(prompt, max_tokens=1000, temperature=0.85)
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:])
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+        result = json.loads(response)
+
+        # 规范化
+        stages_raw = result.get("stages", [])
+        total_days = 0
+        stages = []
+        for s in stages_raw:
+            if not isinstance(s, dict):
+                continue
+            dur = int(s.get("duration_days", 5))
+            dur = max(2, min(15, dur))
+            total_days += dur
+            stages.append({
+                "name": str(s.get("name", "阶段")),
+                "description": str(s.get("description", "")),
+                "duration_days": dur,
+                "status": "pending",
+                "key_events": [str(e) for e in s.get("key_events", [])[:5]],
+            })
+
+        if not stages:
+            return _default_life_arc(name)
+
+        # 激活第一个阶段
+        stages[0]["status"] = "active"
+
+        return {
+            "title": str(result.get("title", "日常冒险")),
+            "description": str(result.get("description", "")),
+            "duration_days": total_days,
+            "stages": stages,
+        }
+
+    except Exception as e:
+        print(f"[SimLife] 主线生成失败: {e}")
+        return _default_life_arc(name)
+
+
+def _default_life_arc(name: str = "角色") -> dict:
+    """主线生成失败时的默认值"""
+    return {
+        "title": "日常修炼与探索",
+        "description": f"{name}开始了平淡但充实的日常生活",
+        "duration_days": 30,
+        "stages": [
+            {"name": "日常修炼", "description": "在住处附近修炼基本功", "duration_days": 7, "status": "active", "key_events": ["晨练", "研读典籍", "基础训练"]},
+            {"name": "外出探索", "description": "到周边区域了解情况", "duration_days": 7, "status": "pending", "key_events": ["前往集市", "打听消息", "探索遗迹"]},
+            {"name": "任务执行", "description": "接受并完成一些任务", "duration_days": 10, "status": "pending", "key_events": ["接受委托", "战斗历练", "收获战利品"]},
+            {"name": "总结沉淀", "description": "休整并规划下一步", "duration_days": 6, "status": "pending", "key_events": ["整理收获", "修复装备", "记录心得"]},
+        ],
+    }
+
+
+def generate_day_plan(
+    character_card: dict,
+    mood: int = 70,
+    yesterday_summary: str = "",
+    arc_hint: str = "",
+    cast: list = None,
+) -> list:
+    """
+    为非现代世界生成一天的大纲计划（LLM 一次调用，生成全天安排）。
+    返回列表：[{"time":"07:00","scene":"房间","label":"起床","activity":"...","mood_delta":0,"npc":"npc_id或空"}, ...]
+    通常 6-10 个节点，覆盖一天的作息。
+    """
+    from datetime import datetime
+
+    llm = get_llm_client()
+    now = datetime.now()
+    weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+    name = character_card.get("basic", {}).get("name", "")
+    occupation = character_card.get("basic", {}).get("occupation", "")
+    personality = character_card.get("basic", {}).get("personality_traits", [])
+    traits_str = "、".join(personality[:3]) if personality else "未设定"
+
+    summary_hint = f"\n昨天的经历：{yesterday_summary}" if yesterday_summary else ""
+    arc_hint_text = f"\n\n{arc_hint}" if arc_hint else ""
+
+    # NPC卡司提示
+    cast_hint = ""
+    if cast:
+        npc_brief = "\n".join([f"- {c['name']}（{c['role']}，{c['personality']}）" for c in cast])
+        cast_hint = f"\n\n可用NPC卡司：\n{npc_brief}"
+
+    prompt = f"""你是人生模拟器。请为角色「{name}」（{occupation}，性格：{traits_str}）安排今天一整天的大纲计划。
+
+今天是{weekday_names[now.weekday()]}，当前心情{mood}/100。{summary_hint}{arc_hint_text}{cast_hint}
+
+要求：
+1. 生成 8-10 个时间节点，从起床到入睡，均匀分布
+2. 每个节点包含：time(HH:MM)、scene(2-4字场景名)、label(4-8字标签)、activity(15-30字简短描述)、mood_delta(-5到+5)、npc(可选，NPC的id或空字符串)
+3. 活动要符合世界观设定，围绕主线推进
+4. 不要用感叹号
+5. activity 要精简概括，不要展开细节，细节会在到时间后按需展开
+6. 一天中至少 1-2 个节点涉及NPC互动
+
+返回 JSON 数组，不要其他内容：
+[{{"time":"07:00","scene":"房间","label":"晨起","activity":"{name}醒来，简单梳洗",  "mood_delta":1,"npc":""}}, ...]"""
+
+    # 注入世界观引导
+    world_context = _get_world_context()
+    if world_context:
+        prompt = world_context + "\n\n" + prompt
+
+    try:
+        response = llm.generate(prompt, max_tokens=500, temperature=0.85)
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:])
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+
+        plan = json.loads(response)
+        if not isinstance(plan, list) or len(plan) == 0:
+            return _default_day_plan(name)
+
+        # 验证并规范化
+        valid_plan = []
+        for item in plan:
+            if not isinstance(item, dict):
+                continue
+            valid_plan.append({
+                "time": str(item.get("time", "08:00")),
+                "scene": str(item.get("scene", "日常")),
+                "label": str(item.get("label", "")),
+                "activity": str(item.get("activity", "")),
+                "mood_delta": int(item.get("mood_delta", 0)),
+                "npc": str(item.get("npc", "")),
+                "expanded": None,  # 小说展开文本，按需生成
+            })
+        return valid_plan if valid_plan else _default_day_plan(name)
+
+    except Exception as e:
+        print(f"[SimLife] 全天计划生成失败: {e}")
+        return _default_day_plan(name)
+
+
+def _default_day_plan(name: str = "角色") -> list:
+    """生成失败时的默认计划"""
+    return [
+        {"time": "07:00", "scene": "房间", "label": "起床", "activity": f"{name}从睡梦中醒来", "mood_delta": 1},
+        {"time": "08:00", "scene": "日常", "label": "早餐", "activity": f"{name}简单吃了些东西", "mood_delta": 2},
+        {"time": "09:00", "scene": "工作", "label": "开始工作", "activity": f"{name}开始了一天的工作", "mood_delta": 0},
+        {"time": "12:00", "scene": "日常", "label": "午餐", "activity": f"{name}找了个地方吃饭休息", "mood_delta": 2},
+        {"time": "14:00", "scene": "工作", "label": "下午工作", "activity": f"{name}继续忙碌着", "mood_delta": -1},
+        {"time": "18:00", "scene": "日常", "label": "晚餐", "activity": f"{name}吃过晚饭，放松下来", "mood_delta": 3},
+        {"time": "20:00", "scene": "休闲", "label": "晚间休闲", "activity": f"{name}享受着属于自己的时光", "mood_delta": 2},
+        {"time": "22:00", "scene": "房间", "label": "入睡", "activity": f"{name}准备休息了", "mood_delta": 1},
+    ]
+
+
+def generate_story_cast(character_card: dict) -> list:
+    """
+    为非现代世界生成剧情NPC卡司（3-5个角色）。
+    每个NPC有名字、身份、性格、秘密、说话风格。
+    基于世界观设定自动适配内容。
+    """
+    llm = get_llm_client()
+
+    name = character_card.get("basic", {}).get("name", "")
+    occupation = character_card.get("basic", {}).get("occupation", "")
+    age = character_card.get("basic", {}).get("age", 24)
+    personality = character_card.get("basic", {}).get("personality_traits", [])
+    traits_str = "、".join(personality[:3]) if personality else "未设定"
+
+    prompt = f"""你是人生模拟器的叙事系统。请为角色「{name}」（{occupation}，{age}岁，性格：{traits_str}）生成一组剧情NPC卡司。
+
+要求：
+1. 生成 3-5 个NPC，他们将在剧情中反复出现
+2. NPC类型要多样：同伴、对手、导师、神秘人、交易伙伴等
+3. 每个NPC要有独特的性格和说话风格，让对话有辨识度
+4. 每个NPC要有一个秘密或隐藏身份，为后续剧情埋伏笔
+5. NPC要完全符合世界观设定，不要出现现代元素
+
+返回 JSON 数组，不要其他内容：
+[
+  {{
+    "id": "npc_角色英文id",
+    "name": "角色名",
+    "role": "在故事中的角色（如：冒险同伴、图书馆管理员、对头、导师的旧友等）",
+    "personality": "性格描述（30字以内）",
+    "appearance": "外貌描述（30字以内）",
+    "secret": "一个秘密或隐藏身份（20字以内）",
+    "voice_style": "说话风格（15字以内，如：喜欢用反问句、说话慢条斯理、口头禅是什么等）",
+    "first_encounter": "与主角初次相遇的场景描述（30字以内）"
+  }}
+]"""
+
+    world_context = _get_world_context()
+    if world_context:
+        prompt = world_context + "\n\n" + prompt
+
+    try:
+        response = llm.generate(prompt, max_tokens=1500, temperature=0.85)
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:])
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+
+        cast = json.loads(response)
+        if not isinstance(cast, list) or len(cast) == 0:
+            return _default_story_cast(name)
+
+        valid_cast = []
+        for item in cast:
+            if not isinstance(item, dict):
+                continue
+            valid_cast.append({
+                "id": str(item.get("id", "")),
+                "name": str(item.get("name", "")),
+                "role": str(item.get("role", "")),
+                "personality": str(item.get("personality", "")),
+                "appearance": str(item.get("appearance", "")),
+                "secret": str(item.get("secret", "")),
+                "voice_style": str(item.get("voice_style", "")),
+                "first_encounter": str(item.get("first_encounter", "")),
+                "trust": 50,       # 初始信任度 0-100
+                "encountered": False,
+            })
+        return valid_cast if valid_cast else _default_story_cast(name)
+    except Exception as e:
+        print(f"[SimLife] NPC卡司生成失败: {e}")
+        return _default_story_cast(name)
+
+
+def _default_story_cast(name: str = "角色") -> list:
+    """卡司生成失败时的默认值"""
+    return [
+        {"id": "npc_companion", "name": "旅行者", "role": "偶然相遇的同行者",
+         "personality": "话多但心善", "appearance": "穿着斗篷看不清面容",
+         "secret": "其实是在逃亡", "voice_style": "喜欢用夸张的比喻",
+         "first_encounter": "在路边休息时被搭话", "trust": 50, "encountered": False},
+        {"id": "npc_mentor", "name": "老者", "role": "神秘的引导者",
+         "personality": "沉默寡言但关键时刻指点迷津", "appearance": "白发苍苍，眼神深邃",
+         "secret": "与主角的导师有旧交", "voice_style": "说话简短有力",
+         "first_encounter": "在图书馆角落偶遇", "trust": 50, "encountered": False},
+        {"id": "npc_rival", "name": "竞争者", "role": "目标相同的对手",
+         "personality": "表面友善内心算计", "appearance": "衣着整洁，面带微笑",
+         "secret": "为某个组织效力", "voice_style": "语气温和但暗藏锋芒",
+         "first_encounter": "在任务发布处争抢同一个委托", "trust": 30, "encountered": False},
+    ]
+
+
+def expand_node(character_card: dict, node: dict, cast: list = None,
+                arc_context: str = "", prev_nodes: list = None) -> str:
+    """
+    将 day_plan 的一个节点展开为 200-500 字的小说段落。
+    包含场景描写、动作细节、内心独白、NPC对话。
+    """
+    llm = get_llm_client()
+
+    name = character_card.get("basic", {}).get("name", "")
+    occupation = character_card.get("basic", {}).get("occupation", "")
+
+    # 构建 NPC 上下文
+    cast_info = ""
+    if cast and node.get("npc"):
+        npc_id = node.get("npc", "")
+        for c in cast:
+            if c.get("id") == npc_id:
+                cast_info = (
+                    f"\n互动NPC：{c['name']}（{c['role']}）\n"
+                    f"性格：{c['personality']}\n"
+                    f"说话风格：{c['voice_style']}\n"
+                    f"秘密：{c['secret']}"
+                )
+                break
+        if not cast_info and cast:
+            # 如果没找到具体NPC，把所有卡司简要列出
+            brief = "; ".join([f"{c['name']}({c['role']})" for c in cast[:4]])
+            cast_info = f"\n可用NPC：{brief}"
+
+    # 构建上文衔接
+    prev_context = ""
+    if prev_nodes and len(prev_nodes) > 0:
+        last = prev_nodes[-1]
+        prev_context = f"\n上一个节点：{last.get('time', '')} {last.get('label', '')} - {last.get('activity', '')}"
+
+    arc_hint = f"\n\n{arc_context}" if arc_context else ""
+
+    prompt = f"""你是人生模拟器的小说叙事系统。请将以下日程节点展开为一段生动的小说段落。
+
+角色：{name}（{occupation}）
+当前节点：{node.get('time', '')} {node.get('label', '')} - {node.get('scene', '')}
+活动概要：{node.get('activity', '')}{cast_info}{prev_context}{arc_hint}
+
+写作要求：
+1. 字数 200-500 字
+2. 包含场景描写（环境、氛围、五感）
+3. 包含动作细节（微表情、小动作）
+4. 如果有互动NPC，必须包含对话（要有性格辨识度）
+5. 可以包含角色内心独白
+6. 第三人称叙事，语气自然流畅
+7. 不要用感叹号
+8. 严格符合世界观设定
+
+只返回小说正文，不要其他内容。"""
+
+    world_context = _get_world_context()
+    if world_context:
+        prompt = world_context + "\n\n" + prompt
+
+    try:
+        response = llm.generate(prompt, max_tokens=600, temperature=0.9)
+        return response.strip()
+    except Exception as e:
+        print(f"[SimLife] 节点展开失败: {e}")
+        return node.get("activity", "")
 
 
 def generate_future_events(

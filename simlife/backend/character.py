@@ -343,3 +343,6 @@ class WorldState(BaseModel):
     today_log: List[LogEntry] = Field(default_factory=list)
     today_events_triggered: List[str] = Field(default_factory=list)
     sleep_mood_penalty: int = 0
+    # 非现代世界：全天大纲计划（LLM 一次生成，逐步推进）
+    day_plan: Optional[List[dict]] = None          # [{"time":"07:00","scene":"房间","label":"起床","activity":"...","mood_delta":0,"npc":"","expanded":null}, ...]
+    day_plan_progress: int = 0                      # 已推进到的索引位置
