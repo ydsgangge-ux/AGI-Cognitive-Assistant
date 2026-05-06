@@ -233,6 +233,70 @@ async function generateWorld() {
   }
 }
 
+/* ── 设置菜单 ── */
+
+function toggleSettingsMenu() {
+  const menu = document.getElementById('settings-menu');
+  menu.classList.toggle('show');
+  if (menu.classList.contains('show')) {
+    setTimeout(() => {
+      document.addEventListener('click', _closeSettingsOnOutsideClick);
+    }, 0);
+  }
+}
+
+function _closeSettingsOnOutsideClick(e) {
+  const menu = document.getElementById('settings-menu');
+  const btn = document.getElementById('settings-btn');
+  if (!menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.classList.remove('show');
+    document.removeEventListener('click', _closeSettingsOnOutsideClick);
+  }
+}
+
+function openSetupForReinit() {
+  document.getElementById('settings-menu').classList.remove('show');
+  if (!confirm('重新初始化会删除当前角色和世界，确定要重新开始吗？')) return;
+  fetch('/api/reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => { location.reload(); })
+    .catch(e => { alert('重置失败：' + e.message); });
+}
+
+function openUserPanelFromMenu() {
+  document.getElementById('settings-menu').classList.remove('show');
+  const overlay = document.getElementById('user-overlay');
+  if (overlay.style.display === 'flex') {
+    closeUserPanel();
+    return;
+  }
+  if (UI._userProfile) {
+    document.getElementById('inp-user-name').value = UI._userProfile.name || '';
+    document.getElementById('inp-user-relation').value = UI._userProfile.relation || '';
+    document.getElementById('inp-user-role').value = UI._userProfile.world_role || '';
+  }
+  const hasRelation = UI._userProfile && UI._userProfile.relation;
+  const btnEnter = document.getElementById('btn-user-enter');
+  const btnLeave = document.getElementById('btn-user-leave');
+  if (UI._userProfile && UI._userProfile.entered) {
+    btnEnter.textContent = '✨ 保存修改';
+    btnLeave.style.display = '';
+  } else {
+    btnEnter.textContent = hasRelation ? '✨ 进入世界' : '✨ 保存并进入';
+    btnLeave.style.display = 'none';
+  }
+  overlay.style.display = 'flex';
+}
+
+function doResetSimLife() {
+  document.getElementById('settings-menu').classList.remove('show');
+  if (!confirm('这将清空 SimLife 的所有数据（角色、世界、NPC、用户身份），确定吗？')) return;
+  fetch('/api/reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => { location.reload(); })
+    .catch(e => { alert('重置失败：' + e.message); });
+}
+
 /* ── 用户入驻管理 ── */
 
 function toggleUserPanel() {
@@ -242,12 +306,9 @@ function toggleUserPanel() {
     return;
   }
 
-  // 如果已入驻，点击按钮 = 离开
-  if (UI._userProfile && UI._userProfile.entered) {
-    doUserLeave();
-    return;
-  }
-
+  // 已入驻状态：打开面板可修改身份或离开
+  // （不再直接执行离开，让用户在面板里选择）
+  
   // 填充已有信息
   if (UI._userProfile) {
     document.getElementById('inp-user-name').value = UI._userProfile.name || '';
@@ -255,14 +316,17 @@ function toggleUserPanel() {
     document.getElementById('inp-user-role').value = UI._userProfile.world_role || '';
   }
 
-  // 根据是否已有关系设置，切换按钮文字
   const hasRelation = UI._userProfile && UI._userProfile.relation;
   const btnEnter = document.getElementById('btn-user-enter');
-  btnEnter.textContent = hasRelation ? '✨ 进入世界' : '✨ 保存并进入';
+  const btnLeave = document.getElementById('btn-user-leave');
 
-  // 隐藏离开按钮，显示进入按钮
-  document.getElementById('btn-user-leave').style.display = 'none';
-  btnEnter.style.display = '';
+  if (UI._userProfile && UI._userProfile.entered) {
+    btnEnter.textContent = '✨ 保存修改';
+    btnLeave.style.display = '';
+  } else {
+    btnEnter.textContent = hasRelation ? '✨ 进入世界' : '✨ 保存并进入';
+    btnLeave.style.display = 'none';
+  }
 
   overlay.style.display = 'flex';
 }

@@ -120,6 +120,15 @@ def _tick():
     if not character_card or not world_state:
         return
 
+    # ── 检查用户是否在场景中（冻结场景推进） ──
+    user_in_scene = False
+    try:
+        profile = _load_user_profile()
+        if profile.get("entered"):
+            user_in_scene = True
+    except Exception:
+        pass
+
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     char_bd = character_card.basic.birth_date if character_card.basic.birth_date else ""
@@ -149,11 +158,79 @@ def _tick():
                 time="09:00", event=br["log"]
             ))
 
-    # 离线补算
-    last_updated = datetime.fromisoformat(world_state.last_updated) if world_state.last_updated else None
-    if last_updated and (now - last_updated).total_seconds() > 300:
-        world_state, catchup_logs = catchup_world_state(world_state, character_card, now)
-        last_tick_scene = world_state.current_scene
+    # 离线补算（用户在场景中跳过，避免角色凭空移动）
+    if not user_in_scene:
+        last_updated = datetime.fromisoformat(world_state.last_updated) if world_state.last_updated else None
+        if last_updated and (now - last_updated).total_seconds() > 300:
+            world_state, catchup_logs = catchup_world_state(world_state, character_card, now)
+            last_tick_scene = world_state.current_scene
+
+    # ── 用户在场景中：冻结场景切换和事件触发，只更新心情 ──
+    if user_in_scene:
+        scene = SceneEnum(world_state.current_scene)
+        label = SCENE_LABELS.get(scene, world_state.current_scene)
+
+        # 心情计算（仍然响应天气、节假日、用户交互等）
+        is_weekend = now.weekday() >= 5
+        mood_deltas = []
+        for eid in world_state.today_events_triggered:
+            hist = load_event_history()
+            for h in hist:
+                if h.get("id") == eid:
+                    mood_deltas.append(h.get("mood_delta", 0))
+                    break
+
+        interaction_hours = None
+        task_len = 0
+        if agidpa_reader and agidpa_reader.is_available():
+            if agidpa_reader.recent_interaction_within_hours(3):
+                interaction_hours = 0.1
+            else:
+                interaction_hours = None
+            task_len = agidpa_reader.get_task_queue_length()
+
+        weather_mood_delta = 0
+        if weather_service:
+            weather_mood_delta = weather_service.get_mood_delta()
+
+        holiday_mood_delta = 0
+        from simlife.backend.holiday_calendar import get_holiday_mood_delta
+        holiday_mood_delta = get_holiday_mood_delta(now.date())
+
+        birthday_mood_delta = get_birthday_mood(char_bd) if char_bd else 0
+        if birthday_mood_delta == 0:
+            for npc in load_npc_cards():
+                npc_bd = npc.get("birth_date", "")
+                npc_mood = get_birthday_mood(npc_bd)
+                if npc_mood > 0:
+                    birthday_mood_delta += npc_mood // 3
+
+        mood_deltas.append(weather_mood_delta)
+        mood_deltas.append(holiday_mood_delta)
+        mood_deltas.append(birthday_mood_delta)
+
+        world_state.mood = calculate_mood(
+            scene=scene.value,
+            current_hour=now.hour,
+            is_weekend=is_weekend,
+            today_events_mood_delta=mood_deltas,
+            recent_interaction_hours=interaction_hours,
+            task_queue_length=task_len,
+            sleep_penalty=world_state.sleep_mood_penalty,
+        )
+
+        # 激活 NPC（当前场景）
+        active = get_active_npcs(scene.value, world_state.today_events_triggered)
+        world_state.active_npcs = [n.get("id", "") for n in active]
+
+        if len(world_state.today_log) > 50:
+            world_state.today_log = world_state.today_log[-50:]
+
+        world_state.last_updated = now.isoformat()
+        _save_world_state(world_state)
+        return
+
+    # ── 正常推进（用户不在场景中） ──
 
     # 事件覆盖（今日已触发事件的后果）
     event_overrides = {}
@@ -472,6 +549,25 @@ def api_event_history():
 @app.get("/api/events/scheduled")
 def api_scheduled_events():
     return {"scheduled": load_scheduled_events()}
+
+
+@app.post("/api/reset")
+def api_reset():
+    """重置 SimLife：删除角色卡、世界状态和用户档案，重新初始化"""
+    global character_card, world_state
+    try:
+        # 删除数据文件
+        for f in ["character_card.json", "world_state.json", "user_profile.json"]:
+            p = DATA_DIR / f
+            if p.exists():
+                p.unlink()
+
+        character_card = None
+        world_state = None
+
+        return {"status": "ok", "message": "已重置，请刷新页面重新设置"}
+    except Exception as e:
+        raise HTTPException(500, f"重置失败: {e}")
 
 
 @app.get("/api/status")

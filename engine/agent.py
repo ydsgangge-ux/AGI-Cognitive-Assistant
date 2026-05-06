@@ -168,6 +168,7 @@ class ConsciousnessAgent:
         self.cognition   = cognition_store
         self.auth        = auth_manager       # 身份验证管理器
         self.simlife     = simlife_client     # SimLife 生活状态客户端
+        self.simlife_mode = False              # 用户是否"进入 SimLife 场景"（默认关闭）
         self._cfg        = {}                 # 延迟加载配置
         self.conversation_history: List[Dict] = []
         self.current_emotion = EmotionState()
@@ -220,6 +221,7 @@ class ConsciousnessAgent:
                 pass
 
         # ── 提前构建 SimLife 生活上下文（感知层也需要知道自己的身体和生活）──
+        # SimLife 是角色的生活状态，始终读取；simlife_mode 仅控制"面对面"提示
         is_guest  = self.auth and self.auth.is_guest()
         current_uid = (self.auth.user_id if self.auth and self.auth.is_verified()
                        else "default")
@@ -230,7 +232,26 @@ class ConsciousnessAgent:
                 if not simlife_context:
                     self._log("SimLife", "format_for_prompt() 返回空")
                 else:
-                    self._log("SimLife", f"已加载 ({len(simlife_context)}字)")
+                    # 自动同步 simlife_mode：读取 user_profile.json 的 entered 字段
+                    try:
+                        profile = self.simlife._read_user_profile()
+                        if profile and profile.get("entered"):
+                            self.simlife_mode = True
+                        # 注意：不自动设为 False，保留桌面端手动切换的能力
+                    except Exception:
+                        pass
+
+                    # 仅当 simlife_mode=True 时追加面对面提示
+                    if self.simlife_mode:
+                        simlife_context += (
+                            "\n\n【面对面场景】用户此刻就在你身边，"
+                            "你正在和用户面对面交谈。"
+                            "用自然的方式回应，就像现实中朋友见面一样，"
+                            "可以描述周围环境、自己的状态，让用户感受到身临其境。"
+                        )
+                        self._log("SimLife", f"场景模式已开启 ({len(simlife_context)}字)")
+                    else:
+                        self._log("SimLife", f"生活状态已读取 ({len(simlife_context)}字)，场景模式关闭")
             except Exception as e:
                 self._log("SimLife", f"读取失败: {e}")
         else:

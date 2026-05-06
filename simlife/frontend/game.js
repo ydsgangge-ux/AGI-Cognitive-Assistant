@@ -137,6 +137,16 @@ const Game = {
           relation: state.user.relation || UI._userProfile?.relation || '',
         };
         UI._updateEnterButton();
+
+        // 冻结指示器
+        const freezeEl = document.getElementById('freeze-indicator');
+        if (freezeEl) {
+          if (state.user && state.user.entered) {
+            freezeEl.classList.add('show');
+          } else {
+            freezeEl.classList.remove('show');
+          }
+        }
       }
 
     } catch (e) {

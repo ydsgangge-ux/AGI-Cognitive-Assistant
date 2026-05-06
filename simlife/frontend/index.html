@@ -119,6 +119,17 @@ body {
   font-size: 11px;
   border: 1px solid rgba(233,69,96,0.2);
 }
+#freeze-indicator {
+  display: none;
+  padding: 2px 8px;
+  background: rgba(52,211,153,0.15);
+  color: #4ecca3;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-left: 6px;
+  border: 1px solid rgba(52,211,153,0.2);
+}
+#freeze-indicator.show { display: inline-block; }
 #activity-text {
   color: var(--text-dim);
   font-size: 13px;
@@ -317,6 +328,59 @@ body {
 }
 #user-enter-btn.entered:hover {
   background: rgba(233, 69, 96, 0.25);
+}
+
+/* 齿轮设置按钮 */
+#settings-btn {
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-dim);
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+#settings-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+/* 设置下拉菜单 */
+#settings-menu {
+  display: none;
+  position: absolute;
+  top: 42px;
+  right: 16px;
+  background: #1e2a45;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 0;
+  min-width: 180px;
+  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+#settings-menu.show { display: block; }
+#settings-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#settings-menu button:hover { background: rgba(255,255,255,0.06); }
+#settings-menu button.danger { color: var(--accent); }
+#settings-menu button.danger:hover { background: rgba(233,69,96,0.1); }
+#settings-menu .menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 /* 用户设置弹窗 */
@@ -526,9 +590,16 @@ body {
     <span id="disp-weekday">周六</span>
     <span class="time" id="disp-time">14:30</span>
     <span class="weather" id="disp-weather">⛅</span>
-    <span id="scene-tag">晚间放松</span>
+    <span id="scene-tag">晚间放松</span><span id="freeze-indicator">⏸ 场景冻结</span>
     <span style="flex:1;"></span>
     <button id="user-enter-btn" onclick="toggleUserPanel()">🏠 进入世界</button>
+    <button id="settings-btn" onclick="toggleSettingsMenu()">⚙️</button>
+    <div id="settings-menu">
+      <button onclick="openSetupForReinit()">🔄 重新初始化角色</button>
+      <button onclick="openUserPanelFromMenu()">🏠 设置我的身份</button>
+      <div class="menu-divider"></div>
+      <button class="danger" onclick="doResetSimLife()">🗑️ 重置 SimLife（清空所有数据）</button>
+    </div>
   </div>
 
   <div id="game-area">
@@ -572,6 +643,7 @@ body {
     </div>
     <div class="btn-row" id="user-btn-row">
       <button id="btn-user-cancel" onclick="closeUserPanel()">取消</button>
+      <button id="btn-user-leave" onclick="doUserLeave()" style="display:none;">🚪 离开世界</button>
       <button id="btn-user-enter" onclick="doUserEnter()">✨ 进入世界</button>
     </div>
   </div>

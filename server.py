@@ -86,6 +86,9 @@ class LoginRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
 
+class SimLifeModeRequest(BaseModel):
+    enabled: bool
+
 # ── 路由 ─────────────────────────────────────────────────────
 @app.post("/api/login")
 async def login(req: LoginRequest, response: Response):
@@ -154,9 +157,49 @@ async def chat(req: ChatRequest, current: dict = Depends(_get_current_user)):
 
     return {"reply": reply, "timestamp": datetime.now().isoformat()}
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def index():
     return _HTML
+
+@app.get("/api/simlife")
+async def simlife_status(current: dict = Depends(_get_current_user)):
+    """获取 SimLife 状态和场景模式"""
+    if not _agent or not _agent.simlife:
+        return {"available": False}
+    mode = getattr(_agent, 'simlife_mode', False)
+    summary = None
+    try:
+        summary = _agent.simlife.get_life_summary()
+    except Exception:
+        pass
+    return {
+        "available": True,
+        "scene_mode": mode,
+        "summary": summary,
+    }
+
+@app.post("/api/simlife/mode")
+async def simlife_set_mode(req: SimLifeModeRequest, current: dict = Depends(_get_current_user)):
+    """切换 SimLife 场景模式（面对面）"""
+    if not _agent or not _agent.simlife:
+        raise HTTPException(status_code=503, detail="SimLife 未启用")
+    _agent.simlife_mode = req.enabled
+    # 同步到 user_profile.json（让 SimLife web 面板也能感知）
+    try:
+        from pathlib import Path
+        profile_path = Path(__file__).parent / "simlife" / "data" / "user_profile.json"
+        if profile_path.exists():
+            import json
+            with open(profile_path, "r", encoding="utf-8") as f:
+                profile = json.load(f)
+            profile["entered"] = req.enabled
+            with open(profile_path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    return {"ok": True, "scene_mode": req.enabled}
+
+@app.get("/")
 
 # ── 对外启动接口（由 main.py 的 _on_engine_ready 调用）───────
 def start_server(agent, auth_manager, host="0.0.0.0", port=18765):
@@ -274,6 +317,11 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
   padding:.38rem .75rem;color:var(--dim);font-family:'Sora',sans-serif;
   font-size:.75rem;cursor:pointer;transition:color .2s,border-color .2s}
 .btn-exit:hover{color:var(--text);border-color:var(--muted)}
+.btn-scene{background:none;border:1px solid var(--rim);border-radius:8px;
+  padding:.38rem .7rem;color:var(--dim);font-family:'Sora',sans-serif;
+  font-size:.75rem;cursor:pointer;transition:all .2s;margin-left:.4rem}
+.btn-scene:hover{color:var(--text);border-color:var(--muted)}
+.btn-scene.on{background:rgba(52,215,138,.15);border-color:var(--ok);color:var(--ok)}
 
 .msgs{flex:1;overflow-y:auto;padding:1.2rem 1rem;display:flex;flex-direction:column;
   gap:1rem;scroll-behavior:smooth;overscroll-behavior:contain}
@@ -358,6 +406,7 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
       </div>
     </div>
     <button class="btn-exit" onclick="doLogout()">退出</button>
+    <button class="btn-scene" id="sceneBtn" onclick="toggleScene()" title="进入/离开面对面场景">🌿 场景</button>
   </div>
 
   <div class="msgs" id="msgs">
@@ -411,6 +460,33 @@ function showChat(name,uid){
   document.getElementById('topUid').textContent=uid||'在线';
   document.getElementById('av').textContent=(name||'A')[0].toUpperCase();
   document.getElementById('inp').focus();
+  checkSceneStatus();
+}
+
+async function checkSceneStatus(){
+  try{
+    const r=await fetch('/api/simlife');
+    if(r.ok){
+      const d=await r.json();
+      if(d.available){
+        document.getElementById('sceneBtn').style.display='';
+        if(d.scene_mode){document.getElementById('sceneBtn').classList.add('on');document.getElementById('sceneBtn').textContent='🌿 场景中';}
+        else{document.getElementById('sceneBtn').classList.remove('on');document.getElementById('sceneBtn').textContent='🌿 场景';}
+      }else{document.getElementById('sceneBtn').style.display='none';}
+    }
+  }catch(e){document.getElementById('sceneBtn').style.display='none';}
+}
+
+async function toggleScene(){
+  const btn=document.getElementById('sceneBtn');
+  const isOn=btn.classList.contains('on');
+  try{
+    const r=await fetch('/api/simlife/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!isOn})});
+    if(r.ok){
+      if(!isOn){btn.classList.add('on');btn.textContent='🌿 场景中';}
+      else{btn.classList.remove('on');btn.textContent='🌿 场景';}
+    }
+  }catch(e){}
 }
 
 async function send(){

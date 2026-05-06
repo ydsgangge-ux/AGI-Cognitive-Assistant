@@ -495,6 +495,7 @@ class SlashCompleter(QWidget):
 class ChatPage(QWidget):
 
     message_sent = pyqtSignal(str)
+    simlife_toggled = pyqtSignal(bool)  # SimLife 场景模式切换
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -586,6 +587,22 @@ class ChatPage(QWidget):
         in_layout.addWidget(btn_attach)
         in_layout.addWidget(self._attach_lbl)
         in_layout.addWidget(self._input)
+
+        # SimLife 场景切换按钮
+        self._simlife_mode = False
+        self.btn_simlife = QPushButton("🌱 进入场景")
+        self.btn_simlife.setFixedSize(72, 72)
+        self.btn_simlife.setToolTip("左键：进入/离开场景\n右键：打开 SimLife 设置")
+        self._style_simlife_btn()
+        self.btn_simlife.clicked.connect(self._toggle_simlife)
+        self.btn_simlife.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.btn_simlife.customContextMenuRequested.connect(
+            self._simlife_context_menu
+        )
+
+        in_layout.addWidget(self.btn_simlife)
         in_layout.addWidget(btn_send)
 
         layout.addWidget(self._scroll)
@@ -686,6 +703,48 @@ class ChatPage(QWidget):
                 self._send()
                 return True
         return super().eventFilter(obj, event)
+
+    def _style_simlife_btn(self):
+        """根据 simlife_mode 状态更新按钮样式"""
+        if self._simlife_mode:
+            self.btn_simlife.setText("🌱 场景中")
+            self.btn_simlife.setStyleSheet(
+                "QPushButton{background:#238636;border:none;"
+                "border-radius:8px;color:white;font-size:11px;font-weight:700;}"
+            )
+        else:
+            self.btn_simlife.setText("🌱 进入场景")
+            self.btn_simlife.setStyleSheet(
+                "QPushButton{background:#21262d;border:1px solid #30363d;"
+                "border-radius:8px;color:#8b949e;font-size:11px;font-weight:700;}"
+                "QPushButton:hover{color:#58a6ff;border-color:#58a6ff;}"
+            )
+
+    def _toggle_simlife(self):
+        self._simlife_mode = not self._simlife_mode
+        self._style_simlife_btn()
+        self.simlife_toggled.emit(self._simlife_mode)
+
+    def _simlife_context_menu(self, pos):
+        """SimLife 按钮右键菜单"""
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self.btn_simlife)
+        menu.setStyleSheet(
+            "QMenu{background:#21262d;border:1px solid #30363d;"
+            "color:#e6edf3;padding:4px;}"
+            "QMenu::item{padding:6px 16px;}"
+            "QMenu::item:hover{background:#30363d;}"
+        )
+        act_setup = menu.addAction("🔧 打开 SimLife 设置")
+        act_open = menu.addAction("🌐 在浏览器中打开")
+
+        chosen = menu.exec(self.btn_simlife.mapToGlobal(pos))
+        if chosen == act_setup:
+            import webbrowser
+            webbrowser.open("http://127.0.0.1:8769")
+        elif chosen == act_open:
+            import webbrowser
+            webbrowser.open("http://127.0.0.1:8769")
 
     def _pick_file(self):
         """打开文件选择器，支持图片和 Office 文件"""
@@ -4893,6 +4952,132 @@ class FaceRecognitionPage(QWidget):
             self._load_users()
 
 
+# ── SimLife 页面（内嵌浏览器 / 降级按钮）─────────────
+class SimLifePage(QWidget):
+    """SimLife 生活模拟页面，内嵌 QWebEngineView 加载 http://127.0.0.1:8769"""
+
+    SIMLIFE_URL = "http://127.0.0.1:8769"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._web = None
+        self._loaded = False
+        self._setup_ui()
+
+    def _setup_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # 顶部栏
+        header = QWidget()
+        header.setFixedHeight(48)
+        header.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(16, 0, 16, 0)
+        h_lay.addWidget(_make_label("🌱  SimLife 生活模拟",
+            "color:#e6edf3;font-size:15px;font-weight:700;"))
+        h_lay.addStretch()
+
+        btn_refresh = QPushButton("🔄 刷新")
+        btn_refresh.setFixedSize(70, 32)
+        btn_refresh.setStyleSheet(
+            "QPushButton{background:#21262d;border:1px solid #30363d;"
+            "border-radius:6px;color:#c9d1d9;font-size:12px;}"
+            "QPushButton:hover{color:#58a6ff;border-color:#58a6ff;}"
+        )
+        btn_refresh.clicked.connect(self._refresh)
+        h_lay.addWidget(btn_refresh)
+
+        btn_external = QPushButton("🌐 浏览器打开")
+        btn_external.setFixedSize(100, 32)
+        btn_external.setStyleSheet(
+            "QPushButton{background:#21262d;border:1px solid #30363d;"
+            "border-radius:6px;color:#c9d1d9;font-size:12px;}"
+            "QPushButton:hover{color:#58a6ff;border-color:#58a6ff;}"
+        )
+        btn_external.clicked.connect(self._open_external)
+        h_lay.addWidget(btn_external)
+
+        outer.addWidget(header)
+
+        # 内容区（WebEngine 或占位）
+        self._container = QWidget()
+        self._container.setStyleSheet("background:#0d1117;")
+        container_lay = QVBoxLayout(self._container)
+        container_lay.setContentsMargins(0, 0, 0, 0)
+
+        # 占位（WebEngine 加载前显示）
+        self._placeholder = QLabel("🌱 SimLife 生活模拟\n\n正在加载…")
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._placeholder.setStyleSheet(
+            "color:#8b949e;font-size:16px;background:#0d1117;"
+        )
+        self._placeholder.setMinimumSize(300, 200)
+        container_lay.addWidget(self._placeholder)
+
+        outer.addWidget(self._container, stretch=1)
+
+        # 延迟 1 秒后尝试加载 WebEngine
+        from PyQt6.QtCore import QTimer
+        self._load_timer = QTimer(self)
+        self._load_timer.setSingleShot(True)
+        self._load_timer.timeout.connect(self._try_load)
+        self._load_timer.start(1000)
+
+    def _try_load(self):
+        """延迟加载 WebEngine，避免影响启动性能"""
+        try:
+            from PyQt6.QtWebEngineWidgets import QWebEngineView
+            lay = self._container.layout()
+
+            self._web = QWebEngineView()
+            self._web.setStyleSheet(
+                "QWebEngineView{background:#0d1117;border:none;}"
+            )
+            self._web.setUrl(self.SIMLIFE_URL)
+
+            lay.removeWidget(self._placeholder)
+            self._placeholder.deleteLater()
+            self._placeholder = None
+            lay.addWidget(self._web)
+            self._loaded = True
+            print("[SimLife] 内嵌页面已加载")
+        except ImportError:
+            if self._placeholder:
+                self._placeholder.setText(
+                    "🌱 SimLife 生活模拟\n\n"
+                    "PyQt6-WebEngine 未安装\n"
+                    "请点击上方「浏览器打开」按钮\n"
+                    "或执行: pip install PyQt6-WebEngine"
+                )
+            print("[SimLife] WebEngine 未安装，降级为外部浏览器模式")
+        except Exception as e:
+            if self._placeholder:
+                self._placeholder.setText(
+                    f"🌱 SimLife\n\nWebEngine 加载失败:\n{e}\n\n"
+                    "请点击上方「浏览器打开」按钮"
+                )
+            print(f"[SimLife] WebEngine 加载失败: {e}")
+
+    def _refresh(self):
+        if self._web:
+            self._web.reload()
+        else:
+            self._try_load()
+
+    def _open_external(self):
+        import webbrowser
+        webbrowser.open(self.SIMLIFE_URL)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # 切换到这个 tab 时如果还没加载则尝试加载
+        if not self._loaded and self._placeholder and \
+                "正在加载" in self._placeholder.text():
+            self._try_load()
+
+
 # ── 主窗口 ────────────────────────────────────────
 class MainWindow(QMainWindow):
 
@@ -4950,6 +5135,7 @@ class MainWindow(QMainWindow):
         # 对话页
         self.chat_page = ChatPage()
         self.chat_page.message_sent.connect(self._on_message)
+        self.chat_page.simlife_toggled.connect(self._on_simlife_toggled)
         self._tabs.addTab(self.chat_page, "💬")
         self._tabs.setTabToolTip(0, "对话")
 
@@ -5761,6 +5947,15 @@ class MainWindow(QMainWindow):
 
 
     # ── 消息处理 ────────────────────────────────
+    def _on_simlife_toggled(self, enabled: bool):
+        """SimLife 场景模式切换：同步到 agent"""
+        if self.agent:
+            self.agent.simlife_mode = enabled
+        self.statusBar().showMessage(
+            "🌱 已进入 SimLife 场景模式" if enabled
+            else "已退出 SimLife 场景模式", 3000
+        )
+
     def _on_message(self, text: str):
         if self._worker and self._worker.isRunning():
             return
