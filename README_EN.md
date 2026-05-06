@@ -21,14 +21,16 @@
 ## Features
 
 - **A/B Dual Architecture** — Layer A (consciousness) has personality, emotions, judgment; Layer B (executor) calls LLM + tools
+- **Dynamic Thinking Mode** — Perception layer automatically judges question complexity; simple questions get fast responses (saves tokens), complex questions enable deep reasoning (high quality). Three switchable modes (auto/always on/always off), decision path observable in server logs
 - **Hierarchical Memory** — SQLite + vector retrieval, three-tier storage (outline/detail/fragment) + associative network + two-phase retrieval
 - **User Profile** — Gradually accumulates personality traits, detects anomalous behavior, identity verification
 - **28 Built-in Tools** — File operations, system control, web search, browser automation, OCR, coding agent, Office I/O, stock info, news, **AI image generation**
 - **AI Image Generation** — Auto-generates character selfies & scenery using pollinations.ai (free, no API key); proactive periodic generation (~3h); chat bubble image display; personality-bound avatar prompts with AI auto-generation
-- **SimLife Virtual Life** — Virtual life system: real-time scene engine (work/home/commute/outdoor), daily events, mood system, NPC interaction, weather integration (Open-Meteo, free), holiday calendar. Auto-starts with main app. First-time setup via built-in web UI (`http://127.0.0.1:87659`)
+- **SimLife Virtual Life** — Virtual life system: real-time scene engine (work/home/commute/outdoor/travel), daily events, mood system, NPC interaction, weather integration (Open-Meteo, free), holiday calendar, schedule management. Auto-starts with main app. First-time setup via built-in web UI (`http://127.0.0.1:87659`)
+- **SimLife World System** — Experience isekai-style communication! Besides the default modern world, import custom world settings (fantasy/sci-fi/isekai). Users generate setting packs via external LLMs (JSON), which auto-inject into character generation, activity descriptions, and event systems. Built-in world template and generation prompts, one-click switching
 - **Growth Engine** — Personality drift + active learning + experiential cognition with deduplication & activity decay — the AGI evolves through conversation
 - **Mobile Web Client** — Built-in web server (FastAPI), chat from any phone browser, shares the same agent instance and memory as desktop
-- **Proactive Conversation** — AGI initiates topics autonomously; user replies are stored as complete memory chains (system→user→AI)
+- **Proactive Conversation** — AGI initiates topics autonomously; user replies are stored as complete memory chains (system→user→AI), proactive messages carry identity tags so AI correctly distinguishes its own messages from user messages
 - **12 LLM Providers** — DeepSeek / OpenAI / Claude / Gemini / Groq / Qwen / Zhipu / Doubao / Kimi / Baidu / SparkDesk / Ollama (100% local)
 - **Multi-language** — Chinese / English / 日本語 / 한국어 / Español / العربية
 - **Voice Synthesis** — Microsoft Edge TTS, multiple voices
@@ -117,10 +119,14 @@ agi_app/
 │   │   ├── mood_engine.py   # Mood calculation (scene + events + weather)
 │   │   ├── npc_engine.py    # NPC activation and interaction
 │   │   ├── weather.py       # Open-Meteo weather (free, no API key)
-│   │   ├── generator.py     # LLM character/NPC card generation
+│   │   ├── generator.py     # LLM character/NPC generation (auto world injection)
 │   │   └── holiday_calendar.py  # Chinese holidays + festivals
 │   ├── frontend/            # Setup web UI (initial character creation)
 │   ├── data/                # Runtime data (character, world state, events)
+│   ├── worlds/              # World Setting System
+│   │   ├── world_manager.py       # World load/switch/injection manager
+│   │   ├── world_setting_template.json  # 13-dimension world template
+│   │   └── generate_world_prompt.md     # Prompt template for world generation
 │   └── setup.py             # Standalone setup launcher
 │
 ├── vrm_module/              # VRM Virtual Avatar Module (optional)
@@ -173,7 +179,7 @@ After launching, go to the **Settings** tab to configure:
 User Input
     │
     ▼
-① Perception (LLM) → Emotion / task type / topic tags
+① Perception (LLM) → Emotion / task type / topic tags / complexity (simple/complex)
     │
     ▼
 ② Two-phase Memory Retrieval
@@ -183,6 +189,7 @@ User Input
     │
     ▼
 ③ Reasoning (LLM) → Decide tool usage, storage strategy
+   └ Complex problems enable deep thinking, simple ones get fast response
     │
     ├── Needs tools ──→ ④ Layer B tool loop (ReAct, max 8 steps)
     │
@@ -213,6 +220,36 @@ User Input
 | **Image** | `generate_image` (pollinations.ai, free, no API key) |
 
 All high-risk tools (`run_command`, `run_python`) require explicit user confirmation before execution.
+
+---
+
+## SimLife World System
+
+SimLife supports custom world settings, enabling isekai-style communication — the AGI can roleplay as a character from fantasy/sci-fi worlds.
+
+### How It Works
+
+- **Modern World** (default): Cannot be deleted, uses original real-world theme
+- **Custom Worlds**: Users generate world settings via external LLMs (JSON), which auto-inject into character generation, activity descriptions, and event generation
+- **LLM Config Inheritance**: SimLife automatically uses the main system's LLM config, no separate setup needed
+
+### Usage
+
+1. Open `simlife/worlds/generate_world_prompt.md`, copy the prompt template
+2. Paste into any LLM (e.g., DeepSeek, ChatGPT), customize the settings
+3. Save the generated JSON as `world_setting.json`
+4. Import via SimLife API: `POST http://127.0.0.1:8769/api/worlds/import`
+5. Switch world: `POST http://127.0.0.1:8769/api/worlds/switch`, body: `{"world_id": "your_world_id"}`
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/worlds` | GET | List all available worlds |
+| `/api/worlds/current` | GET | Get current world |
+| `/api/worlds/switch` | POST | Switch world |
+| `/api/worlds/import` | POST | Import world setting |
+| `/api/worlds/template` | GET | Get world template |
 
 ---
 

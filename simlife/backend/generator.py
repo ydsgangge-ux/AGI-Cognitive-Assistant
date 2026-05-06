@@ -1,6 +1,7 @@
 """
 AI 生成器 - 生成人物卡 + NPC卡 + Activity描述 + 事件队列
 支持多种工作模式：上班族 / 自由职业 / 学生 / 旅行博主
+支持多世界观：现代世界（默认）+ 自定义世界（fantasy/scifi/...）
 """
 import json
 import sys
@@ -11,6 +12,38 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from engine.llm_client import create_client
+
+
+def _get_world_context() -> str:
+    """获取当前世界观的 context 文本，现代世界返回空字符串"""
+    try:
+        from simlife.worlds.world_manager import load_world_setting, build_world_context
+        ws = load_world_setting()
+        if ws:
+            return build_world_context(ws)
+    except Exception:
+        pass
+    return ""
+
+
+def _get_world_guide(guide_type: str = "character") -> str:
+    """获取世界观的生成引导（character/activity/event）"""
+    try:
+        from simlife.worlds.world_manager import load_world_setting
+        ws = load_world_setting()
+        if ws:
+            if guide_type == "character":
+                from simlife.worlds.world_manager import build_character_guide
+                return build_character_guide(ws)
+            elif guide_type == "activity":
+                from simlife.worlds.world_manager import build_activity_guide
+                return build_activity_guide(ws)
+            elif guide_type == "event":
+                from simlife.worlds.world_manager import build_event_guide
+                return build_event_guide(ws)
+    except Exception:
+        pass
+    return ""
 
 
 def get_llm_client(config: dict = None):
@@ -83,6 +116,11 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
         prompt = _build_travel_prompt(name, age, city, occupation, personality, extra_context)
     else:
         prompt = _build_office_prompt(name, age, city, occupation, personality, extra_context)
+
+    # 注入世界观设定（非现代世界时）
+    world_ctx = _get_world_context()
+    if world_ctx:
+        prompt = world_ctx + _get_world_guide("character") + "\n\n" + prompt
 
     try:
         response = llm.generate(prompt, max_tokens=2500, temperature=0.8)
@@ -862,6 +900,11 @@ def generate_activity_description(
 用第三人称写一句话描述这个瞬间，口语化，有细节，不超过30字，不要用感叹号。
 只返回描述文字，不要引号或其他内容。"""
 
+    # 注入世界观活动引导
+    world_guide = _get_world_guide("activity")
+    if world_guide:
+        prompt = world_guide + "\n\n" + prompt
+
     try:
         response = llm.generate(prompt, max_tokens=100, temperature=0.9)
         return response.strip().strip('"').strip('"').strip("'").strip()
@@ -927,6 +970,11 @@ def generate_future_events(
   {{"event_id": "自定义英文id", "label": "事件描述", "scheduled_date": "YYYY-MM-DD", "scheduled_time_range": "HH:MM-HH:MM", "mood_delta": 10, "source": "llm_generated"}}
 ]
 从明天开始。只返回JSON数组。"""
+
+    # 注入世界观事件引导
+    world_guide = _get_world_guide("event")
+    if world_guide:
+        prompt = world_guide + "\n\n" + prompt
 
     try:
         from datetime import datetime, timedelta

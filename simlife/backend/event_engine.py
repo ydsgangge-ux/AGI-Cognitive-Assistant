@@ -433,7 +433,7 @@ def check_scheduled_events(
 
         # 触发
         library = load_event_library()
-        lib_evt = next((e for e in library if e["id"] == evt["event_id"]), None)
+        lib_evt = next((e for e in library if e["id"] == evt.get("event_id")), None)
         label = evt.get("label", "")
         mood = evt.get("mood_delta", 0)
         if lib_evt:

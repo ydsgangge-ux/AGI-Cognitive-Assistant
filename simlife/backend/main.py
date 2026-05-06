@@ -474,6 +474,69 @@ def api_status():
     }
 
 
+# ── 世界观管理 API ─────────────────────────────────
+
+@app.get("/api/worlds")
+def api_list_worlds():
+    """列出所有可用世界观"""
+    from simlife.worlds.world_manager import list_available_worlds, get_current_world_id
+    return {
+        "worlds": list_available_worlds(),
+        "current": get_current_world_id(),
+    }
+
+
+@app.get("/api/worlds/current")
+def api_get_current_world():
+    """获取当前世界观的完整设定"""
+    from simlife.worlds.world_manager import (
+        load_world_setting, build_world_context,
+        get_current_world_id,
+    )
+    world_id = get_current_world_id()
+    setting = load_world_setting(world_id)
+    context = build_world_context(setting) if setting else ""
+    return {"world_id": world_id, "setting": setting, "context": context}
+
+
+@app.post("/api/worlds/switch")
+def api_switch_world(data: dict):
+    """切换世界观（仅未初始化时可用）"""
+    if character_card is not None:
+        raise HTTPException(400, "已初始化角色，无法切换世界观")
+    world_id = data.get("world_id", "modern")
+    from simlife.worlds.world_manager import set_current_world, list_available_worlds
+    valid_ids = [w["world_id"] for w in list_available_worlds()]
+    if world_id not in valid_ids:
+        raise HTTPException(400, f"无效的世界观 ID: {world_id}")
+    set_current_world(world_id)
+    return {"status": "ok", "world_id": world_id}
+
+
+@app.post("/api/worlds/import")
+def api_import_world(data: dict):
+    """导入自定义世界观设定"""
+    setting = data.get("setting")
+    if not setting or not isinstance(setting, dict):
+        raise HTTPException(400, "缺少 setting 字段")
+    world_id = setting.get("world_id", "custom")
+    if not world_id or world_id == "modern":
+        raise HTTPException(400, "世界观 ID 无效（不能使用 'modern'）")
+    from simlife.worlds.world_manager import save_world_setting
+    save_world_setting(world_id, setting)
+    return {"status": "ok", "world_id": world_id, "world_name": setting.get("world_name", "")}
+
+
+@app.get("/api/worlds/template")
+def api_get_world_template():
+    """获取世界观设定模板（用户用 LLM 生成后导入）"""
+    from simlife.worlds.world_manager import WORLD_TEMPLATE
+    if WORLD_TEMPLATE.exists():
+        with open(WORLD_TEMPLATE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
 # ── 前端静态文件 ─────────────────────────────────────
 
 @app.get("/")

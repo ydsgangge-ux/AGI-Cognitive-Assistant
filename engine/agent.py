@@ -737,7 +737,7 @@ class ConsciousnessAgent:
         # 追加最近几轮原始对话（帮助理解指代和判断任务连续性）
         if self.conversation_history:
             recent_conv = self.conversation_history[-6:]
-            conv_lines = []
+            conv_lines = ["（注：[我主动发送的消息]和[我主动分享的图片]是你之前主动发给用户的，不是用户发的）"]
             for m in recent_conv:
                 role = "用户" if m["role"] == "user" else self.personality.name
                 conv_lines.append(f"{role}：{m['content'][:300]}")
@@ -779,7 +779,7 @@ class ConsciousnessAgent:
         history_section = ""
         if self.conversation_history:
             recent = self.conversation_history[-HISTORY_SEND_LIMIT:]
-            lines = []
+            lines = ["（注：[我主动发送的消息]和[我主动分享的图片]是你之前主动发给用户的，不是用户发的）"]
             for m in recent:
                 role = "用户" if m["role"] == "user" else self.personality.name
                 lines.append(f"{role}：{m['content']}")

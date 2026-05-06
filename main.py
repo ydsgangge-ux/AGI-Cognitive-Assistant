@@ -492,7 +492,7 @@ class AGIApp:
         # 追加到对话历史，用户回复时 process() 能看到上下文并一起存入记忆
         if self.agent:
             self.agent.conversation_history.append(
-                {"role": "assistant", "content": message}
+                {"role": "assistant", "content": f"[我主动发送的消息]{message}"}
             )
 
         # 优先展示到悬浮窗（如果可见），否则展示到主窗口
@@ -615,7 +615,7 @@ class AGIApp:
         # 追加到对话历史
         if self.agent:
             self.agent.conversation_history.append(
-                {"role": "assistant", "content": f"[主动图片: {image_path}]\n{caption}"}
+                {"role": "assistant", "content": f"[我主动分享的图片]{caption}"}
             )
 
         # 展示到可见窗口
