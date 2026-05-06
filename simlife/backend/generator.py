@@ -46,6 +46,70 @@ def _get_world_guide(guide_type: str = "character") -> str:
     return ""
 
 
+def generate_world_setting(
+    world_type: str = "fantasy",
+    core_theme: str = "",
+    character_role: str = "",
+) -> dict:
+    """
+    用 LLM 生成一个完整的世界观设定 JSON。
+    返回 world_setting dict 或 None。
+    """
+    import re
+
+    llm = get_llm_client()
+
+    type_names = {
+        "fantasy": "奇幻魔法",
+        "scifi": "科幻未来",
+        "xianxia": "仙侠修真",
+        "post_apocalyptic": "末世废土",
+        "custom": "自定义",
+    }
+    type_label = type_names.get(world_type, world_type)
+
+    prompt = f"""你是一个专业的世界观设计师。请创建一个{type_label}类型的世界观设定。
+
+核心主题：{core_theme}
+角色在这个世界的身份：{character_role or '（未指定）'}
+
+设计要求：
+1. 世界观必须自洽：地理、种族、力量体系、势力之间要有合理的因果关系
+2. 细节要丰富：每个区域、种族、势力都要有独特性
+3. 要有故事潜力：留出冲突点和悬念
+4. 数量适当：区域4-8个，种族3-6个，势力3-5个，副本3-5个
+5. 所有名称要有风格统一性
+
+返回完整的 JSON 格式，必须包含以下顶层字段：
+world_id（英文小写id）、world_name、world_type、era、communication（device/device_description/narrative_style）、geography（overview/regions数组）、races数组、power_system、factions数组、history、daily_life、dangers（monster_types/dungeons数组）、character_generation_guide、activity_generation_guide、event_generation_guide
+
+只返回JSON，不要任何其他文字。确保JSON可以直接被解析。"""
+
+    try:
+        response = llm.generate(prompt, max_tokens=8000, temperature=0.8)
+        response = response.strip()
+        # 提取 JSON（可能被 markdown 代码块包裹）
+        json_match = re.search(r'\{[\s\S]*\}', response)
+        if json_match:
+            response = json_match.group(0)
+
+        setting = json.loads(response)
+
+        # 确保 world_id 合法
+        if not setting.get("world_id") or setting["world_id"] == "modern":
+            import hashlib
+            setting["world_id"] = "world_" + hashlib.md5(core_theme.encode()).hexdigest()[:8]
+
+        # 确保 world_type
+        if not setting.get("world_type"):
+            setting["world_type"] = world_type
+
+        return setting
+    except Exception as e:
+        print(f"[SimLife] 世界观生成失败: {e}")
+        return None
+
+
 def get_llm_client(config: dict = None):
     """获取 LLM 客户端实例（从 SimLife 配置或主项目配置）"""
     if config is None:

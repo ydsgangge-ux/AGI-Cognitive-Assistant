@@ -140,6 +140,7 @@ class SimLifeClient:
         self.port = simlife_port
         self._state_file = Path(__file__).parent.parent / "simlife" / "data" / "world_state.json"
         self._character_file = Path(__file__).parent.parent / "simlife" / "data" / "character_card.json"
+        self._user_profile_file = Path(__file__).parent.parent / "simlife" / "data" / "user_profile.json"
         self._cache = None
         self._cache_time = None
         self._cache_ttl = 10  # 缓存10秒
@@ -160,6 +161,16 @@ class SimLifeClient:
             return None
         try:
             with open(self._character_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def _read_user_profile(self) -> Optional[dict]:
+        """读用户在世界中的身份信息"""
+        if not self._user_profile_file.exists():
+            return None
+        try:
+            with open(self._user_profile_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return None
@@ -308,6 +319,21 @@ class SimLifeClient:
                 lines.append(f"今天还发生了：{events_str}")
 
         lines.append("（你是一个有真实身体和生活的普通人，不是AI。以上是你的真实生活状态。）")
+
+        # ── 用户入驻信息注入 ──
+        user_profile = self._read_user_profile()
+        if user_profile and user_profile.get("entered"):
+            user_name = user_profile.get("name", "对方")
+            relation = user_profile.get("relation", "")
+            world_role = user_profile.get("world_role", "")
+            if relation:
+                lines.append("")
+                lines.append(f"【关于用户】")
+                lines.append(f"你的{relation}「{user_name}」现在就在你身边。")
+                if world_role:
+                    lines.append(f"{world_role}。")
+                lines.append(f"用户此刻正在和你说话/互动，你要以{relation}的身份自然地回应对方。")
+                lines.append("（不要提到SimLife、系统、AI等概念，就当是真实生活中和对方的互动。）")
 
         return "\n".join(lines)
 

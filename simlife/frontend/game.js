@@ -128,6 +128,17 @@ const Game = {
 
       this._activeNpcIds = state.active_npcs || [];
 
+      // 同步用户入驻状态
+      if (state.user) {
+        UI._userProfile = {
+          ...UI._userProfile,
+          entered: state.user.entered,
+          name: state.user.name || UI._userProfile?.name || '',
+          relation: state.user.relation || UI._userProfile?.relation || '',
+        };
+        UI._updateEnterButton();
+      }
+
     } catch (e) {
       console.error('Poll error:', e);
     }

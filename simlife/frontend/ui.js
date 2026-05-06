@@ -15,6 +15,12 @@ const UI = {
   $logList: null,
   $setupOverlay: null,
   $mainUi: null,
+  $userOverlay: null,
+  $userEnterBtn: null,
+  _userProfile: null,
+
+  _worlds: [],
+  _selectedWorldId: 'modern',
 
   init() {
     this.$city = document.getElementById('disp-city');
@@ -29,6 +35,72 @@ const UI = {
     this.$logList = document.getElementById('log-list');
     this.$setupOverlay = document.getElementById('setup-overlay');
     this.$mainUi = document.getElementById('main-ui');
+    this.$userOverlay = document.getElementById('user-overlay');
+    this.$userEnterBtn = document.getElementById('user-enter-btn');
+
+    // 启动时加载用户入驻状态 + 世界观列表
+    this._loadUserProfile();
+    this._loadWorlds();
+  },
+
+  async _loadWorlds() {
+    try {
+      const resp = await fetch('/api/worlds');
+      if (resp.ok) {
+        const data = await resp.json();
+        this._worlds = data.worlds || [];
+        this._selectedWorldId = data.current || 'modern';
+        this._refreshWorldSelector();
+      }
+    } catch (e) { /* 忽略 */ }
+  },
+
+  _refreshWorldSelector() {
+    const sel = document.getElementById('inp-world');
+    if (!sel) return;
+    // 清空并重建选项
+    const currentValue = sel.value;
+    sel.innerHTML = '<option value="modern">🏢 现代都市（默认）</option>';
+    for (const w of this._worlds) {
+      if (w.world_id === 'modern') continue;
+      const opt = document.createElement('option');
+      opt.value = w.world_id;
+      const typeEmoji = { fantasy: '🗡️', scifi: '🚀', xianxia: '⛩️', post_apocalyptic: '☢️', custom: '🌈' };
+      opt.textContent = (typeEmoji[w.world_type] || '🌍') + ' ' + w.world_name;
+      sel.appendChild(opt);
+    }
+    sel.innerHTML += '<option value="__ai_generate">🤖 AI 生成自定义世界…</option>';
+    sel.innerHTML += '<option value="__import">📋 导入世界观 JSON…</option>';
+    sel.value = this._selectedWorldId || 'modern';
+    onWorldChange();
+  },
+
+  async _loadUserProfile() {
+    try {
+      const resp = await fetch('/api/user/profile');
+      if (resp.ok) {
+        this._userProfile = await resp.json();
+        this._updateEnterButton();
+      }
+    } catch (e) { /* 忽略 */ }
+  },
+
+  _updateEnterButton() {
+    if (!this.$userEnterBtn || !this._userProfile) return;
+    const entered = this._userProfile.entered;
+    const name = this._userProfile.name || '你';
+    const relation = this._userProfile.relation || '';
+
+    if (entered) {
+      this.$userEnterBtn.className = 'entered';
+      this.$userEnterBtn.innerHTML = '<span id="user-status-dot" class="active"></span>' + name + '（' + relation + '）在场';
+    } else if (relation) {
+      this.$userEnterBtn.className = '';
+      this.$userEnterBtn.innerHTML = '🏠 进入世界';
+    } else {
+      this.$userEnterBtn.className = '';
+      this.$userEnterBtn.innerHTML = '🏠 设置身份';
+    }
   },
 
   showSetup() {
@@ -160,3 +232,307 @@ async function generateWorld() {
     UI.setGenerateButton(true);
   }
 }
+
+/* ── 用户入驻管理 ── */
+
+function toggleUserPanel() {
+  const overlay = document.getElementById('user-overlay');
+  if (overlay.style.display === 'flex') {
+    closeUserPanel();
+    return;
+  }
+
+  // 如果已入驻，点击按钮 = 离开
+  if (UI._userProfile && UI._userProfile.entered) {
+    doUserLeave();
+    return;
+  }
+
+  // 填充已有信息
+  if (UI._userProfile) {
+    document.getElementById('inp-user-name').value = UI._userProfile.name || '';
+    document.getElementById('inp-user-relation').value = UI._userProfile.relation || '';
+    document.getElementById('inp-user-role').value = UI._userProfile.world_role || '';
+  }
+
+  // 根据是否已有关系设置，切换按钮文字
+  const hasRelation = UI._userProfile && UI._userProfile.relation;
+  const btnEnter = document.getElementById('btn-user-enter');
+  btnEnter.textContent = hasRelation ? '✨ 进入世界' : '✨ 保存并进入';
+
+  // 隐藏离开按钮，显示进入按钮
+  document.getElementById('btn-user-leave').style.display = 'none';
+  btnEnter.style.display = '';
+
+  overlay.style.display = 'flex';
+}
+
+function closeUserPanel() {
+  document.getElementById('user-overlay').style.display = 'none';
+}
+
+async function doUserEnter() {
+  const name = document.getElementById('inp-user-name').value.trim();
+  const relation = document.getElementById('inp-user-relation').value.trim();
+  const worldRole = document.getElementById('inp-user-role').value.trim();
+
+  if (!relation) {
+    alert('请填写你和角色的关系');
+    return;
+  }
+
+  try {
+    // 先保存身份信息
+    await fetch('/api/user/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, relation, world_role: worldRole }),
+    });
+
+    // 再进入世界
+    const resp = await fetch('/api/user/enter', { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || '进入失败');
+    }
+
+    UI._userProfile = { name, relation, world_role: worldRole, entered: true };
+    UI._updateEnterButton();
+    closeUserPanel();
+
+  } catch (e) {
+    alert('操作失败：' + e.message);
+  }
+}
+
+async function doUserLeave() {
+  if (!confirm('确定要离开 SimLife 世界吗？')) return;
+
+  try {
+    const resp = await fetch('/api/user/leave', { method: 'POST' });
+    if (resp.ok && UI._userProfile) {
+      UI._userProfile.entered = false;
+      UI._updateEnterButton();
+    }
+  } catch (e) {
+    alert('操作失败：' + e.message);
+  }
+}
+
+/* ── 世界观管理 ── */
+
+function onWorldChange() {
+  const sel = document.getElementById('inp-world');
+  const val = sel.value;
+
+  const modernFields = document.getElementById('modern-fields');
+  const cwFields = document.getElementById('custom-world-fields');
+  const aiPanel = document.getElementById('ai-gen-world-panel');
+  const importPanel = document.getElementById('import-world-panel');
+  const infoBar = document.getElementById('world-info-bar');
+
+  // 默认全部隐藏
+  modernFields.style.display = 'none';
+  cwFields.style.display = 'none';
+  aiPanel.style.display = 'none';
+  importPanel.style.display = 'none';
+  infoBar.style.display = 'none';
+
+  if (val === 'modern') {
+    modernFields.style.display = '';
+  } else if (val === '__ai_generate') {
+    aiPanel.style.display = '';
+    cwFields.style.display = '';
+  } else if (val === '__import') {
+    importPanel.style.display = '';
+    cwFields.style.display = '';
+  } else {
+    // 已有的自定义世界观
+    cwFields.style.display = '';
+    // 显示世界观摘要
+    const world = UI._worlds.find(w => w.world_id === val);
+    if (world) {
+      infoBar.style.display = '';
+      const typeNames = { fantasy: '奇幻魔法', scifi: '科幻未来', xianxia: '仙侠修真', post_apocalyptic: '末世废土', custom: '自定义' };
+      infoBar.textContent = '🌍 ' + world.world_name + '  |  类型：' + (typeNames[world.world_type] || world.world_type);
+    }
+  }
+
+  // 同步名字字段
+  const nameModern = document.getElementById('inp-name');
+  const nameCw = document.getElementById('inp-name-cw');
+  if (nameModern && nameCw) {
+    if (val === 'modern') {
+      nameCw.value = nameModern.value;
+    } else {
+      nameModern.value = nameCw.value;
+    }
+  }
+}
+
+async function doSwitchWorld(worldId) {
+  try {
+    const resp = await fetch('/api/worlds/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ world_id: worldId }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || '切换失败');
+    }
+    UI._selectedWorldId = worldId;
+    UI.setSetupStatus('✅ 已切换到 ' + worldId);
+  } catch (e) {
+    UI.setSetupStatus('❌ ' + e.message);
+  }
+}
+
+async function doAIGenerateWorld() {
+  const worldType = document.getElementById('inp-ai-world-type').value;
+  const theme = document.getElementById('inp-ai-world-theme').value.trim();
+  const role = document.getElementById('inp-ai-world-role').value.trim();
+
+  if (!theme) {
+    UI.setSetupStatus('请至少填写「核心主题」');
+    return;
+  }
+
+  UI.setSetupStatus('🧙 AI 正在生成世界观设定… 这可能需要 30-60 秒');
+  const btn = document.querySelector('#ai-gen-world-panel button');
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中…';
+
+  try {
+    const resp = await fetch('/api/worlds/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        world_type: worldType,
+        core_theme: theme,
+        character_role_hint: role,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || '生成失败');
+    }
+
+    const data = await resp.json();
+    UI.setSetupStatus('✅ 世界观「' + (data.world_name || data.world_id) + '」生成成功！');
+
+    // 刷新列表并选中
+    UI._selectedWorldId = data.world_id;
+    await UI._loadWorlds();
+
+  } catch (e) {
+    UI.setSetupStatus('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🧙 AI 生成世界观设定（约 30-60 秒）';
+  }
+}
+
+async function doImportWorld() {
+  const jsonStr = document.getElementById('inp-import-json').value.trim();
+  if (!jsonStr) {
+    UI.setSetupStatus('请粘贴世界观 JSON');
+    return;
+  }
+
+  let setting;
+  try {
+    setting = JSON.parse(jsonStr);
+  } catch (e) {
+    UI.setSetupStatus('❌ JSON 格式错误：' + e.message);
+    return;
+  }
+
+  UI.setSetupStatus('正在导入…');
+
+  try {
+    const resp = await fetch('/api/worlds/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setting }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || '导入失败');
+    }
+
+    const data = await resp.json();
+    UI.setSetupStatus('✅ 世界观「' + (data.world_name || data.world_id) + '」导入成功！');
+
+    UI._selectedWorldId = data.world_id;
+    await UI._loadWorlds();
+
+  } catch (e) {
+    UI.setSetupStatus('❌ ' + e.message);
+  }
+}
+
+// 改写 generateWorld 以支持非现代世界
+const _originalGenerateWorld = generateWorld;
+window.generateWorld = async function() {
+  const sel = document.getElementById('inp-world');
+  const isModern = sel.value === 'modern';
+
+  // 如果选了自定义世界观但未实际切换
+  if (!isModern && sel.value !== '__ai_generate' && sel.value !== '__import') {
+    await doSwitchWorld(sel.value);
+  }
+
+  const anchor = {
+    character_name: isModern
+      ? document.getElementById('inp-name').value.trim()
+      : document.getElementById('inp-name-cw').value.trim(),
+    city: isModern ? document.getElementById('inp-city').value : '',
+    occupation_hint: isModern
+      ? document.getElementById('inp-occupation').value.trim()
+      : document.getElementById('inp-occupation-cw').value.trim(),
+    age: parseInt(isModern
+      ? document.getElementById('inp-age').value
+      : document.getElementById('inp-age-cw').value) || 24,
+    personality_word: isModern
+      ? document.getElementById('inp-personality').value.trim()
+      : document.getElementById('inp-personality-cw').value.trim(),
+  };
+
+  if (!anchor.character_name) {
+    UI.setSetupStatus('请填写角色名字');
+    return;
+  }
+
+  UI.setSetupStatus('正在生成人物卡和世界... AI 可能耗时 10-30 秒');
+  UI.setGenerateButton(false);
+
+  try {
+    const resp = await fetch('/api/setup/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anchor }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || '生成失败');
+    }
+
+    const data = await resp.json();
+    UI.setSetupStatus('✅ 世界生成完成！');
+
+    setTimeout(() => {
+      UI.hideSetup();
+      if (typeof Game !== 'undefined') {
+        Game.onCharacterReady(data.card);
+      }
+    }, 800);
+
+  } catch (e) {
+    UI.setSetupStatus('❌ ' + e.message);
+    UI.setGenerateButton(true);
+  }
+};

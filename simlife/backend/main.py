@@ -361,6 +361,9 @@ def api_world_state():
         if travel_dest:
             travel_info = travel_dest
 
+    # 用户入驻状态
+    user_profile = _load_user_profile()
+
     return {
         "scene": world_state.current_scene,
         "scene_label": SCENE_LABELS.get(
@@ -380,6 +383,11 @@ def api_world_state():
         "birthday": birthday_info,
         "upcoming_birthdays": upcoming_birthdays,
         "travel": travel_info,
+        "user": {
+            "entered": user_profile.get("entered", False),
+            "name": user_profile.get("name", ""),
+            "relation": user_profile.get("relation", ""),
+        },
     }
 
 
@@ -527,6 +535,42 @@ def api_import_world(data: dict):
     return {"status": "ok", "world_id": world_id, "world_name": setting.get("world_name", "")}
 
 
+@app.post("/api/worlds/generate")
+def api_generate_world(data: dict):
+    """用 AI 生成一个自定义世界观设定"""
+    from simlife.backend.generator import generate_world_setting
+    from simlife.worlds.world_manager import save_world_setting, set_current_world
+
+    world_type = data.get("world_type", "fantasy")
+    core_theme = data.get("core_theme", "")
+    character_role = data.get("character_role_hint", "")
+
+    if not core_theme:
+        raise HTTPException(400, "请填写核心主题")
+
+    try:
+        setting = generate_world_setting(
+            world_type=world_type,
+            core_theme=core_theme,
+            character_role=character_role,
+        )
+        if not setting:
+            raise HTTPException(500, "AI 生成世界观失败，请检查 API Key 是否配置")
+
+        world_id = setting.get("world_id", "custom")
+        save_world_setting(world_id, setting)
+        set_current_world(world_id)
+        return {
+            "status": "ok",
+            "world_id": world_id,
+            "world_name": setting.get("world_name", ""),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"生成失败: {e}")
+
+
 @app.get("/api/worlds/template")
 def api_get_world_template():
     """获取世界观设定模板（用户用 LLM 生成后导入）"""
@@ -535,6 +579,83 @@ def api_get_world_template():
         with open(WORLD_TEMPLATE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
+
+
+# ── 用户入驻管理 API ─────────────────────────────────
+
+USER_PROFILE_PATH = DATA_DIR / "user_profile.json"
+
+
+def _load_user_profile() -> dict:
+    """加载用户在世界中的身份信息"""
+    if USER_PROFILE_PATH.exists():
+        with open(USER_PROFILE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"entered": False}
+
+
+def _save_user_profile(profile: dict):
+    """保存用户身份信息"""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(USER_PROFILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(profile, f, ensure_ascii=False, indent=2)
+
+
+@app.get("/api/user/profile")
+def api_get_user_profile():
+    """获取用户当前入驻状态和身份"""
+    return _load_user_profile()
+
+
+@app.post("/api/user/profile")
+def api_set_user_profile(data: dict):
+    """设置用户在世界中的身份信息"""
+    profile = _load_user_profile()
+    profile["name"] = data.get("name", "") or profile.get("name", "")
+    profile["relation"] = data.get("relation", "")
+    profile["world_role"] = data.get("world_role", "")
+    if profile["relation"]:
+        _save_user_profile(profile)
+    return {"status": "ok", "profile": profile}
+
+
+@app.post("/api/user/enter")
+def api_user_enter():
+    """用户进入 SimLife 世界"""
+    profile = _load_user_profile()
+    if not profile.get("relation"):
+        raise HTTPException(400, "请先设置你与角色的关系")
+    profile["entered"] = True
+    profile["entered_at"] = datetime.now().isoformat()
+    _save_user_profile(profile)
+    # 记录到世界日志
+    if world_state:
+        user_name = profile.get("name", "用户")
+        relation = profile.get("relation", "")
+        world_state.today_log.append(LogEntry(
+            time=datetime.now().strftime("%H:%M"),
+            event=f"🎂 {user_name}（{relation}）来到了"
+        ))
+        _save_world_state(world_state)
+    return {"status": "ok", "entered": True}
+
+
+@app.post("/api/user/leave")
+def api_user_leave():
+    """用户离开 SimLife 世界"""
+    profile = _load_user_profile()
+    profile["entered"] = False
+    profile["entered_at"] = None
+    _save_user_profile(profile)
+    # 记录到世界日志
+    if world_state:
+        user_name = profile.get("name", "用户")
+        world_state.today_log.append(LogEntry(
+            time=datetime.now().strftime("%H:%M"),
+            event=f"👋 {user_name}离开了"
+        ))
+        _save_world_state(world_state)
+    return {"status": "ok", "entered": False}
 
 
 # ── 前端静态文件 ─────────────────────────────────────
