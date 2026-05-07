@@ -286,7 +286,7 @@ def _tick_non_modern():
         _save_world_state(world_state)
         return
 
-    # 找到当前时间应该推进到的节点
+    # 推进计划节点：按原始逻辑，节点有固有 HH:MM 时间分布，直接按时间推进
     progress = world_state.day_plan_progress
     new_progress = progress
 
@@ -364,6 +364,7 @@ def _tick():
         world_state.today_date = today
         world_state.today_log = []
         world_state.today_events_triggered = []
+        world_state.next_random_event_at = None  # 新的一天重置，下一次触发自动重新计时
         # 继承前一天加班的疲劳
         if world_state.current_scene == "OVERTIME":
             world_state.sleep_mood_penalty = -5
@@ -516,21 +517,31 @@ def _tick():
                 event=micro["label"]
             ))
 
-    # 检查随机事件
-    rand_evt = check_random_events(
-        character_card.model_dump(),
-        scene.value,
-        day_seed,
-        world_state.today_events_triggered,
-        now,
-    )
-    if rand_evt and rand_evt["id"] not in world_state.today_events_triggered:
-        world_state.today_events_triggered.append(rand_evt["id"])
-        record_triggered_event(rand_evt)
-        world_state.today_log.append(LogEntry(
-            time=now.strftime("%H:%M"),
-            event=rand_evt["label"]
-        ))
+    # 检查随机事件（受 2-4 小时随机间隔控制）
+    import time as _time2
+    import random as _random_evt
+
+    next_at = world_state.next_random_event_at
+    if next_at is None:
+        # 新的一天：设置首次触发时间为 2-4 小时后
+        world_state.next_random_event_at = _time2.time() + _random_evt.uniform(7200, 14400)
+    elif _time2.time() >= next_at:
+        rand_evt = check_random_events(
+            character_card.model_dump(),
+            scene.value,
+            day_seed,
+            world_state.today_events_triggered,
+            now,
+        )
+        if rand_evt and rand_evt["id"] not in world_state.today_events_triggered:
+            world_state.today_events_triggered.append(rand_evt["id"])
+            # 设置下一次触发时间为 2-4 小时后
+            world_state.next_random_event_at = _time2.time() + _random_evt.uniform(7200, 14400)
+            record_triggered_event(rand_evt)
+            world_state.today_log.append(LogEntry(
+                time=now.strftime("%H:%M"),
+                event=rand_evt["label"]
+            ))
 
     # 检查排期事件
     scheduled = load_scheduled_events()

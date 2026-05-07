@@ -346,3 +346,4 @@ class WorldState(BaseModel):
     # 非现代世界：全天大纲计划（LLM 一次生成，逐步推进）
     day_plan: Optional[List[dict]] = None          # [{"time":"07:00","scene":"房间","label":"起床","activity":"...","mood_delta":0,"npc":"","expanded":null}, ...]
     day_plan_progress: int = 0                      # 已推进到的索引位置
+    next_random_event_at: Optional[float] = None    # 现代：2-4小时间隔，下次允许触发随机事件的时间戳
