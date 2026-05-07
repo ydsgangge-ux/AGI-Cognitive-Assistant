@@ -1203,7 +1203,7 @@ def generate_day_plan(
 
         plan = json.loads(response)
         if not isinstance(plan, list) or len(plan) == 0:
-            return _default_day_plan(name)
+            raise ValueError("空列表")
 
         # 验证并规范化
         valid_plan = []
@@ -1222,7 +1222,44 @@ def generate_day_plan(
         return valid_plan if valid_plan else _default_day_plan(name)
 
     except Exception as e:
-        print(f"[SimLife] 全天计划生成失败: {e}")
+        print(f"[SimLife] 全天计划 JSON 解析失败，尝试修复: {e}")
+        # 尝试修复常见 JSON 格式错误
+        try:
+            import re as _re
+            fixed = response
+            # 1. 如果以 , 结尾，去掉
+            fixed = _re.sub(r',\s*$', '', fixed.strip())
+            # 2. 补全最外层的 ] 或 }（LLM 经常截断）
+            open_brackets = fixed.count('[') + fixed.count('{')
+            close_brackets = fixed.count(']') + fixed.count('}')
+            fixed += ']' * (open_brackets - close_brackets)
+            # 3. 尝试用 rjson（对引号缺失更宽容）
+            try:
+                import rjson
+                plan = rjson.loads(fixed)
+            except ImportError:
+                plan = json.loads(fixed)
+            if isinstance(plan, list) and len(plan) > 0:
+                valid_plan = []
+                for item in plan:
+                    if not isinstance(item, dict):
+                        continue
+                    valid_plan.append({
+                        "time": str(item.get("time", "08:00")),
+                        "scene": str(item.get("scene", "日常")),
+                        "label": str(item.get("label", "")),
+                        "activity": str(item.get("activity", "")),
+                        "mood_delta": int(item.get("mood_delta", 0)),
+                        "npc": str(item.get("npc", "")),
+                        "expanded": None,
+                    })
+                if valid_plan:
+                    print(f"[SimLife] JSON 修复成功，得到 {len(valid_plan)} 个节点")
+                    return valid_plan
+        except Exception as e2:
+            print(f"[SimLife] JSON 修复也失败: {e2}")
+
+        print(f"[SimLife] 全天计划生成失败，使用默认计划")
         return _default_day_plan(name)
 
 
