@@ -1003,9 +1003,10 @@ def generate_activity_description(
         return defaults.get(scene, "在忙自己的事")
 
 
-def generate_life_arc(character_card: dict) -> dict:
+def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
     """
     根据世界观 + 角色信息，LLM 推算一个月级别的人生主线。
+    可选传入 previous_arc 作为上一段主线的摘要，保证故事连续性。
     返回字典，可直接用于创建 LifeArc 对象。
     """
     llm = get_llm_client()
@@ -1016,7 +1017,36 @@ def generate_life_arc(character_card: dict) -> dict:
     traits_str = "、".join(personality[:3]) if personality else "未设定"
     age = character_card.get("basic", {}).get("age", "")
 
-    prompt = f"""你是人生模拟器的叙事系统。请为角色「{name}」（{occupation}，{age}岁，性格：{traits_str}）规划一段为期约30天的人生主线任务。
+    # 前情提要：上一段主线的摘要
+    prev_hint = ""
+    if previous_arc:
+        prev_title = previous_arc.get("title", "")
+        prev_desc = previous_arc.get("description", "")
+        stages = previous_arc.get("stages", [])
+        final_stage = stages[-1] if stages else {}
+        final_events = "；".join(final_stage.get("key_events", [])[:3])
+        if final_stage.get("description"):
+            final_events = final_stage["description"] + "。" + final_events
+        prev_hint = f"""
+
+【前情提要】
+上一条主线：「{prev_title}」
+概述：{prev_desc}
+结局：{final_events}
+"""
+        # 历史归档中的主线轨迹
+        try:
+            hist_path = Path(__file__).parent.parent / "data" / "life_arc_history.json"
+            if hist_path.exists():
+                with open(hist_path, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+                if history:
+                    arc_titles = " → ".join([h.get("title", "?") for h in history[-5:]])
+                    prev_hint += f"角色经历过的所有主线：{arc_titles}\n"
+        except Exception:
+            pass
+
+    prompt = f"""你是人生模拟器的叙事系统。请为角色「{name}」（{occupation}，{age}岁，性格：{traits_str}）规划一段为期约30天的人生主线任务。{prev_hint}
 
 要求：
 1. 主线要有起承转合，符合角色身份和性格
@@ -1026,6 +1056,7 @@ def generate_life_arc(character_card: dict) -> dict:
 5. 总时长控制在 25-40 天
 6. 内容要符合世界观设定，有冒险感但不离谱
 7. 标题用 10-20 字概括
+8. 如果有【前情提要】，新主线要基于前情自然延续，角色状态和关系要有继承性
 
 返回 JSON，不要其他内容：
 {{

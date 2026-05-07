@@ -197,14 +197,20 @@ def _tick_non_modern():
 
     arc = load_life_arc()
 
-    # 没有主线或主线已完成 → 生成新的
+    # 没有主线或主线已完成 → 生成新的（带前情提要）
     if not arc or arc.completed:
+        prev_arc = None
         if arc:
+            prev_arc = {
+                "title": arc.title,
+                "description": arc.description,
+                "stages": [s.to_dict() for s in arc.stages],
+            }
             archive_life_arc(arc)
             print(f"[SimLife] 主线「{arc.title}」已完成，已归档")
         try:
             from simlife.backend.generator import generate_life_arc
-            arc_data = generate_life_arc(character_card.model_dump())
+            arc_data = generate_life_arc(character_card.model_dump(), previous_arc=prev_arc)
             arc = LifeArc(arc_data)
             save_life_arc(arc)
             print(f"[SimLife] 新主线「{arc.title}」（{arc.total_stages} 个阶段，共 {arc.duration_days} 天）")
@@ -302,11 +308,31 @@ def _tick_non_modern():
             if new_scene != world_state.current_scene or label:
                 world_state.today_log.append(LogEntry(time=node_time, event=f"→ {label}"))
 
-            if activity:
+            # 自动生成 200-500 字详细剧情，失败则回退到简短 activity
+            if not node.get("expanded"):
+                try:
+                    from simlife.backend.generator import expand_node
+                    prev_nodes_list = plan[max(0, i - 3):i]
+                    text = expand_node(
+                        character_card.model_dump(),
+                        node,
+                        cast=story_cast,
+                        arc_context=arc_hint,
+                        prev_nodes=prev_nodes_list,
+                    )
+                    node["expanded"] = text
+                except Exception as e:
+                    print(f"[SimLife] 节点展开失败: {e}")
+
+            expanded_text = node.get("expanded", "")
+            if expanded_text:
+                world_state.today_log.append(LogEntry(time=node_time, event=expanded_text))
+            elif activity:
                 world_state.today_log.append(LogEntry(time=node_time, event=activity))
 
             world_state.current_scene = new_scene
-            world_state.current_activity = activity
+            world_state.current_activity = expanded_text or activity
+            mood_delta = node.get("mood_delta", 0)
             world_state.mood = max(0, min(100, world_state.mood + mood_delta))
             last_tick_scene = world_state.current_scene
 
