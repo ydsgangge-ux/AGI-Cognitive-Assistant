@@ -1192,7 +1192,8 @@ def generate_day_plan(
         prompt = world_context + "\n\n" + prompt
 
     try:
-        response = llm.generate(prompt, max_tokens=500, temperature=0.85)
+        response = llm.generate(prompt, max_tokens=800, temperature=0.85,
+                                 response_format={"type": "json_object"})
         response = response.strip()
         if response.startswith("```"):
             lines = response.split("\n")

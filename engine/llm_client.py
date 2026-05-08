@@ -41,7 +41,8 @@ class OpenAICompatClient:
                  messages: List[Dict] = None, model: str = None,
                  thinking: Optional[bool] = None,
                  thinking_effort: Optional[str] = None,
-                 thinking_budget: Optional[int] = None) -> str:
+                 thinking_budget: Optional[int] = None,
+                 response_format: Optional[Dict] = None) -> str:
         if messages is None:
             msgs = []
             if system:
@@ -55,6 +56,10 @@ class OpenAICompatClient:
             "model": use_model, "messages": msgs,
             "max_tokens": max_tokens, "temperature": temperature
         }
+
+        # response_format（如 {"type": "json_object"} 强制模型输出合法 JSON）
+        if response_format:
+            body["response_format"] = response_format
 
         # 合并思考参数
         extra = self._build_thinking_params(thinking, thinking_effort, thinking_budget)
@@ -208,7 +213,8 @@ class ClaudeClient:
                  messages: List[Dict] = None,
                  thinking: Optional[bool] = None,
                  thinking_effort: Optional[str] = None,
-                 thinking_budget: Optional[int] = None) -> str:
+                 thinking_budget: Optional[int] = None,
+                 response_format: Optional[Dict] = None) -> str:
         if messages is None:
             msgs = [{"role": "user", "content": prompt}]
         else:
@@ -273,7 +279,8 @@ class GeminiClient:
                  messages: List[Dict] = None,
                  thinking: Optional[bool] = None,
                  thinking_effort: Optional[str] = None,
-                 thinking_budget: Optional[int] = None) -> str:
+                 thinking_budget: Optional[int] = None,
+                 response_format: Optional[Dict] = None) -> str:
         # 构建 Gemini 格式
         contents = []
         if messages:
@@ -386,7 +393,8 @@ class MockClient:
                  messages: List[Dict] = None, model: str = None,
                  thinking: Optional[bool] = None,
                  thinking_effort: Optional[str] = None,
-                 thinking_budget: Optional[int] = None) -> str:
+                 thinking_budget: Optional[int] = None,
+                 response_format: Optional[Dict] = None) -> str:
         if any(k in prompt for k in ["emotion", "needs_deep_memory",
                                       "情绪类型", "初步感受", "感知结果"]):
             return json.dumps({
