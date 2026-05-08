@@ -69,12 +69,21 @@ PERCEPTION_PROMPT = """你是{name}，你是一个有真实身体和生活的普
   "needs_deep_memory": true或false（是否需要从记忆中检索深层信息）,
   "task_type": "chat（普通对话）或 task（需要工具操作电脑/文件/网络的任务）",
   "task_description": "如果是task，简述需要做什么",
-  "complexity": "simple 或 complex（simple=闲聊/简单问答/打招呼/感谢，直接回答即可；complex=需要深度推理/分析/多步思考/创作/代码/数学等）
+  "complexity": "simple 或 complex（simple=闲聊/简单问答/打招呼/感谢，直接回答即可；complex=需要深度推理/分析/多步思考/创作/代码/数学等）,
+  "story_influence": null 或 {{
+    "summary": "对剧情走向有影响的一句话概括",
+    "importance": 0.0~1.0
+  }}
 }}
 
 complexity 判断标准：
 - simple：打招呼、闲聊、感谢、简单事实问答（"你好""谢谢""几点了""今天星期几"）、简单翻译、单个词语解释
 - complex：需要推理分析的问题、创作、编程、数学计算、多步逻辑、需要工具的任务、涉及深层记忆的回溯
+
+story_influence 填写规则（仅在异世界模式有意义）：
+- 如果用户说了会影响你未来行动/决策/目标的话 → 概括为一条影响信息，填 importance(0.6~1.0)
+- 如果用户说了你想记住的关键知识，也会影响你今后的行为 → 填 importance(0.3~0.6)
+- 日常闲聊/问候/无关话题 → 填 null
 
 只输出JSON，不要其他内容。"""
 
@@ -698,14 +707,37 @@ class ConsciousnessAgent:
             user_input=user_input
         )
         raw = self.b.generate(prompt, max_tokens=500, temperature=0.4, thinking=False)
-        return self._parse_json(raw, {
+
+        # 默认值 + story_influence
+        default_result = {
             "emotion":          {"primary": "neutral", "intensity": 0.3, "valence": 0.0},
             "initial_thoughts": "",
             "topic_tags":       [],
             "needs_deep_memory": True,
             "task_type":        "chat",
-            "task_description": ""
-        })
+            "task_description": "",
+        }
+        perception = self._parse_json(raw, default_result)
+
+        # 第三步：如果有剧情影响信息，推送到 SimLife
+        influence = perception.get("story_influence")
+        if isinstance(influence, dict) and influence.get("summary"):
+            summary = influence["summary"]
+            importance = float(influence.get("importance", 0.5))
+            if importance >= 0.3:
+                try:
+                    self._push_story_influence(summary, importance)
+                    self._log("剧情影响", f"[{importance:.1f}] {summary[:80]}")
+                except Exception as e:
+                    self._log("剧情影响", f"推送失败: {e}")
+
+        return perception
+
+    def _push_story_influence(self, summary: str, importance: float):
+        """将用户对剧情的影响写入 SimLife 共享文件"""
+        if not self.simlife:
+            return
+        self.simlife.push_story_influence(summary, importance)
 
     def _get_config(self, key, default=None):
         """从配置文件读取值，带缓存"""

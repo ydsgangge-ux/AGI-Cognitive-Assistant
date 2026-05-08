@@ -216,6 +216,62 @@ class SimLifeClient:
         except Exception:
             return False
 
+    # ── 剧情影响系统 ──────────────────────────────────────────
+    _STORY_INFLUENCE_MAX = 10
+
+    def push_story_influence(self, summary: str, importance: float):
+        """
+        AGI 代理调用：写入一条用户聊天中对剧情有影响的信息。
+        按重要度排序，保留最新 TOP N 条。
+        """
+        path = self._state_file.parent / "story_influence.json"
+        influences = []
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    influences = json.load(f)
+            except Exception:
+                influences = []
+
+        influences.append({
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "summary": summary,
+            "importance": round(importance, 2),
+        })
+
+        # 按重要度降序，保留前 N 条
+        influences.sort(key=lambda x: x["importance"], reverse=True)
+        influences = influences[:self._STORY_INFLUENCE_MAX]
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(influences, f, ensure_ascii=False, indent=2)
+
+    def get_story_influences(self, min_importance: float = 0.6) -> str:
+        """
+        SimLife 后端调用：读取格式化后的剧情影响文本，注入 LLM prompt。
+        低于 min_importance 的会被过滤。
+        """
+        path = self._state_file.parent / "story_influence.json"
+        if not path.exists():
+            return ""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                influences = json.load(f)
+        except Exception:
+            return ""
+
+        filtered = [i for i in influences if i["importance"] >= min_importance]
+        if not filtered:
+            return ""
+
+        lines = ["【用户对剧情走向的影响】"]
+        for inf in filtered[:3]:
+            bar = "█" * int(inf["importance"] * 5)
+            lines.append(f"- {inf['summary']} (重要度:{bar})")
+        lines.append("（以上是用户和你交流中对剧情有影响的内容，生成剧情时请自然融入）")
+        return "\n".join(lines)
+
     def format_for_prompt(self) -> str:
         """
         格式化为可注入 AGI 对话 prompt 的文本。

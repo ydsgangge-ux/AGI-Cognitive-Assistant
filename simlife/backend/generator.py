@@ -27,6 +27,16 @@ def _get_world_context() -> str:
     return ""
 
 
+def _get_story_influences() -> str:
+    """读取用户聊天中对剧情的影响信息"""
+    try:
+        from engine.simlife_client import SimLifeClient
+        sl = SimLifeClient()
+        return sl.get_story_influences()
+    except Exception:
+        return ""
+
+
 def _get_world_guide(guide_type: str = "character") -> str:
     """获取世界观的生成引导（character/activity/event）"""
     try:
@@ -1076,6 +1086,10 @@ def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
     world_context = _get_world_context()
     if world_context:
         prompt = world_context + "\n\n" + prompt
+    # 注入用户对剧情的影响
+    story_influence = _get_story_influences()
+    if story_influence:
+        prompt = prompt + "\n\n" + story_influence
 
     try:
         response = llm.generate(prompt, max_tokens=1000, temperature=0.85)
@@ -1190,6 +1204,10 @@ def generate_day_plan(
     world_context = _get_world_context()
     if world_context:
         prompt = world_context + "\n\n" + prompt
+    # 注入用户对剧情的影响
+    story_influence = _get_story_influences()
+    if story_influence:
+        prompt = prompt + "\n\n" + story_influence
 
     try:
         response = llm.generate(prompt, max_tokens=800, temperature=0.85,
@@ -1373,6 +1391,9 @@ def generate_story_cast(character_card: dict) -> list:
     world_context = _get_world_context()
     if world_context:
         prompt = world_context + "\n\n" + prompt
+    story_influence = _get_story_influences()
+    if story_influence:
+        prompt = prompt + "\n\n" + story_influence
 
     try:
         response = llm.generate(prompt, max_tokens=1500, temperature=0.85)
@@ -1486,6 +1507,9 @@ def expand_node(character_card: dict, node: dict, cast: list = None,
     world_context = _get_world_context()
     if world_context:
         prompt = world_context + "\n\n" + prompt
+    story_influence = _get_story_influences()
+    if story_influence:
+        prompt = prompt + "\n\n" + story_influence
 
     try:
         response = llm.generate(prompt, max_tokens=600, temperature=0.9)
