@@ -1227,13 +1227,32 @@ def generate_day_plan(
         try:
             import re as _re
             fixed = response
-            # 1. 如果以 , 结尾，去掉
+
+            # 1. 用正则提取 JSON 数组部分（LLM 可能在首尾附加了其他文本）
+            array_match = _re.search(r'\[[\s\S]*\]', fixed)
+            if array_match:
+                fixed = array_match.group(0)
+            # 2. 如果以 , 结尾，去掉
             fixed = _re.sub(r',\s*$', '', fixed.strip())
-            # 2. 补全最外层的 ] 或 }（LLM 经常截断）
+            # 3. 修复未闭合的引号（Unterminated string）
+            in_string = False
+            escape_next = False
+            for ch in fixed:
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == '\\':
+                    escape_next = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+            if in_string:
+                fixed += '"'
+            # 4. 补全最外层的 ] 或 }（LLM 经常截断）
             open_brackets = fixed.count('[') + fixed.count('{')
             close_brackets = fixed.count(']') + fixed.count('}')
             fixed += ']' * (open_brackets - close_brackets)
-            # 3. 尝试用 rjson（对引号缺失更宽容）
+            # 5. 尝试用 rjson（对引号缺失更宽容）
             try:
                 import rjson
                 plan = rjson.loads(fixed)
@@ -1258,6 +1277,42 @@ def generate_day_plan(
                     return valid_plan
         except Exception as e2:
             print(f"[SimLife] JSON 修复也失败: {e2}")
+
+        # 终极兜底：用正则逐字段提取每个 JSON 对象
+        try:
+            import re as _re
+            objects = _re.findall(r'\{[^{}]*\}', response)
+            if objects:
+                valid_plan = []
+                for obj_str in objects:
+                    try:
+                        key_values = {}
+                        # 提取 mood_delta（数字类型）
+                        m = _re.search(r'"mood_delta"\s*:\s*(-?\d+)', obj_str)
+                        if m:
+                            key_values["mood_delta"] = int(m.group(1))
+                        # 提取字符串字段
+                        for key in ("time", "scene", "label", "activity", "npc"):
+                            m = _re.search(rf'"{key}"\s*:\s*"([^"]*)"', obj_str)
+                            if m:
+                                key_values[key] = m.group(1)
+                        if "time" in key_values and "scene" in key_values:
+                            valid_plan.append({
+                                "time": key_values.get("time", "08:00"),
+                                "scene": key_values.get("scene", "日常"),
+                                "label": key_values.get("label", ""),
+                                "activity": key_values.get("activity", ""),
+                                "mood_delta": int(key_values.get("mood_delta", 0)),
+                                "npc": key_values.get("npc", ""),
+                                "expanded": None,
+                            })
+                    except Exception:
+                        continue
+                if valid_plan:
+                    print(f"[SimLife] 正则提取修复成功，得到 {len(valid_plan)} 个节点")
+                    return valid_plan
+        except Exception:
+            pass
 
         print(f"[SimLife] 全天计划生成失败，使用默认计划")
         return _default_day_plan(name)
