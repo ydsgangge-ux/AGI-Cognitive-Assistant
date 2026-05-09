@@ -597,6 +597,7 @@ body {
     <div id="settings-menu">
       <button onclick="openSetupForReinit()">🔄 重新初始化角色</button>
       <button onclick="openUserPanelFromMenu()">🏠 设置我的身份</button>
+      <button onclick="openStoryArchive()">📖 剧情存档</button>
       <div class="menu-divider"></div>
       <button class="danger" onclick="doResetSimLife()">🗑️ 重置 SimLife（清空所有数据）</button>
     </div>
@@ -646,6 +647,17 @@ body {
       <button id="btn-user-leave" onclick="doUserLeave()" style="display:none;">🚪 离开世界</button>
       <button id="btn-user-enter" onclick="doUserEnter()">✨ 进入世界</button>
     </div>
+  </div>
+</div>
+
+<!-- 剧情存档弹窗 -->
+<div id="archive-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;align-items:center;justify-content:center;">
+  <div id="archive-panel" style="background:linear-gradient(160deg,#1e2a45,#16213e);border:1px solid #0f3460;border-radius:16px;padding:24px;width:700px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="color:#e0e0e0;font-size:18px;">📖 剧情存档</h2>
+      <button onclick="closeStoryArchive()" style="background:none;border:none;color:#8899aa;font-size:20px;cursor:pointer;padding:4px 10px;">✕</button>
+    </div>
+    <div id="archive-list" style="font-size:13px;color:#8899aa;text-align:center;padding:40px 0;">加载中…</div>
   </div>
 </div>
 

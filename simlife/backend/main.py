@@ -48,6 +48,123 @@ from simlife.backend.life_arc_engine import LifeArc
 
 # ── 故事NPC卡司（非现代世界） ────────────────────────────────
 STORY_CAST_FILE = DATA_DIR / "story_cast.json"
+STORY_ARCHIVE_DIR = DATA_DIR / "story_archive"
+
+# ── 剧情存档 ─────────────────────────────────────────────
+def _archive_yesterday_story(world_state, old_date: str):
+    """将昨天的剧情存档到 story_archive/YYYY-MM-DD.json"""
+    if not _is_non_modern_world():
+        return
+    if not old_date:
+        return
+    STORY_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    archive_path = STORY_ARCHIVE_DIR / f"{old_date}.json"
+    if archive_path.exists():
+        return  # 已存档，不覆盖
+
+    # 提取 day_plan（含展开的剧情）
+    plan_data = []
+    if world_state.day_plan:
+        for node in world_state.day_plan:
+            plan_data.append({
+                "time": node.get("time", ""),
+                "scene": node.get("scene", ""),
+                "label": node.get("label", ""),
+                "activity": node.get("activity", ""),
+                "mood_delta": node.get("mood_delta", 0),
+                "expanded": node.get("expanded", ""),
+            })
+
+    # 提取日志
+    log_data = []
+    for entry in world_state.today_log:
+        log_data.append({"time": entry.time, "event": entry.event})
+
+    archive = {
+        "date": old_date,
+        "mood": world_state.mood,
+        "day_plan": plan_data,
+        "today_log": log_data,
+    }
+    try:
+        with open(archive_path, "w", encoding="utf-8") as f:
+            json.dump(archive, f, ensure_ascii=False, indent=2)
+        print(f"[SimLife] 剧情已存档: {old_date}")
+    except Exception as e:
+        print(f"[SimLife] 存档失败: {e}")
+
+
+def _load_archive(date_str: str) -> dict:
+    """读取指定日期的剧情存档"""
+    path = STORY_ARCHIVE_DIR / f"{date_str}.json"
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _list_archives() -> list:
+    """列出所有存档日期"""
+    if not STORY_ARCHIVE_DIR.exists():
+        return []
+    archives = []
+    for f in sorted(STORY_ARCHIVE_DIR.glob("*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            archives.append({
+                "date": f.stem,
+                "mood": data.get("mood", 0),
+                "node_count": len(data.get("day_plan", [])),
+                "summary": _extract_archive_summary(data),
+            })
+        except Exception:
+            pass
+    return archives
+
+
+def _extract_archive_summary(data: dict) -> str:
+    """从存档中提取一句话摘要"""
+    logs = data.get("today_log", [])
+    plan = data.get("day_plan", [])
+    # 优先用最后一条剧情展开的摘要
+    for node in reversed(plan):
+        expanded = node.get("expanded", "")
+        if expanded:
+            return expanded[:60] + "…"
+    # 回退到日志最后一条
+    if logs:
+        return logs[-1].get("event", "")[:60] + "…"
+    return ""
+
+
+def _get_recent_story_context(days: int = 7) -> str:
+    """读取最近 N 天的剧情存档，格式化为连续的剧情摘要"""
+    archives = _list_archives()
+    if not archives:
+        return ""
+    recent = archives[-days:]
+    lines = ["【近期剧情回顾】"]
+    for a in recent:
+        date = a["date"]
+        data = _load_archive(date)
+        if not data:
+            continue
+        # 提取关键节点
+        key_events = []
+        for node in data.get("day_plan", []):
+            label = node.get("label", "")
+            expanded = node.get("expanded", "")
+            if expanded:
+                key_events.append(f"  [{node['time']}] {label}：{expanded[:80]}…")
+            elif label:
+                key_events.append(f"  [{node['time']}] {label}")
+        lines.append(f"\n{date}（心情{data.get('mood', 0)}/100）：")
+        lines.extend(key_events[:6])  # 最多6个节点
+    lines.append("\n以上是已发生的剧情，生成新的一天时请保持故事连续性。")
+    return "\n".join(lines)
 
 
 def _load_story_cast() -> list:
@@ -246,8 +363,14 @@ def _tick_non_modern():
 
     # ── 新的一天：生成全天计划 ──
     if world_state.today_date != today or not world_state.day_plan:
+        old_date = world_state.today_date
         world_state.today_date = today
         world_state.day_plan_progress = 0
+
+        # 存档昨天的剧情
+        _archive_yesterday_story(world_state, old_date)
+        # 读取近期剧情回顾（用于注入 prompt）
+        recent_story = _get_recent_story_context(days=3)
 
         yesterday_summary = ""
         if world_state.today_log:
@@ -264,6 +387,7 @@ def _tick_non_modern():
                 yesterday_summary=yesterday_summary,
                 arc_hint=arc_hint,
                 cast=story_cast,
+                recent_story_context=recent_story,  # 传入近期剧情回顾
             )
             world_state.day_plan = plan
             print(f"[SimLife] 已生成全天计划（{len(plan)} 个节点）")
@@ -992,6 +1116,23 @@ def api_status():
         "initialized": character_card is not None,
         "version": "1.0.0",
     }
+
+
+# ── 剧情存档 API ─────────────────────────────────────
+
+@app.get("/api/story/archive")
+def api_list_archives():
+    """列出所有剧情存档"""
+    return {"archives": _list_archives()}
+
+
+@app.get("/api/story/archive/{date_str}")
+def api_get_archive(date_str: str):
+    """读取指定日期的剧情存档"""
+    data = _load_archive(date_str)
+    if not data:
+        raise HTTPException(404, f"未找到 {date_str} 的存档")
+    return data
 
 
 # ── 世界观管理 API ─────────────────────────────────

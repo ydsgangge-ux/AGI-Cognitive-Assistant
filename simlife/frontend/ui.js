@@ -600,3 +600,92 @@ window.generateWorld = async function() {
     UI.setGenerateButton(true);
   }
 };
+
+// ── 剧情存档 ─────────────────────────────────────────
+function openStoryArchive() {
+  document.getElementById('settings-menu').classList.remove('show');
+  const overlay = document.getElementById('archive-overlay');
+  overlay.style.display = 'flex';
+  loadArchiveList();
+}
+
+function closeStoryArchive() {
+  document.getElementById('archive-overlay').style.display = 'none';
+}
+
+async function loadArchiveList() {
+  const listEl = document.getElementById('archive-list');
+  listEl.innerHTML = '加载中…';
+  try {
+    const resp = await fetch('/api/story/archive');
+    const data = await resp.json();
+    const archives = data.archives || [];
+    if (archives.length === 0) {
+      listEl.innerHTML = '<div style="padding:40px 0;color:#8899aa;">暂无存档，异世界模式运行一天后会自动生成</div>';
+      return;
+    }
+    let html = '';
+    for (const a of archives) {
+      html += `<div class="archive-item" onclick="loadArchiveDay('${a.date}')"
+        style="cursor:pointer;padding:12px 14px;margin-bottom:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:10px;transition:background 0.2s;"
+        onmouseover="this.style.background='rgba(255,255,255,0.08)'"
+        onmouseout="this.style.background='rgba(0,0,0,0.2)'">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#e0e0e0;font-weight:bold;">📅 ${a.date}</span>
+          <span style="font-size:12px;color:#8899aa;">${a.node_count} 个节点 · 心情 ${a.mood}/100</span>
+        </div>
+        <div style="font-size:12px;color:#8899aa;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.summary || '暂无记录'}</div>
+      </div>`;
+    }
+    listEl.innerHTML = html;
+  } catch (e) {
+    listEl.innerHTML = `<div style="padding:40px 0;color:#e94560;">加载失败：${e.message}</div>`;
+  }
+}
+
+async function loadArchiveDay(dateStr) {
+  const listEl = document.getElementById('archive-list');
+  listEl.innerHTML = '加载中…';
+  try {
+    const resp = await fetch(`/api/story/archive/${dateStr}`);
+    const data = await resp.json();
+    let html = `<div style="margin-bottom:12px;">
+      <button onclick="loadArchiveList()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:#8899aa;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">← 返回列表</button>
+      <span style="color:#e0e0e0;font-weight:bold;font-size:15px;margin-left:10px;">📅 ${dateStr}</span>
+    </div>`;
+    // 日志
+    const logs = data.today_log || [];
+    if (logs.length > 0) {
+      html += '<div style="margin-bottom:12px;"><div style="font-size:12px;color:#8899aa;margin-bottom:6px;">📋 日志</div>';
+      for (const log of logs) {
+        html += `<div style="padding:4px 0;font-size:13px;color:#e0e0e0;border-bottom:1px solid rgba(255,255,255,0.03);">
+          <span style="color:#e94560;opacity:0.7;width:42px;display:inline-block;">${log.time || ''}</span>
+          ${log.event || ''}
+        </div>`;
+      }
+      html += '</div>';
+    }
+    // 剧情节点
+    const plan = data.day_plan || [];
+    if (plan.length > 0) {
+      html += '<div style="font-size:12px;color:#8899aa;margin-bottom:6px;">📖 剧情节点</div>';
+      for (const node of plan) {
+        html += `<div style="padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:8px;">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:4px;">
+            <span style="color:#e94560;font-size:12px;font-weight:bold;">${node.time || ''}</span>
+            <span style="color:#4ecca3;font-size:12px;">${node.label || ''}</span>
+            <span style="color:#8899aa;font-size:11px;">${node.scene || ''}</span>
+          </div>`;
+        if (node.expanded) {
+          html += `<div style="font-size:13px;color:#e0e0e0;line-height:1.6;padding:6px 0;">${node.expanded}</div>`;
+        } else if (node.activity) {
+          html += `<div style="font-size:12px;color:#8899aa;">${node.activity}</div>`;
+        }
+        html += '</div>';
+      }
+    }
+    listEl.innerHTML = html;
+  } catch (e) {
+    listEl.innerHTML = `<div style="padding:40px 0;color:#e94560;">加载失败：${e.message}</div>`;
+  }
+}

@@ -1159,6 +1159,7 @@ def generate_day_plan(
     yesterday_summary: str = "",
     arc_hint: str = "",
     cast: list = None,
+    recent_story_context: str = "",
 ) -> list:
     """
     为非现代世界生成一天的大纲计划（LLM 一次调用，生成全天安排）。
@@ -1208,6 +1209,9 @@ def generate_day_plan(
     story_influence = _get_story_influences()
     if story_influence:
         prompt = prompt + "\n\n" + story_influence
+    # 注入近期剧情回顾（存档历史）
+    if recent_story_context:
+        prompt = prompt + "\n\n" + recent_story_context
 
     try:
         response = llm.generate(prompt, max_tokens=800, temperature=0.85,
