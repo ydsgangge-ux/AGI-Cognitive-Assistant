@@ -322,6 +322,20 @@ class MemoryStore:
             ).fetchall()
         return rows
 
+    def get_interactions_by_date_range(
+        self, start_date: str, end_date: str,
+        user_id: str = "default"
+    ) -> List[tuple]:
+        """按日期范围取对话记录（时间正序），用于按时间回溯"""
+        with guarded_connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT user_input, response, timestamp FROM interactions "
+                "WHERE user_id=? AND timestamp >= ? AND timestamp <= ? "
+                "ORDER BY timestamp ASC",
+                (user_id, start_date, end_date)
+            ).fetchall()
+        return rows
+
     def get_by_date_range(
         self,
         start_date: str,

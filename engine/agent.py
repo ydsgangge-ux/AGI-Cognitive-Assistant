@@ -181,7 +181,7 @@ class ConsciousnessAgent:
         self._cfg        = {}                 # 延迟加载配置
         self.conversation_history: List[Dict] = []
         self.current_emotion = EmotionState()
-        self._verify_pending = False
+        self._history_restored = False  # 延迟到 process() 拿到正确 user_id 再恢复
 
         # 注入 MemoryStore 到 tool 系统，供 search_memories_by_date 使用
         try:
@@ -190,19 +190,16 @@ class ConsciousnessAgent:
         except Exception:
             pass
 
-        # 启动时恢复最近 5 轮对话上下文
-        self._restore_recent_conversation()
-
     def _log(self, tag: str, content: str):
         if self.verbose:
             print(f"\n{'─'*50}")
             print(f"[A层·{tag}] {content}")
 
-    def _restore_recent_conversation(self):
+    def _restore_recent_conversation(self, user_id: str = "default"):
         """从 interactions 表恢复最近 5 轮对话到 conversation_history"""
         try:
-            user_id = (self.auth.user_id if self.auth and self.auth.is_verified()
-                       else "default")
+            if self._history_restored:
+                return
             rows = self.memory.store.get_recent_interactions(limit=10, user_id=user_id)
             for row in reversed(rows):  # 时间倒序→反转为正序
                 if row[0]:
@@ -210,8 +207,10 @@ class ConsciousnessAgent:
                 if row[1]:
                     self.conversation_history.append({"role": "assistant", "content": row[1]})
             if self.conversation_history:
-                self._log("启动", f"已恢复 {len(self.conversation_history)} 条对话上下文")
+                self._log("启动", f"已恢复 {len(self.conversation_history)} 条对话上下文 (user={user_id})")
+            self._history_restored = True
         except Exception:
+            self._history_restored = True  # 失败也标记，避免重复尝试
             pass  # 首次启动无数据，静默跳过
 
     def process(self, user_input: str) -> Dict[str, Any]:
@@ -234,6 +233,10 @@ class ConsciousnessAgent:
         is_guest  = self.auth and self.auth.is_guest()
         current_uid = (self.auth.user_id if self.auth and self.auth.is_verified()
                        else "default")
+
+        # 延迟恢复对话历史（拿到正确的 user_id 后再查）
+        self._restore_recent_conversation(user_id=current_uid)
+
         simlife_context = ""
         if self.simlife:
             try:
@@ -294,9 +297,13 @@ class ConsciousnessAgent:
 
         # 涉及历史回溯的提问强制检索记忆（即使 LLM 判断不需要）
         _memory_hint_words = ("几号", "什么时候", "之前", "上次", "以前", "还记得", "记得吗",
-                              "聊过", "说过", "提过", "讨论过", "问过", "我们", "记录")
+                              "聊过", "说过", "提过", "讨论过", "问过", "我们", "记录",
+                              "昨天晚上", "昨天", "前天", "上周", "方才", "刚才")
+        _date_pattern = False
+        if re.search(r'\d{4}-\d{1,2}-\d{1,2}|\d{1,2}月\d{1,2}[号日]|昨天|前天|今天', user_input):
+            _date_pattern = True
         if not is_guest and not perception.get("needs_deep_memory", True):
-            if any(w in user_input for w in _memory_hint_words):
+            if any(w in user_input for w in _memory_hint_words) or _date_pattern:
                 self._log("记忆", f"检测到历史回溯关键词，强制检索记忆")
                 perception["needs_deep_memory"] = True
 
@@ -309,6 +316,56 @@ class ConsciousnessAgent:
                 user_id=current_uid,
             )
             memory_context = self.memory.format_for_prompt(search_results)
+
+        # ── 时间回溯：检测用户输入中的日期，按时间检索原始对话 ──
+        if not is_guest:
+            time_context = ""
+            target_date = None
+            # 匹配 ISO 日期格式：2026-05-09 或 2026-05-09-23:33
+            date_match = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', user_input)
+            if date_match:
+                y, m, d = date_match.group(1, 2, 3)
+                target_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+            else:
+                # 匹配中文日期：5月9号 / 5月9日 / 五月九日
+                cn_match = re.search(r'(\d{1,2})月(\d{1,2})[号日]', user_input)
+                if cn_match:
+                    from datetime import datetime as _dt
+                    y = _dt.now().year
+                    m, d = cn_match.group(1, 2)
+                    target_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+                else:
+                    # 匹配昨天/前天/今天
+                    from datetime import timedelta
+                    today = datetime.now()
+                    if "昨天" in user_input:
+                        target_date = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+                    elif "前天" in user_input:
+                        target_date = (today - timedelta(days=2)).strftime("%Y-%m-%d")
+                    elif "今天" in user_input:
+                        target_date = today.strftime("%Y-%m-%d")
+
+            if target_date:
+                start_dt = f"{target_date} 00:00"
+                end_dt   = f"{target_date} 23:59"
+                time_rows = self.memory.store.get_interactions_by_date_range(
+                    start_dt, end_dt, user_id=current_uid
+                )
+                if time_rows:
+                    lines = [f"【{target_date} 对话记录】"]
+                    for r in time_rows:
+                        _u = r[0][:200] if r[0] else ""
+                        _a = f"你：{r[1][:200]}" if r[1] else ""
+                        _t = r[2][11:16] if r[2] else ""
+                        lines.append(f"  {_t} 用户说：{_u}")
+                        if _a:
+                            lines.append(f"  {_t} {self.personality.name}说：{_a}")
+                    time_context = "\n".join(lines)
+                    if memory_context == "（本次无需检索历史记忆）":
+                        memory_context = time_context
+                    else:
+                        memory_context = time_context + "\n\n" + memory_context
+                    self._log("记忆", f"时间回溯 {target_date} → {len(time_rows)} 条对话")
 
         # 附件内容注入（图片识别结果 / 文件内容）
         if file_context:
