@@ -12,8 +12,9 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 try:
-    from fastapi import FastAPI, HTTPException, Depends, Request, Response, HTMLResponse
+    from fastapi import FastAPI, HTTPException, Depends, Request, Response
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import HTMLResponse
     from pydantic import BaseModel
     import uvicorn
 except ImportError:
