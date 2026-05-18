@@ -12,9 +12,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 try:
-    from fastapi import FastAPI, HTTPException, Depends, Request, Response
+    from fastapi import FastAPI, HTTPException, Depends, Request, Response, HTMLResponse
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import HTMLResponse
     from pydantic import BaseModel
     import uvicorn
 except ImportError:
@@ -157,7 +156,7 @@ async def chat(req: ChatRequest, current: dict = Depends(_get_current_user)):
 
     return {"reply": reply, "timestamp": datetime.now().isoformat()}
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def index():
     return _HTML
 
@@ -199,8 +198,6 @@ async def simlife_set_mode(req: SimLifeModeRequest, current: dict = Depends(_get
         pass
     return {"ok": True, "scene_mode": req.enabled}
 
-@app.get("/")
-
 # ── 对外启动接口（由 main.py 的 _on_engine_ready 调用）───────
 def start_server(agent, auth_manager, host="0.0.0.0", port=18765):
     """在 daemon 线程里启动 uvicorn，不阻塞 Qt 主线程"""
@@ -231,9 +228,6 @@ _HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>AGI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 
 :root {
@@ -255,7 +249,7 @@ _HTML = """<!DOCTYPE html>
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
-  font-family:'Sora',-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
 
 /* 登录页 */
 #login{height:100dvh;display:flex;flex-direction:column;align-items:center;
@@ -269,7 +263,7 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 0 24px rgba(74,143,255,.25)}
 .brand-mark svg{width:18px;height:18px;fill:white}
-.brand-name{font-family:'JetBrains Mono','SF Mono','Cascadia Code','Fira Code',monospace;font-size:1.1rem;font-weight:500;
+.brand-name{font-family:'SF Mono','Cascadia Code','Fira Code',monospace;font-size:1.1rem;font-weight:500;
   letter-spacing:.15em;color:var(--bright)}
 .brand-name span{color:var(--blue)}
 
@@ -284,13 +278,13 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
   text-transform:uppercase;color:var(--muted);margin-bottom:.45rem}
 .field input{width:100%;background:var(--layer);border:1px solid var(--rim);
   border-radius:10px;padding:.8rem 1rem;color:var(--text);
-  font-family:'Sora',-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;font-size:.95rem;outline:none;
+  font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;font-size:.95rem;outline:none;
   transition:border-color .2s,box-shadow .2s}
 .field input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(74,143,255,.12)}
 
 .btn{width:100%;padding:.85rem;
   background:linear-gradient(135deg,var(--blue) 0%,var(--indigo) 100%);
-  border:none;border-radius:10px;color:white;font-family:'Sora',-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
+  border:none;border-radius:10px;color:white;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
   font-size:.95rem;font-weight:600;cursor:pointer;
   box-shadow:0 4px 20px rgba(74,143,255,.3);transition:opacity .2s,transform .1s}
 .btn:active{transform:scale(.98);opacity:.9}
@@ -311,16 +305,16 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
 .topbar-info{line-height:1.3}
 .topbar-name{font-size:.9rem;font-weight:600;color:var(--bright)}
 .topbar-status{display:flex;align-items:center;gap:.35rem;font-size:.68rem;
-  color:var(--dim);font-family:'JetBrains Mono','SF Mono','Cascadia Code',monospace}
+  color:var(--dim);font-family:'SF Mono','Cascadia Code',monospace}
 .dot-live{width:6px;height:6px;border-radius:50%;background:var(--ok);
   box-shadow:0 0 6px var(--ok);animation:blink 2.4s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 .btn-exit{background:none;border:1px solid var(--rim);border-radius:8px;
-  padding:.38rem .75rem;color:var(--dim);font-family:'Sora',-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
+  padding:.38rem .75rem;color:var(--dim);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
   font-size:.75rem;cursor:pointer;transition:color .2s,border-color .2s}
 .btn-exit:hover{color:var(--text);border-color:var(--muted)}
 .btn-scene{background:none;border:1px solid var(--rim);border-radius:8px;
-  padding:.38rem .7rem;color:var(--dim);font-family:'Sora',-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
+  padding:.38rem .7rem;color:var(--dim);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;
   font-size:.75rem;cursor:pointer;transition:all .2s;margin-left:.4rem}
 .btn-scene:hover{color:var(--text);border-color:var(--muted)}
 .btn-scene.on{background:rgba(52,215,138,.15);border-color:var(--ok);color:var(--ok)}
@@ -344,7 +338,7 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
 .row.me{align-self:flex-end;align-items:flex-end}
 .row.agi{align-self:flex-start;align-items:flex-start}
 .row-label{font-size:.62rem;color:var(--muted);margin-bottom:.28rem;
-  font-family:'JetBrains Mono','SF Mono','Cascadia Code',monospace;letter-spacing:.04em}
+  font-family:'SF Mono','Cascadia Code',monospace;letter-spacing:.04em}
 .bubble{padding:.72rem 1rem;border-radius:16px;font-size:.92rem;line-height:1.65;
   word-break:break-word;white-space:pre-wrap}
 .row.me .bubble{background:linear-gradient(135deg,#1a3a6e,#1e2f5a);
@@ -364,7 +358,7 @@ html,body{height:100%;height:100dvh;background:var(--ink);color:var(--text);
   background:var(--paper);border-top:1px solid var(--rim);flex-shrink:0}
 .inputbar textarea{flex:1;background:var(--layer);border:1px solid var(--rim);
   border-radius:12px;padding:.65rem .9rem;color:var(--text);
-  font-family:'Sora',-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;font-size:.9rem;line-height:1.5;resize:none;outline:none;
+  font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;font-size:.9rem;line-height:1.5;resize:none;outline:none;
   min-height:42px;max-height:130px;transition:border-color .2s,box-shadow .2s}
 .inputbar textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(74,143,255,.1)}
 .inputbar textarea::placeholder{color:var(--muted)}
