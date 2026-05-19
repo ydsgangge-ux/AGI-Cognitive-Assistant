@@ -213,8 +213,10 @@ class ConsciousnessAgent:
             self._history_restored = True  # 失败也标记，避免重复尝试
             pass  # 首次启动无数据，静默跳过
 
-    def process(self, user_input: str) -> Dict[str, Any]:
-        """完整交互流水线 v3"""
+    def process(self, user_input: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """完整交互流水线 v3
+        user_id: 可选，指定用户ID。不传则使用 auth 当前登录用户。
+        """
         interaction_id = str(uuid.uuid4())[:8]
 
         # 预处理：图片/文件附件
@@ -231,7 +233,7 @@ class ConsciousnessAgent:
         # ── 提前构建 SimLife 生活上下文（感知层也需要知道自己的身体和生活）──
         # SimLife 是角色的生活状态，始终读取；simlife_mode 仅控制"面对面"提示
         is_guest  = self.auth and self.auth.is_guest()
-        current_uid = (self.auth.user_id if self.auth and self.auth.is_verified()
+        current_uid = user_id or (self.auth.user_id if self.auth and self.auth.is_verified()
                        else "default")
 
         # 延迟恢复对话历史（拿到正确的 user_id 后再查）

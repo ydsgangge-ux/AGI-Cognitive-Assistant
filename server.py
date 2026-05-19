@@ -23,7 +23,10 @@ except ImportError:
 try:
     import jwt as pyjwt
 except ImportError:
-    raise ImportError("请先安装：pip install PyJWT")
+    raise ImportError("请先安装 pip install PyJWT")
+
+# 企业微信桥接模块（可选，未配置不影响现有功能）
+import wechat_bridge
 
 # ── 全局共享实例（由 start_server 注入）─────────────────────
 _agent        = None
@@ -199,12 +202,31 @@ async def simlife_set_mode(req: SimLifeModeRequest, current: dict = Depends(_get
         pass
     return {"ok": True, "scene_mode": req.enabled}
 
+# ── 企业微信 Webhook ────────────────────────────────────────
+@app.get("/wechat")
+async def wechat_verify(request: Request):
+    msg_signature = request.query_params.get("msg_signature", "")
+    timestamp     = request.query_params.get("timestamp", "")
+    nonce         = request.query_params.get("nonce", "")
+    echostr       = request.query_params.get("echostr", "")
+    result = wechat_bridge.verify_url(msg_signature, timestamp, nonce, echostr)
+    return Response(content=result, media_type="text/plain")
+
+@app.post("/wechat")
+async def wechat_webhook(request: Request):
+    xml_data = await request.body()
+    reply_xml = wechat_bridge.handle_message(xml_data.decode("utf-8"))
+    if not reply_xml:
+        return Response(content="", media_type="text/xml")
+    return Response(content=reply_xml, media_type="text/xml")
+
 # ── 对外启动接口（由 main.py 的 _on_engine_ready 调用）───────
 def start_server(agent, auth_manager, host="0.0.0.0", port=18765):
     """在 daemon 线程里启动 uvicorn，不阻塞 Qt 主线程"""
     global _agent, _auth_manager
     _agent        = agent
     _auth_manager = auth_manager
+    wechat_bridge.init(agent)
 
     def _run():
         try:
