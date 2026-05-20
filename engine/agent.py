@@ -121,7 +121,7 @@ REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主�
     "reason": "为什么要/不要记住这个"
   }},
 
-  "schedule_info": 如果用户提到未来要做的事情（如"明天我要看电影"、"下周三去体检"、"3点提醒我开会"），填写：{{"content": "计划内容", "date": "日期", "time": "具体时间HH:MM（有则填，无则不填）", "remind": "到时提醒内容（有则填）", "action": "到时自动执行的操作（有则填，如'查天气'）", "repeat": "once/daily/weekly（默认once）", "category": "分类"}}。如果对话中没有提到未来计划，填写null。
+  "schedule_info": 如果用户提到未来要做的事情（如"明天我要看电影"、"下周三去体检"、"3点提醒我开会"），或者你判断某件事值得在将来提醒/跟进，填写：{{"content": "计划内容", "date": "日期", "time": "具体时间HH:MM（有则填，无则不填）", "remind": "到时提醒内容（有则填）", "action": "到时自动执行的操作（有则填，如'查天气'）", "repeat": "once/daily/weekly（默认once）", "category": "分类", "source": "user或system"}}。如果不需要加计划，填写null。
 }}
 
 重要规则：
@@ -130,6 +130,12 @@ REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主�
 - 当用户说"提醒我""到点叫我"时，必须填写 time 字段。
 - 当用户说"每天""每周"时，repeat 字段填 daily 或 weekly。
 - 当用户说"到时帮我查/做XX"时，action 字段填写操作描述。
+- 【主动加计划】当你判断以下情况时，应主动填写 schedule_info（source 设为 "system"）：
+  - 用户提到了重要但容易忘记的事（如"我要吃药""明天有考试"），你主动帮他设提醒
+  - 对话中提到了未完成的待办，你主动设一个跟进提醒
+  - 你认为某件事在特定时间跟进会更好（如"这个项目周五前要交"→设周五早上提醒）
+  - 你想在未来某个时间主动关心用户（如"明天晚上问问他面试怎么样"）
+  - 不要过度添加，只在真正重要或用户可能遗忘时才主动加计划
 
 只输出JSON，不要其他内容。"""
 
@@ -1034,28 +1040,61 @@ class ConsciousnessAgent:
 - 必须有实质内容或具体话题，不要只说"在想什么呢"这种空泛的话
 - 语气要有变化：有时轻松调侃，有时正经分享，有时好奇提问，有时自言自语
 - 如果觉得现在真的不适合开口，只输出：null
+- 【主动加计划】如果你觉得某件事值得在未来提醒用户（如他之前提到的重要待办、容易忘记的事、需要跟进的事），在消息后面用 [SCHEDULE] 标记，格式：[SCHEDULE]content=内容|date=日期|time=时间|remind=提醒内容|source=system[/SCHEDULE]。date必填，其他可选。如果没有需要加的计划，不加标记。
 
 直接输出要说的话，或者null。"""
 
         try:
-            result = self.b.generate(prompt, max_tokens=100, temperature=1.0, thinking=False)
+            result = self.b.generate(prompt, max_tokens=150, temperature=1.0, thinking=False)
             result = result.strip()
             if not result or "null" in result.lower():
                 return None
+
+            schedule_text = ""
+            if "[SCHEDULE]" in result and "[/SCHEDULE]" in result:
+                import re as _re
+                sch_match = _re.search(r'\[SCHEDULE\](.*?)\[/SCHEDULE\]', result)
+                if sch_match:
+                    schedule_text = sch_match.group(1)
+                result = _re.sub(r'\[SCHEDULE\].*?\[/SCHEDULE\]', '', result).strip()
+
             result = result.strip('"').strip('"').strip('"')
 
             if len(result) < 3:
                 return None
 
-            # 简单去重：跟最近消息太相似就丢弃
             for old in self._proactive_history[-3:]:
                 if self._similar(result, old):
                     return None
 
             self._proactive_history.append(result)
-            # 只保留最近10条
             if len(self._proactive_history) > 10:
                 self._proactive_history = self._proactive_history[-10:]
+
+            if schedule_text:
+                try:
+                    sch_params = {}
+                    for pair in schedule_text.split("|"):
+                        if "=" in pair:
+                            k, v = pair.split("=", 1)
+                            sch_params[k.strip()] = v.strip()
+                    if sch_params.get("content") and sch_params.get("date"):
+                        from engine.tools import execute_tool
+                        sch_result = execute_tool("add_schedule", {
+                            "content": sch_params.get("content", ""),
+                            "date": sch_params.get("date", ""),
+                            "time": sch_params.get("time", ""),
+                            "remind": sch_params.get("remind", ""),
+                            "action": sch_params.get("action", ""),
+                            "repeat": sch_params.get("repeat", "once"),
+                            "category": sch_params.get("category", "personal"),
+                            "source": sch_params.get("source", "system"),
+                        })
+                        if sch_result.get("ok"):
+                            self._log("主动计划", f"已添加: {sch_result.get('message', '')}")
+                except Exception as e:
+                    self._log("主动计划", f"添加失败: {e}")
+
             return result
         except Exception:
             return None
