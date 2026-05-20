@@ -362,6 +362,23 @@ class AGIApp:
         except ImportError as e:
             print(f"[手机端] Web 服务未启动（缺少依赖）：{e}")
 
+        # 启动定时执行引擎
+        try:
+            from engine.scheduler import Scheduler
+            import engine.agent as agent_mod
+            self._scheduler = Scheduler(on_fire=self._on_schedule_fire)
+            self._scheduler.set_agent(agent)
+            agent_mod._scheduler_ref = self._scheduler
+            self._scheduler.start()
+            pending = self._scheduler.get_pending()
+            if pending:
+                print(f"[定时引擎] 已恢复 {len(pending)} 个待执行计划")
+            else:
+                print("[定时引擎] 就绪，暂无待执行计划")
+        except Exception as e:
+            print(f"[定时引擎] 启动失败: {e}")
+            self._scheduler = None
+
     def _apply_memory_decay(self):
         """定时记忆衰减"""
         try:
@@ -371,6 +388,25 @@ class AGIApp:
             print("[记忆衰减] 已执行")
         except Exception as e:
             print(f"[记忆衰减] 失败: {e}")
+
+    def _on_schedule_fire(self, evt: dict):
+        """定时计划到期触发"""
+        remind = evt.get("remind", "")
+        action = evt.get("action", "")
+        content = evt.get("content", "")
+        msg = f"⏰ 提醒：{remind}"
+        if action:
+            msg += f"\n（已自动执行：{action}）"
+        print(f"[定时提醒] {msg}")
+
+        if hasattr(self, 'float_win') and self.float_win and self.float_win.isVisible():
+            self.float_win.add_message(msg, is_user=False, is_proactive=True)
+        if hasattr(self, 'main_win') and self.main_win:
+            try:
+                chat = self.main_win.chat_widget
+                chat.add_ai_message(msg, meta={"schedule": True})
+            except Exception:
+                pass
 
     def _refresh_simlife_float(self):
         """定时刷新悬浮窗 SimLife 状态面板"""

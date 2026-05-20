@@ -2103,22 +2103,27 @@ def set_memory_store(store):
 
 @register_tool(
     "add_schedule",
-    "将用户或系统提到的未来计划添加到 SimLife 日程中。当对话中出现未来要做的事情时调用。",
+    "将用户或系统提到的未来计划添加到日程中。支持定时提醒和自动执行。当对话中出现未来要做的事情时调用。",
     {
         "content": {"type": "string", "description": "计划内容描述", "required": True},
         "date": {"type": "string", "description": "计划日期，格式 YYYY-MM-DD。支持相对日期如'明天'、'后天'、'下周一'", "required": True},
+        "time": {"type": "string", "description": "具体时间，格式 HH:MM（24小时制），如'15:00'。不填则默认09:00", "required": False},
+        "remind": {"type": "string", "description": "到时提醒内容。不填则用content作为提醒", "required": False},
+        "action": {"type": "string", "description": "到时自动执行的操作（自然语言描述），如'查天气'、'打开项目文档'。不填则仅提醒", "required": False},
+        "repeat": {"type": "string", "description": "重复方式：once(仅一次，默认)/daily(每天)/weekly(每周)", "required": False},
         "category": {"type": "string", "description": "分类：entertainment(娱乐)/work(工作)/personal(个人)/health(健康)/social(社交)/other(其他)", "required": False},
         "source": {"type": "string", "description": "来源：user(用户提出) / system(系统提议)", "required": False},
     },
     risk="low",
 )
-def add_schedule(content: str, date: str, category: str = "personal", source: str = "user") -> Dict:
-    """将计划添加到 SimLife 行程"""
+def add_schedule(content: str, date: str, time: str = "", remind: str = "",
+                 action: str = "", repeat: str = "once",
+                 category: str = "personal", source: str = "user") -> Dict:
+    """将计划添加到日程，支持定时提醒和自动执行"""
     try:
         from datetime import datetime, timedelta
         from pathlib import Path
 
-        # 解析相对日期
         date_lower = date.strip().lower()
         if date_lower in ("明天", "tmr", "tomorrow"):
             target = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -2130,8 +2135,6 @@ def add_schedule(content: str, date: str, category: str = "personal", source: st
             weekdays = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6,
                         "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6,
                         "mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
-            # 默认下周一
-            import calendar
             today = datetime.now()
             target_dow = weekdays.get(date_lower.replace("下周", ""), 0)
             current_dow = today.weekday()
@@ -2144,22 +2147,30 @@ def add_schedule(content: str, date: str, category: str = "personal", source: st
         else:
             return {"ok": False, "error": f"无法解析日期: {date}"}
 
-        # 写入 scheduled_events.json
         schedule_path = Path(__file__).resolve().parent.parent / "simlife" / "data" / "scheduled_events.json"
         schedule_path.parent.mkdir(parents=True, exist_ok=True)
 
         events = []
         if schedule_path.exists():
             with open(schedule_path, "r", encoding="utf-8") as f:
-                events = json.load(f)
+                try:
+                    events = json.load(f)
+                except json.JSONDecodeError:
+                    events = []
 
+        scheduled_time = time.strip() if time.strip() else "09:00"
         event = {
             "id": f"sch_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(events)}",
             "content": content,
             "scheduled_date": target,
-            "scheduled_time_range": "09:00-21:00",
+            "scheduled_time": scheduled_time,
+            "scheduled_time_range": f"{scheduled_time}-23:59",
+            "remind": remind or content,
+            "action": action,
+            "repeat": repeat if repeat in ("once", "daily", "weekly") else "once",
             "category": category,
             "source": source,
+            "status": "pending",
             "created_at": datetime.now().isoformat(),
         }
         events.append(event)
@@ -2167,7 +2178,22 @@ def add_schedule(content: str, date: str, category: str = "personal", source: st
         with open(schedule_path, "w", encoding="utf-8") as f:
             json.dump(events, f, ensure_ascii=False, indent=2)
 
-        return {"ok": True, "message": f"已添加行程：{content}（{target}）", "event": event}
+        try:
+            from engine.scheduler import _load_events, _save_events
+            from engine.agent import _scheduler_ref
+            if _scheduler_ref is not None:
+                _scheduler_ref.add_event(event)
+        except Exception:
+            pass
+
+        time_info = f" {scheduled_time}" if time.strip() else ""
+        repeat_info = f"（{repeat}）" if repeat != "once" else ""
+        action_info = f"，到时自动执行：{action}" if action else ""
+        return {
+            "ok": True,
+            "message": f"已添加行程：{content}（{target}{time_info}）{repeat_info}{action_info}",
+            "event": event,
+        }
 
     except Exception as e:
         return {"ok": False, "error": str(e)}

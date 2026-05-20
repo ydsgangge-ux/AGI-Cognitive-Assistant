@@ -13,6 +13,8 @@ import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
+_scheduler_ref = None
+
 from engine.models import (
     PersonalityCore, EmotionState, EmotionType, MemoryModality, MemoryLevel
 )
@@ -119,12 +121,15 @@ REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主�
     "reason": "为什么要/不要记住这个"
   }},
 
-  "schedule_info": 如果用户提到未来要做的事情（如"明天我要看电影"、"下周三去体检"），填写：{{"content": "计划内容", "date": "日期", "category": "分类"}}。如果对话中没有提到未来计划，填写null。
+  "schedule_info": 如果用户提到未来要做的事情（如"明天我要看电影"、"下周三去体检"、"3点提醒我开会"），填写：{{"content": "计划内容", "date": "日期", "time": "具体时间HH:MM（有则填，无则不填）", "remind": "到时提醒内容（有则填）", "action": "到时自动执行的操作（有则填，如'查天气'）", "repeat": "once/daily/weekly（默认once）", "category": "分类"}}。如果对话中没有提到未来计划，填写null。
 }}
 
 重要规则：
 - 当用户提到未来要做的计划时，schedule_info 必须填写，need_tools 设为 true，tool_task 中要求调用 add_schedule 工具。
 - 当你自己提议未来一起做什么并得到用户同意时，也要用 add_schedule 记录，source 设为 "system"。
+- 当用户说"提醒我""到点叫我"时，必须填写 time 字段。
+- 当用户说"每天""每周"时，repeat 字段填 daily 或 weekly。
+- 当用户说"到时帮我查/做XX"时，action 字段填写操作描述。
 
 只输出JSON，不要其他内容。"""
 
@@ -455,12 +460,17 @@ class ConsciousnessAgent:
         if schedule_info and isinstance(schedule_info, dict):
             try:
                 from engine.tools import execute_tool
-                sch_result = execute_tool("add_schedule", {
+                sch_params = {
                     "content": schedule_info.get("content", ""),
                     "date": schedule_info.get("date", ""),
+                    "time": schedule_info.get("time", ""),
+                    "remind": schedule_info.get("remind", ""),
+                    "action": schedule_info.get("action", ""),
+                    "repeat": schedule_info.get("repeat", "once"),
                     "category": schedule_info.get("category", "personal"),
                     "source": schedule_info.get("source", "user"),
-                })
+                }
+                sch_result = execute_tool("add_schedule", sch_params)
                 if sch_result.get("ok"):
                     self._log("行程", f"已记录计划: {sch_result.get('message', '')}")
                     tool_result_section += f"\n[行程已记录] {sch_result.get('message', '')}"
