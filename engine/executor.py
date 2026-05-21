@@ -498,12 +498,8 @@ class BLayerExecutor:
             if msg.get("content"):
                 blocks.append({"type": "text", "text": msg["content"]})
 
-            # 保留 DeepSeek reasoning_content，后续请求必须回传
             if msg.get("reasoning_content"):
-                blocks.append({
-                    "type": "reasoning_content",
-                    "text": msg["reasoning_content"]
-                })
+                blocks.append({"type": "reasoning_content", "text": msg["reasoning_content"]})
 
             for tc in msg.get("tool_calls", []):
                 try:
