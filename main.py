@@ -364,20 +364,17 @@ class AGIApp:
 
         # 启动定时执行引擎
         try:
-            from engine.scheduler import Scheduler
+            from engine.tools import set_schedule_callback, restore_pending_timers
             import engine.agent as agent_mod
-            self._scheduler = Scheduler(on_fire=self._on_schedule_fire)
-            self._scheduler.set_agent(agent)
-            agent_mod._scheduler_ref = self._scheduler
-            self._scheduler.start()
-            pending = self._scheduler.get_pending()
-            if pending:
-                print(f"[定时引擎] 已恢复 {len(pending)} 个待执行计划")
+            agent_mod._agent_ref = agent
+            set_schedule_callback(self._on_schedule_fire)
+            count = restore_pending_timers()
+            if count:
+                print(f"[定时引擎] 已恢复 {count} 个待执行计划")
             else:
                 print("[定时引擎] 就绪，暂无待执行计划")
         except Exception as e:
             print(f"[定时引擎] 启动失败: {e}")
-            self._scheduler = None
 
     def _apply_memory_decay(self):
         """定时记忆衰减"""
