@@ -2179,10 +2179,10 @@ def add_schedule(content: str, date: str, time: str = "", remind: str = "",
             json.dump(events, f, ensure_ascii=False, indent=2)
 
         try:
-            from engine.scheduler import _load_events, _save_events
-            from engine.agent import _scheduler_ref
-            if _scheduler_ref is not None:
-                _scheduler_ref.add_event(event)
+            import engine.agent as agent_mod
+            scheduler = getattr(agent_mod, '_scheduler_ref', None)
+            if scheduler is not None:
+                scheduler.watch_event(event)
         except Exception:
             pass
 

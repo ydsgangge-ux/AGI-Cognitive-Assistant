@@ -102,6 +102,15 @@ class Scheduler:
         elif target:
             self._set_timer(evt, target)
 
+    def watch_event(self, evt: dict):
+        """对已持久化的事件只设定时器，不重复写 JSON"""
+        target = _parse_datetime(evt)
+        now = datetime.now()
+        if target and target <= now:
+            self._fire_event(evt)
+        elif target:
+            self._set_timer(evt, target)
+
     def _set_timer(self, evt: dict, target: datetime):
         if QTimer is None:
             return
