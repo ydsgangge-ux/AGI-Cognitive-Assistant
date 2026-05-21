@@ -2180,9 +2180,15 @@ def add_schedule(content: str, date: str, time: str = "", remind: str = "",
 
         try:
             import engine.agent as agent_mod
+            from engine.scheduler import _parse_datetime
             scheduler = getattr(agent_mod, '_scheduler_ref', None)
             if scheduler is not None:
-                scheduler.watch_event(event)
+                target = _parse_datetime(event)
+                now = datetime.now()
+                if target and target <= now:
+                    scheduler._fire_event(event)
+                elif target:
+                    scheduler._set_timer(event, target)
         except Exception:
             pass
 
