@@ -17,6 +17,7 @@ import glob
 import base64
 import urllib.request
 import urllib.parse
+import threading
 from pathlib import Path
 from engine.db_guard import guarded_connect
 from datetime import datetime
@@ -2101,165 +2102,19 @@ def set_memory_store(store):
 # SimLife 行程管理工具
 # ═══════════════════════════════════════════════════
 
-_active_timers: Dict[str, Any] = {}
-_on_fire_callback = None
-
-
-def set_schedule_callback(cb):
-    global _on_fire_callback
-    _on_fire_callback = cb
-
-
-def _ensure_qtimer():
-    try:
-        from PyQt5.QtCore import QTimer
-        return QTimer
-    except ImportError:
-        return None
-
-
-def _start_timer_for_event(event: dict):
-    QTimer = _ensure_qtimer()
-    if QTimer is None:
-        return
-
-    evt_id = event.get("id", "")
-    d = event.get("scheduled_date", "")
-    t = event.get("scheduled_time", "09:00")
-    try:
-        target_dt = datetime.strptime(f"{d} {t}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        return
-
-    delay_ms = int((target_dt - datetime.now()).total_seconds() * 1000)
-    if delay_ms <= 0:
-        _fire_timed_event(event)
-        return
-
-    if evt_id in _active_timers and _active_timers[evt_id]:
-        _active_timers[evt_id].stop()
-
-    timer = QTimer()
-    timer.setSingleShot(True)
-    evt_ref = dict(event)
-    timer.timeout.connect(lambda: _fire_timed_event(evt_ref))
-    timer.start(delay_ms)
-    _active_timers[evt_id] = timer
-
-
-def _fire_timed_event(event: dict):
-    evt_id = event.get("id", "")
-    remind = event.get("remind", event.get("content", ""))
-    action = event.get("action", "")
-    content = event.get("content", "")
-    repeat = event.get("repeat", "once")
-
-    msg = f"⏰ 提醒：{remind}"
-    if action:
-        msg += f"\n（自动执行：{action}）"
-
-    if _on_fire_callback:
-        _on_fire_callback({
-            "id": evt_id,
-            "remind": remind,
-            "action": action,
-            "content": content,
-        })
-
-    if action:
-        try:
-            import engine.agent as agent_mod
-            agent = getattr(agent_mod, '_agent_ref', None)
-            if agent:
-                agent.process(action)
-        except Exception:
-            pass
-
-    if repeat in ("daily", "weekly"):
-        from datetime import timedelta
-        d = event.get("scheduled_date", "")
-        t = event.get("scheduled_time", "09:00")
-        try:
-            old_target = datetime.strptime(f"{d} {t}", "%Y-%m-%d %H:%M")
-        except ValueError:
-            old_target = None
-        if old_target:
-            delta = timedelta(days=1) if repeat == "daily" else timedelta(weeks=1)
-            new_target = old_target + delta
-            new_event = dict(event)
-            new_event["scheduled_date"] = new_target.strftime("%Y-%m-%d")
-            new_event["status"] = "pending"
-            _start_timer_for_event(new_event)
-
-    _mark_event_done(evt_id)
-    _active_timers.pop(evt_id, None)
-
-
-def _mark_event_done(evt_id: str):
-    schedule_path = Path(__file__).resolve().parent.parent / "simlife" / "data" / "scheduled_events.json"
-    if not schedule_path.exists():
-        return
-    try:
-        with open(schedule_path, "r", encoding="utf-8") as f:
-            events = json.load(f)
-        for evt in events:
-            if evt.get("id") == evt_id:
-                evt["status"] = "done"
-                evt["fired_at"] = datetime.now().isoformat()
-                break
-        with open(schedule_path, "w", encoding="utf-8") as f:
-            json.dump(events, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-
-def restore_pending_timers():
-    schedule_path = Path(__file__).resolve().parent.parent / "simlife" / "data" / "scheduled_events.json"
-    if not schedule_path.exists():
-        return 0
-    try:
-        with open(schedule_path, "r", encoding="utf-8") as f:
-            events = json.load(f)
-    except Exception:
-        return 0
-
-    count = 0
-    now = datetime.now()
-    for evt in events:
-        if evt.get("status") == "done":
-            continue
-        d = evt.get("scheduled_date", "")
-        t = evt.get("scheduled_time", "09:00")
-        try:
-            target_dt = datetime.strptime(f"{d} {t}", "%Y-%m-%d %H:%M")
-        except ValueError:
-            continue
-        if target_dt <= now:
-            _fire_timed_event(evt)
-        else:
-            _start_timer_for_event(evt)
-        count += 1
-    return count
-
-
 @register_tool(
     "add_schedule",
-    "将用户或系统提到的未来计划添加到日程中。支持定时提醒和自动执行。当对话中出现未来要做的事情时调用。",
+    "将用户或系统提到的未来计划添加到 SimLife 日程中。当对话中出现未来要做的事情时调用。",
     {
         "content": {"type": "string", "description": "计划内容描述", "required": True},
         "date": {"type": "string", "description": "计划日期，格式 YYYY-MM-DD。支持相对日期如'明天'、'后天'、'下周一'", "required": True},
-        "time": {"type": "string", "description": "具体时间，格式 HH:MM（24小时制），如'15:00'。不填则默认09:00", "required": False},
-        "remind": {"type": "string", "description": "到时提醒内容。不填则用content作为提醒", "required": False},
-        "action": {"type": "string", "description": "到时自动执行的操作（自然语言描述），如'查天气'、'打开项目文档'。不填则仅提醒", "required": False},
-        "repeat": {"type": "string", "description": "重复方式：once(仅一次，默认)/daily(每天)/weekly(每周)", "required": False},
         "category": {"type": "string", "description": "分类：entertainment(娱乐)/work(工作)/personal(个人)/health(健康)/social(社交)/other(其他)", "required": False},
         "source": {"type": "string", "description": "来源：user(用户提出) / system(系统提议)", "required": False},
     },
     risk="low",
 )
-def add_schedule(content: str, date: str, time: str = "", remind: str = "",
-                 action: str = "", repeat: str = "once",
-                 category: str = "personal", source: str = "user") -> Dict:
+def add_schedule(content: str, date: str, category: str = "personal", source: str = "user") -> Dict:
+    """将计划添加到 SimLife 行程（仅记录，不触发定时执行）"""
     try:
         from datetime import timedelta
 
@@ -2297,19 +2152,13 @@ def add_schedule(content: str, date: str, time: str = "", remind: str = "",
                 except json.JSONDecodeError:
                     events = []
 
-        scheduled_time = time.strip() if time.strip() else "09:00"
         event = {
             "id": f"sch_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(events)}",
             "content": content,
             "scheduled_date": target,
-            "scheduled_time": scheduled_time,
-            "scheduled_time_range": f"{scheduled_time}-23:59",
-            "remind": remind or content,
-            "action": action,
-            "repeat": repeat if repeat in ("once", "daily", "weekly") else "once",
+            "scheduled_time_range": "09:00-21:00",
             "category": category,
             "source": source,
-            "status": "pending",
             "created_at": datetime.now().isoformat(),
         }
         events.append(event)
@@ -2317,100 +2166,111 @@ def add_schedule(content: str, date: str, time: str = "", remind: str = "",
         with open(schedule_path, "w", encoding="utf-8") as f:
             json.dump(events, f, ensure_ascii=False, indent=2)
 
-        _start_timer_for_event(event)
+        return {"ok": True, "message": f"已添加行程：{content}（{target}）", "event": event}
 
-        time_info = f" {scheduled_time}" if time.strip() else ""
-        repeat_info = f"（{repeat}）" if repeat != "once" else ""
-        action_info = f"，到时自动执行：{action}" if action else ""
-        return {
-            "ok": True,
-            "message": f"已添加行程：{content}（{target}{time_info}）{repeat_info}{action_info}",
-            "event": event,
-        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
+
+# ═══════════════════════════════════════════════════
+# 定时任务（TaskScheduler 后台线程调度）
+# ═══════════════════════════════════════════════════
+
+@register_tool(
+    "create_timed_task",
+    description=(
+        "创建定时任务，到指定时间后主动说话或执行工具。"
+        "支持多种时间格式："
+        "1) ISO格式 '2026-05-21T15:00:00' "
+        "2) 简单时间 '15:00'（今天或明天） "
+        "3) 相对时间 '+30m' '+2h' '+1d'（从现在起30分钟/2小时/1天后）"
+        "repeat 可选：daily（每天）/ weekly（每周）/ interval:N（每N分钟）/ 留空表示一次性"
+    ),
+    parameters={
+        "content": {"type": "string", "description": "任务描述，如'提醒用户喝水'", "required": True},
+        "trigger_time": {"type": "string", "description": "触发时间，如 '+30m' 或 '15:00' 或 '2026-05-19T15:00:00'", "required": True},
+        "action": {"type": "string", "description": "执行动作：speak（主动说话）/ tool（调用工具）", "required": True},
+        "message": {"type": "string", "description": "action=speak 时要说的话", "required": False},
+        "tool_name": {"type": "string", "description": "action=tool 时要调用的工具名", "required": False},
+        "tool_params": {"type": "object", "description": "action=tool 时传给工具的参数", "required": False},
+        "repeat": {"type": "string", "description": "重复模式：daily/weekly/interval:N，留空为一次性", "required": False},
+    },
+    risk="medium"
+)
+def create_timed_task(
+    content: str,
+    trigger_time: str,
+    action: str = "speak",
+    message: str = "",
+    tool_name: str = "",
+    tool_params: dict = None,
+    repeat: str = "",
+) -> Dict:
+    try:
+        from engine.task_scheduler import get_scheduler
+        scheduler = get_scheduler()
+
+        action_params = {}
+        if action == "speak":
+            action_params = {"message": message or content}
+        elif action == "tool":
+            action_params = {"tool_name": tool_name, "tool_params": tool_params or {}}
+
+        result = scheduler.create_task(
+            content=content,
+            trigger_time=trigger_time,
+            action=action,
+            action_params=action_params,
+            repeat=repeat or None,
+            source="system",
+        )
+        return result
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     "cancel_timed_task",
-    "取消一个已设定的定时任务/提醒。通过任务ID取消。",
+    "取消一个待执行的定时任务。传入任务ID即可取消。",
     {
-        "task_id": {"type": "string", "description": "要取消的任务ID，格式如 sch_20260521094117_0", "required": True},
+        "task_id": {"type": "string", "description": "要取消的任务ID", "required": True},
     },
-    risk="low",
+    risk="low"
 )
 def cancel_timed_task(task_id: str) -> Dict:
     try:
-        timer = _active_timers.pop(task_id, None)
-        if timer:
-            timer.stop()
-
-        schedule_path = Path(__file__).resolve().parent.parent / "simlife" / "data" / "scheduled_events.json"
-        if not schedule_path.exists():
-            return {"ok": False, "error": "没有找到任务文件"}
-
-        with open(schedule_path, "r", encoding="utf-8") as f:
-            events = json.load(f)
-
-        found = False
-        for evt in events:
-            if evt.get("id") == task_id:
-                evt["status"] = "cancelled"
-                evt["cancelled_at"] = datetime.now().isoformat()
-                found = True
-                break
-
-        if not found:
-            return {"ok": False, "error": f"未找到任务 {task_id}"}
-
-        with open(schedule_path, "w", encoding="utf-8") as f:
-            json.dump(events, f, ensure_ascii=False, indent=2)
-
-        return {"ok": True, "message": f"已取消任务 {task_id}"}
+        from engine.task_scheduler import get_scheduler
+        scheduler = get_scheduler()
+        return scheduler.cancel_task(task_id)
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     "list_timed_tasks",
-    "列出所有待执行的定时任务/提醒。用于查看当前有哪些计划。",
+    "列出当前所有待执行的定时任务。",
     {
-        "status": {"type": "string", "description": "筛选状态：pending(待执行，默认)/done(已完成)/all(全部)", "required": False},
+        "status": {"type": "string", "description": "筛选状态：pending（待执行）/ done（已完成）/ all（全部）", "required": False},
     },
-    risk="low",
+    risk="low"
 )
 def list_timed_tasks(status: str = "pending") -> Dict:
     try:
-        schedule_path = Path(__file__).resolve().parent.parent / "simlife" / "data" / "scheduled_events.json"
-        if not schedule_path.exists():
-            return {"ok": True, "tasks": [], "message": "暂无任务"}
-
-        with open(schedule_path, "r", encoding="utf-8") as f:
-            events = json.load(f)
-
+        from engine.task_scheduler import get_scheduler
+        scheduler = get_scheduler()
         if status == "all":
-            filtered = events
-        elif status == "done":
-            filtered = [e for e in events if e.get("status") == "done"]
+            tasks = scheduler._tasks
         else:
-            filtered = [e for e in events if e.get("status") == "pending"]
-
-        tasks = []
-        for evt in filtered:
-            tasks.append({
-                "id": evt.get("id", ""),
-                "content": evt.get("content", ""),
-                "date": evt.get("scheduled_date", ""),
-                "time": evt.get("scheduled_time", ""),
-                "remind": evt.get("remind", ""),
-                "action": evt.get("action", ""),
-                "repeat": evt.get("repeat", "once"),
-                "status": evt.get("status", ""),
-            })
-
-        msg = f"共 {len(tasks)} 个任务" if tasks else "暂无任务"
-        return {"ok": True, "tasks": tasks, "message": msg}
+            tasks = scheduler.list_tasks(status)
+        if not tasks:
+            return {"ok": True, "tasks": [], "message": "当前没有定时任务"}
+        summaries = []
+        for t in tasks:
+            s = f"[{t['id']}] {t['content']} \u2192 {t['trigger_time'][:16]} ({t['action']})"
+            if t.get("repeat"):
+                s += f" 重复:{t['repeat']}"
+            summaries.append(s)
+        return {"ok": True, "tasks": tasks, "summary": "\n".join(summaries)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

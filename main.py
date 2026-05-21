@@ -28,7 +28,7 @@ def _default_font():
 
 # 导入核心 Qt 模块（这里报错说明 PyQt6 没有安装）
 try:
-    from PyQt6.QtCore    import Qt, QThread, pyqtSignal, QTimer
+    from PyQt6.QtCore    import Qt, QObject, QThread, pyqtSignal, QTimer
     from PyQt6.QtWidgets import QApplication, QMessageBox, QSplashScreen
     from PyQt6.QtGui     import QFont, QPixmap, QPainter, QColor
 except ImportError as e:
@@ -251,6 +251,12 @@ class EngineLoader(QThread):
             self.failed.emit(f"{e}\n\n{traceback.format_exc()}")
 
 
+# ── 跨线程定时提醒桥接（后台线程 → 主线程 UI）──
+class TimedMsgBridge(QObject):
+    """接收任何线程发出的定时任务信号，在主线程执行 UI 更新"""
+    signal = pyqtSignal(str)
+
+
 # ── 主控制器 ─────────────────────────────────────
 class AGIApp:
 
@@ -288,6 +294,10 @@ class AGIApp:
         self._proactive_count_today = 0
         self._proactive_date = datetime.now().date()
         self._pending_proactive_msg = None   # 最近一条待关联的主动发言
+
+        # ── 定时任务消息桥（后台线程 → 主线程 UI）────────
+        self._timed_bridge = TimedMsgBridge()
+        self._timed_bridge.signal.connect(self._show_timed_in_ui)
 
         # ── 图片生成状态（每 ~3 小时主动生成一张图）──────
         self._last_image_time = time.time()      # 上次生成图片的时间
@@ -362,19 +372,17 @@ class AGIApp:
         except ImportError as e:
             print(f"[手机端] Web 服务未启动（缺少依赖）：{e}")
 
-        # 启动定时执行引擎
+        # 启动定时任务调度器
         try:
-            from engine.tools import set_schedule_callback, restore_pending_timers
-            import engine.agent as agent_mod
-            agent_mod._agent_ref = agent
-            set_schedule_callback(self._on_schedule_fire)
-            count = restore_pending_timers()
-            if count:
-                print(f"[定时引擎] 已恢复 {count} 个待执行计划")
-            else:
-                print("[定时引擎] 就绪，暂无待执行计划")
+            from engine.task_scheduler import init_scheduler
+            self._task_scheduler = init_scheduler(on_trigger=self._on_timed_task_trigger)
+            result = self._task_scheduler.catchup_overdue()
+            if result["catchup"] > 0 or result["expired"] > 0:
+                print(f"[定时任务] 开机补执行: {result['catchup']}个, 过期丢弃: {result['expired']}个")
+            self._task_scheduler.start()
+            print("[定时任务] 调度器已启动（智能等待模式）")
         except Exception as e:
-            print(f"[定时引擎] 启动失败: {e}")
+            print(f"[定时任务] 调度器启动失败: {e}")
 
     def _apply_memory_decay(self):
         """定时记忆衰减"""
@@ -386,24 +394,57 @@ class AGIApp:
         except Exception as e:
             print(f"[记忆衰减] 失败: {e}")
 
-    def _on_schedule_fire(self, evt: dict):
-        """定时计划到期触发"""
-        remind = evt.get("remind", "")
-        action = evt.get("action", "")
-        content = evt.get("content", "")
-        msg = f"⏰ 提醒：{remind}"
-        if action:
-            msg += f"\n（已自动执行：{action}）"
-        print(f"[定时提醒] {msg}")
+    def _on_timed_task_trigger(self, task: dict):
+        """定时任务到期回调 — 在后台线程中调用，通过信号桥更新 UI"""
+        action = task.get("action", "speak")
+        content = task.get("content", "")
+        params = task.get("action_params", {})
 
-        if hasattr(self, 'float_win') and self.float_win and self.float_win.isVisible():
-            self.float_win.add_message(msg, is_user=False, is_proactive=True)
-        if hasattr(self, 'main_win') and self.main_win:
+        if action == "speak":
+            message = params.get("message", content)
+            print(f"[定时任务] 主动说话: {message[:50]}")
+            self._deliver_timed_message(message, content)
+        elif action == "tool":
+            tool_name = params.get("tool_name", "")
+            tool_params = params.get("tool_params", {})
+            print(f"[定时任务] 执行工具: {tool_name}")
             try:
-                chat = self.main_win.chat_widget
-                chat.add_ai_message(msg, meta={"schedule": True})
-            except Exception:
-                pass
+                from engine.tools import execute_tool
+                result = execute_tool(tool_name, tool_params)
+                print(f"[定时任务] 工具结果: {result}")
+                if result.get("ok"):
+                    msg = result.get("message", f"{tool_name} 执行成功")
+                    self._deliver_timed_message(f"（定时任务）{msg}", content)
+            except Exception as e:
+                print(f"[定时任务] 工具执行失败: {e}")
+
+    def _deliver_timed_message(self, message: str, task_content: str):
+        """将定时任务消息推送到 UI（通过 pyqtSignal 跨线程安全）"""
+        self._proactive_count_today += 1
+        self._last_chat_time = time.time()
+        self._pending_proactive_msg = message
+
+        if self.agent:
+            self.agent.conversation_history.append(
+                {"role": "assistant", "content": f"[定时提醒]{message}"}
+            )
+            self.agent._proactive_context = f"定时任务触发：{task_content}"
+
+        self._timed_bridge.signal.emit(message)
+
+    def _show_timed_in_ui(self, message: str):
+        """在主线程中将定时消息显示到可见窗口"""
+        print(f"[定时提醒] {message}")
+        if self.float_win.isVisible():
+            self.float_win.add_message(message, is_user=False, is_proactive=True)
+            if not self.float_win._expanded:
+                self.float_win._expand()
+        elif self.main_win.isVisible():
+            self.main_win.chat_page.add_ai_message(
+                message, meta={"proactive": True}
+            )
+        else:
+            self.tray.notify("⏰ 定时提醒", message)
 
     def _refresh_simlife_float(self):
         """定时刷新悬浮窗 SimLife 状态面板"""

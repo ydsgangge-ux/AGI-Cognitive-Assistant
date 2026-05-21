@@ -125,8 +125,10 @@ REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主�
 }}
 
 重要规则：
-- 当用户提到未来要做的计划时，schedule_info 必须填写，need_tools 设为 true，tool_task 中要求调用 add_schedule 工具。
-- 当你自己提议未来一起做什么并得到用户同意时，也要用 add_schedule 记录，source 设为 "system"。
+- 当用户提到未来要做的计划时，schedule_info 必须填写。
+- 如果计划有具体时间或需要提醒，need_tools 设为 true，tool_task 中要求调用 create_timed_task 工具来设置定时提醒。
+- 如果只是记录行程（无时间提醒），need_tools 设为 true，tool_task 中要求调用 add_schedule 工具来记录。
+- 当你自己提议未来一起做什么并得到用户同意时，也要用上述方式记录。
 - 当用户说"提醒我""到点叫我"时，必须填写 time 字段。
 - 当用户说"每天""每周"时，repeat 字段填 daily 或 weekly。
 - 当用户说"到时帮我查/做XX"时，action 字段填写操作描述。
@@ -461,27 +463,25 @@ class ConsciousnessAgent:
         tool_steps  = []
         tools_used  = []
 
-        # ── 自动处理行程计划 ──
+        # ── 自动处理行程计划（仅记录，不直接调工具 ──
+        #  A层只记录 schedule_info 信息在响应中输出，
+        #  由 B层（executor）或外部调用方负责执行对应工具
         schedule_info = reasoning.get("schedule_info")
         if schedule_info and isinstance(schedule_info, dict):
-            try:
-                from engine.tools import execute_tool
-                sch_params = {
-                    "content": schedule_info.get("content", ""),
-                    "date": schedule_info.get("date", ""),
-                    "time": schedule_info.get("time", ""),
-                    "remind": schedule_info.get("remind", ""),
-                    "action": schedule_info.get("action", ""),
-                    "repeat": schedule_info.get("repeat", "once"),
-                    "category": schedule_info.get("category", "personal"),
-                    "source": schedule_info.get("source", "user"),
-                }
-                sch_result = execute_tool("add_schedule", sch_params)
-                if sch_result.get("ok"):
-                    self._log("行程", f"已记录计划: {sch_result.get('message', '')}")
-                    tool_result_section += f"\n[行程已记录] {sch_result.get('message', '')}"
-            except Exception as e:
-                self._log("行程", f"记录计划失败: {e}")
+            content = schedule_info.get("content", "")
+            remind = schedule_info.get("remind", "")
+            s_time = schedule_info.get("time", "")
+            s_date = schedule_info.get("date", "")
+            summary_parts = [f"计划: {content}"]
+            if s_date:
+                summary_parts.append(f"日期: {s_date}")
+            if s_time:
+                summary_parts.append(f"时间: {s_time}")
+            if remind:
+                summary_parts.append(f"提醒: {remind}")
+            summary = " | ".join(summary_parts)
+            self._log("行程", summary)
+            tool_result_section += f"\n[计划已记录] {summary}"
 
         if need_tools:
             tool_task = reasoning.get("tool_task") or user_input
