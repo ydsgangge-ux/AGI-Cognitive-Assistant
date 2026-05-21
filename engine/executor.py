@@ -153,12 +153,15 @@ class BLayerExecutor:
             # 解析响应
             text_parts = []
             tool_calls = []
+            reasoning_block = None
 
             for block in response:
                 if block.get("type") == "text":
                     text_parts.append(block["text"])
                 elif block.get("type") == "tool_use":
                     tool_calls.append(block)
+                elif block.get("type") == "reasoning_content":
+                    reasoning_block = block
 
             text_content = "\n".join(text_parts).strip()
             if text_content:
@@ -279,16 +282,19 @@ class BLayerExecutor:
                 }
 
             # 把工具结果放回消息历史，继续推理
-            # assistant 消息（包含工具调用）
+            # assistant 消息（包含工具调用 + reasoning_content）
+            asst_content = (
+                [{"type": "text", "text": text_content}] if text_content else []
+            ) + [
+                {"type": "tool_use", "id": tc.get("id", f"call_{i}"),
+                 "name": tc["name"], "input": tc.get("input", {})}
+                for i, tc in enumerate(tool_calls)
+            ]
+            if reasoning_block:
+                asst_content.append(reasoning_block)
             messages.append({
                 "role": "assistant",
-                "content": (
-                    [{"type": "text", "text": text_content}] if text_content else []
-                ) + [
-                    {"type": "tool_use", "id": tc.get("id", f"call_{i}"),
-                     "name": tc["name"], "input": tc.get("input", {})}
-                    for i, tc in enumerate(tool_calls)
-                ]
+                "content": asst_content
             })
             # 工具结果消息
             messages.append({
@@ -404,11 +410,14 @@ class BLayerExecutor:
                 text_parts   = []
                 tool_calls   = []
                 tool_results = []
+                reasoning_text = ""
 
                 for block in content:
                     btype = block.get("type", "")
                     if btype == "text":
                         text_parts.append(block.get("text", ""))
+                    elif btype == "reasoning_content":
+                        reasoning_text = block.get("text", "")
                     elif btype == "tool_use":
                         # Anthropic tool_use → OpenAI tool_calls
                         tool_calls.append({
@@ -426,11 +435,14 @@ class BLayerExecutor:
                         tool_results.append(block)
 
                 # assistant 消息（带 tool_calls）
-                if tool_calls:
+                if tool_calls or reasoning_text:
                     msg_obj: Dict = {"role": "assistant"}
                     if text_parts:
                         msg_obj["content"] = "\n".join(text_parts)
-                    msg_obj["tool_calls"] = tool_calls
+                    if reasoning_text:
+                        msg_obj["reasoning_content"] = reasoning_text
+                    if tool_calls:
+                        msg_obj["tool_calls"] = tool_calls
                     msgs.append(msg_obj)
                 elif text_parts:
                     msgs.append({
@@ -485,6 +497,13 @@ class BLayerExecutor:
 
             if msg.get("content"):
                 blocks.append({"type": "text", "text": msg["content"]})
+
+            # 保留 DeepSeek reasoning_content，后续请求必须回传
+            if msg.get("reasoning_content"):
+                blocks.append({
+                    "type": "reasoning_content",
+                    "text": msg["reasoning_content"]
+                })
 
             for tc in msg.get("tool_calls", []):
                 try:

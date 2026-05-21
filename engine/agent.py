@@ -461,30 +461,23 @@ class ConsciousnessAgent:
         tool_steps  = []
         tools_used  = []
 
-        # ── 自动处理行程计划 ──
+        # ── 行程计划：交给 B 层执行 ──
         schedule_info = reasoning.get("schedule_info")
         if schedule_info and isinstance(schedule_info, dict):
-            try:
-                from engine.tools import execute_tool
-                sch_params = {
-                    "content": schedule_info.get("content", ""),
-                    "date": schedule_info.get("date", ""),
-                    "time": schedule_info.get("time", ""),
-                    "remind": schedule_info.get("remind", ""),
-                    "action": schedule_info.get("action", ""),
-                    "repeat": schedule_info.get("repeat", "once"),
-                    "category": schedule_info.get("category", "personal"),
-                    "source": schedule_info.get("source", "user"),
-                }
-                sch_result = execute_tool("add_schedule", sch_params)
-                if sch_result.get("ok"):
-                    self._log("行程", f"已记录计划: {sch_result.get('message', '')}")
-                    tool_result_section += f"\n[行程已记录] {sch_result.get('message', '')}"
-            except Exception as e:
-                self._log("行程", f"记录计划失败: {e}")
-
-        if need_tools:
-            tool_task = reasoning.get("tool_task") or user_input
+            need_tools = True
+            if not reasoning.get("tool_task"):
+                reasoning["tool_task"] = (
+                    f"调用add_schedule工具，参数："
+                    f"content='{schedule_info.get('content', '')}', "
+                    f"date='{schedule_info.get('date', '')}', "
+                    f"time='{schedule_info.get('time', '')}', "
+                    f"remind='{schedule_info.get('remind', '')}', "
+                    f"action='{schedule_info.get('action', '')}', "
+                    f"repeat='{schedule_info.get('repeat', 'once')}', "
+                    f"category='{schedule_info.get('category', 'personal')}', "
+                    f"source='{schedule_info.get('source', 'user')}'"
+                )
+            self._log("行程", f"已委托B层执行: {schedule_info.get('content', '')}")
 
             # 检测用户是否要把"刚才的对话内容"传给工具（保存/转PDF/翻译/总结等）
             _content_transfer_keywords = (
