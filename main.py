@@ -384,6 +384,17 @@ class AGIApp:
         except Exception as e:
             print(f"[定时任务] 调度器启动失败: {e}")
 
+        # 启动网页版聊天服务（Claude 风格，端口 18766）
+        try:
+            from web_server import start_web_chat
+            start_web_chat(
+                agent=agent,
+                auth_manager=agent.auth,
+                scheduler=getattr(self, '_task_scheduler', None),
+            )
+        except ImportError as e:
+            print(f"[网页版] Web 服务未启动（缺少依赖）：{e}")
+
     def _apply_memory_decay(self):
         """定时记忆衰减"""
         try:
