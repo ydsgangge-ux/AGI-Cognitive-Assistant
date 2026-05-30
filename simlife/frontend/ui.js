@@ -1,5 +1,5 @@
 /**
- * SimLife UI 管理 v2
+ * SimLife UI Manager v2
  */
 
 const UI = {
@@ -38,7 +38,7 @@ const UI = {
     this.$userOverlay = document.getElementById('user-overlay');
     this.$userEnterBtn = document.getElementById('user-enter-btn');
 
-    // 启动时加载用户入驻状态 + 世界观列表
+    // Load user enter status + world list on startup
     this._loadUserProfile();
     this._loadWorlds();
   },
@@ -52,15 +52,15 @@ const UI = {
         this._selectedWorldId = data.current || 'modern';
         this._refreshWorldSelector();
       }
-    } catch (e) { /* 忽略 */ }
+    } catch (e) { /* ignore */ }
   },
 
   _refreshWorldSelector() {
     const sel = document.getElementById('inp-world');
     if (!sel) return;
-    // 清空并重建选项
+    // Clear and rebuild options
     const currentValue = sel.value;
-    sel.innerHTML = '<option value="modern">🏢 现代都市（默认）</option>';
+    sel.innerHTML = '<option value="modern">🏢 Modern City (Default)</option>';
     for (const w of this._worlds) {
       if (w.world_id === 'modern') continue;
       const opt = document.createElement('option');
@@ -69,8 +69,8 @@ const UI = {
       opt.textContent = (typeEmoji[w.world_type] || '🌍') + ' ' + w.world_name;
       sel.appendChild(opt);
     }
-    sel.innerHTML += '<option value="__ai_generate">🤖 AI 生成自定义世界…</option>';
-    sel.innerHTML += '<option value="__import">📋 导入世界观 JSON…</option>';
+    sel.innerHTML += '<option value="__ai_generate">🤖 AI Generate Custom World...</option>';
+    sel.innerHTML += '<option value="__import">📋 Import World JSON...</option>';
     sel.value = this._selectedWorldId || 'modern';
     onWorldChange();
   },
@@ -82,24 +82,24 @@ const UI = {
         this._userProfile = await resp.json();
         this._updateEnterButton();
       }
-    } catch (e) { /* 忽略 */ }
+    } catch (e) { /* ignore */ }
   },
 
   _updateEnterButton() {
     if (!this.$userEnterBtn || !this._userProfile) return;
     const entered = this._userProfile.entered;
-    const name = this._userProfile.name || '你';
+    const name = this._userProfile.name || 'You';
     const relation = this._userProfile.relation || '';
 
     if (entered) {
       this.$userEnterBtn.className = 'entered';
-      this.$userEnterBtn.innerHTML = '<span id="user-status-dot" class="active"></span>' + name + '（' + relation + '）在场';
+      this.$userEnterBtn.innerHTML = '<span id="user-status-dot" class="active"></span>' + name + ' (' + relation + ') present';
     } else if (relation) {
       this.$userEnterBtn.className = '';
-      this.$userEnterBtn.innerHTML = '🏠 进入世界';
+      this.$userEnterBtn.innerHTML = '🏠 Enter World';
     } else {
       this.$userEnterBtn.className = '';
-      this.$userEnterBtn.innerHTML = '🏠 设置身份';
+      this.$userEnterBtn.innerHTML = '🏠 Set Identity';
     }
   },
 
@@ -179,13 +179,13 @@ const UI = {
   },
 };
 
-// 暴露全局函数
+// Expose global functions
 function skipSetup() {
   UI.hideSetup();
 }
 
 function toggleAllLogs() {
-  // TODO: 展开全部日志的弹窗
+  // TODO: expand all logs popup
 }
 
 async function generateWorld() {
@@ -198,11 +198,11 @@ async function generateWorld() {
   };
 
   if (!anchor.character_name) {
-    UI.setSetupStatus('请填写角色名字');
+    UI.setSetupStatus('Please enter character name');
     return;
   }
 
-  UI.setSetupStatus('正在生成人物卡和世界... AI 可能耗时 10-30 秒');
+  UI.setSetupStatus('Generating character card and world... AI may take 10-30 seconds');
   UI.setGenerateButton(false);
 
   try {
@@ -214,11 +214,11 @@ async function generateWorld() {
 
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || '生成失败');
+      throw new Error(err.detail || 'Generation failed');
     }
 
     const data = await resp.json();
-    UI.setSetupStatus('✅ 世界生成完成！');
+    UI.setSetupStatus('World generation complete!');
 
     setTimeout(() => {
       UI.hideSetup();
@@ -233,7 +233,7 @@ async function generateWorld() {
   }
 }
 
-/* ── 设置菜单 ── */
+/* --- Settings Menu --- */
 
 function toggleSettingsMenu() {
   const menu = document.getElementById('settings-menu');
@@ -256,11 +256,11 @@ function _closeSettingsOnOutsideClick(e) {
 
 function openSetupForReinit() {
   document.getElementById('settings-menu').classList.remove('show');
-  if (!confirm('重新初始化会删除当前角色和世界，确定要重新开始吗？')) return;
+  if (!confirm('Reinitializing will delete the current character and world. Are you sure you want to start over?')) return;
   fetch('/api/reset', { method: 'POST' })
     .then(r => r.json())
     .then(() => { location.reload(); })
-    .catch(e => { alert('重置失败：' + e.message); });
+    .catch(e => { alert('Reset failed: ' + e.message); });
 }
 
 function openUserPanelFromMenu() {
@@ -279,10 +279,10 @@ function openUserPanelFromMenu() {
   const btnEnter = document.getElementById('btn-user-enter');
   const btnLeave = document.getElementById('btn-user-leave');
   if (UI._userProfile && UI._userProfile.entered) {
-    btnEnter.textContent = '✨ 保存修改';
+    btnEnter.textContent = '✨ Save Changes';
     btnLeave.style.display = '';
   } else {
-    btnEnter.textContent = hasRelation ? '✨ 进入世界' : '✨ 保存并进入';
+    btnEnter.textContent = hasRelation ? '✨ Enter World' : '✨ Save and Enter';
     btnLeave.style.display = 'none';
   }
   overlay.style.display = 'flex';
@@ -290,14 +290,14 @@ function openUserPanelFromMenu() {
 
 function doResetSimLife() {
   document.getElementById('settings-menu').classList.remove('show');
-  if (!confirm('这将清空 SimLife 的所有数据（角色、世界、NPC、用户身份），确定吗？')) return;
+  if (!confirm('This will clear all SimLife data (character, world, NPCs, user identity). Are you sure?')) return;
   fetch('/api/reset', { method: 'POST' })
     .then(r => r.json())
     .then(() => { location.reload(); })
-    .catch(e => { alert('重置失败：' + e.message); });
+    .catch(e => { alert('Reset failed: ' + e.message); });
 }
 
-/* ── 用户入驻管理 ── */
+/* --- User Entry Management --- */
 
 function toggleUserPanel() {
   const overlay = document.getElementById('user-overlay');
@@ -306,10 +306,10 @@ function toggleUserPanel() {
     return;
   }
 
-  // 已入驻状态：打开面板可修改身份或离开
-  // （不再直接执行离开，让用户在面板里选择）
+  // Entered state: open panel to modify identity or leave
+  // (no longer directly execute leave, let user choose in panel)
   
-  // 填充已有信息
+  // Fill existing info
   if (UI._userProfile) {
     document.getElementById('inp-user-name').value = UI._userProfile.name || '';
     document.getElementById('inp-user-relation').value = UI._userProfile.relation || '';
@@ -321,10 +321,10 @@ function toggleUserPanel() {
   const btnLeave = document.getElementById('btn-user-leave');
 
   if (UI._userProfile && UI._userProfile.entered) {
-    btnEnter.textContent = '✨ 保存修改';
+    btnEnter.textContent = '✨ Save Changes';
     btnLeave.style.display = '';
   } else {
-    btnEnter.textContent = hasRelation ? '✨ 进入世界' : '✨ 保存并进入';
+    btnEnter.textContent = hasRelation ? '✨ Enter World' : '✨ Save and Enter';
     btnLeave.style.display = 'none';
   }
 
@@ -341,23 +341,23 @@ async function doUserEnter() {
   const worldRole = document.getElementById('inp-user-role').value.trim();
 
   if (!relation) {
-    alert('请填写你和角色的关系');
+    alert('Please fill in your relationship with the character');
     return;
   }
 
   try {
-    // 先保存身份信息
+    // Save identity info first
     await fetch('/api/user/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, relation, world_role: worldRole }),
     });
 
-    // 再进入世界
+    // Then enter world
     const resp = await fetch('/api/user/enter', { method: 'POST' });
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || '进入失败');
+      throw new Error(err.detail || 'Enter failed');
     }
 
     UI._userProfile = { name, relation, world_role: worldRole, entered: true };
@@ -365,12 +365,12 @@ async function doUserEnter() {
     closeUserPanel();
 
   } catch (e) {
-    alert('操作失败：' + e.message);
+    alert('Operation failed: ' + e.message);
   }
 }
 
 async function doUserLeave() {
-  if (!confirm('确定要离开 SimLife 世界吗？')) return;
+  if (!confirm('Are you sure you want to leave SimLife world?')) return;
 
   try {
     const resp = await fetch('/api/user/leave', { method: 'POST' });
@@ -379,11 +379,11 @@ async function doUserLeave() {
       UI._updateEnterButton();
     }
   } catch (e) {
-    alert('操作失败：' + e.message);
+    alert('Operation failed: ' + e.message);
   }
 }
 
-/* ── 世界观管理 ── */
+/* --- World Management --- */
 
 function onWorldChange() {
   const sel = document.getElementById('inp-world');
@@ -395,7 +395,7 @@ function onWorldChange() {
   const importPanel = document.getElementById('import-world-panel');
   const infoBar = document.getElementById('world-info-bar');
 
-  // 默认全部隐藏
+  // Default: hide all
   modernFields.style.display = 'none';
   cwFields.style.display = 'none';
   aiPanel.style.display = 'none';
@@ -411,18 +411,18 @@ function onWorldChange() {
     importPanel.style.display = '';
     cwFields.style.display = '';
   } else {
-    // 已有的自定义世界观
+    // Existing custom worlds
     cwFields.style.display = '';
-    // 显示世界观摘要
+    // Show world summary
     const world = UI._worlds.find(w => w.world_id === val);
     if (world) {
       infoBar.style.display = '';
-      const typeNames = { fantasy: '奇幻魔法', scifi: '科幻未来', xianxia: '仙侠修真', post_apocalyptic: '末世废土', custom: '自定义' };
-      infoBar.textContent = '🌍 ' + world.world_name + '  |  类型：' + (typeNames[world.world_type] || world.world_type);
+      const typeNames = { fantasy: 'Fantasy Magic', scifi: 'Sci-Fi Future', xianxia: 'Xianxia Cultivation', post_apocalyptic: 'Post-Apocalyptic', custom: 'Custom' };
+      infoBar.textContent = '🌍 ' + world.world_name + '  |  Type: ' + (typeNames[world.world_type] || world.world_type);
     }
   }
 
-  // 同步名字字段
+  // Sync name field
   const nameModern = document.getElementById('inp-name');
   const nameCw = document.getElementById('inp-name-cw');
   if (nameModern && nameCw) {
@@ -443,10 +443,10 @@ async function doSwitchWorld(worldId) {
     });
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || '切换失败');
+      throw new Error(err.detail || 'Switch failed');
     }
     UI._selectedWorldId = worldId;
-    UI.setSetupStatus('✅ 已切换到 ' + worldId);
+    UI.setSetupStatus('Switched to ' + worldId);
   } catch (e) {
     UI.setSetupStatus('❌ ' + e.message);
   }
@@ -458,14 +458,14 @@ async function doAIGenerateWorld() {
   const role = document.getElementById('inp-ai-world-role').value.trim();
 
   if (!theme) {
-    UI.setSetupStatus('请至少填写「核心主题」');
+    UI.setSetupStatus('Please fill in at least the Core Theme');
     return;
   }
 
-  UI.setSetupStatus('🧙 AI 正在生成世界观设定… 这可能需要 30-60 秒');
+  UI.setSetupStatus('AI is generating world setting... This may take 30-60 seconds');
   const btn = document.querySelector('#ai-gen-world-panel button');
   btn.disabled = true;
-  btn.textContent = '⏳ 生成中…';
+  btn.textContent = 'Generating...';
 
   try {
     const resp = await fetch('/api/worlds/generate', {
@@ -480,13 +480,13 @@ async function doAIGenerateWorld() {
 
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || '生成失败');
+      throw new Error(err.detail || 'Generation failed');
     }
 
     const data = await resp.json();
-    UI.setSetupStatus('✅ 世界观「' + (data.world_name || data.world_id) + '」生成成功！');
+    UI.setSetupStatus('World "' + (data.world_name || data.world_id) + '" generated successfully!');
 
-    // 刷新列表并选中
+    // Refresh list and select
     UI._selectedWorldId = data.world_id;
     await UI._loadWorlds();
 
@@ -494,14 +494,14 @@ async function doAIGenerateWorld() {
     UI.setSetupStatus('❌ ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '🧙 AI 生成世界观设定（约 30-60 秒）';
+    btn.textContent = '🧙 AI Generate World Setting (~30-60 sec)';
   }
 }
 
 async function doImportWorld() {
   const jsonStr = document.getElementById('inp-import-json').value.trim();
   if (!jsonStr) {
-    UI.setSetupStatus('请粘贴世界观 JSON');
+    UI.setSetupStatus('Please paste world JSON');
     return;
   }
 
@@ -509,11 +509,11 @@ async function doImportWorld() {
   try {
     setting = JSON.parse(jsonStr);
   } catch (e) {
-    UI.setSetupStatus('❌ JSON 格式错误：' + e.message);
+    UI.setSetupStatus('JSON parse error: ' + e.message);
     return;
   }
 
-  UI.setSetupStatus('正在导入…');
+  UI.setSetupStatus('Importing...');
 
   try {
     const resp = await fetch('/api/worlds/import', {
@@ -524,11 +524,11 @@ async function doImportWorld() {
 
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || '导入失败');
+      throw new Error(err.detail || 'Import failed');
     }
 
     const data = await resp.json();
-    UI.setSetupStatus('✅ 世界观「' + (data.world_name || data.world_id) + '」导入成功！');
+    UI.setSetupStatus('World "' + (data.world_name || data.world_id) + '" imported successfully!');
 
     UI._selectedWorldId = data.world_id;
     await UI._loadWorlds();
@@ -538,13 +538,13 @@ async function doImportWorld() {
   }
 }
 
-// 改写 generateWorld 以支持非现代世界
+// Rewrite generateWorld to support non-modern worlds
 const _originalGenerateWorld = generateWorld;
 window.generateWorld = async function() {
   const sel = document.getElementById('inp-world');
   const isModern = sel.value === 'modern';
 
-  // 如果选了自定义世界观但未实际切换
+  // If custom world selected but not actually switched
   if (!isModern && sel.value !== '__ai_generate' && sel.value !== '__import') {
     await doSwitchWorld(sel.value);
   }
@@ -566,11 +566,11 @@ window.generateWorld = async function() {
   };
 
   if (!anchor.character_name) {
-    UI.setSetupStatus('请填写角色名字');
+    UI.setSetupStatus('Please enter character name');
     return;
   }
 
-  UI.setSetupStatus('正在生成人物卡和世界... AI 可能耗时 10-30 秒');
+  UI.setSetupStatus('Generating character card and world... AI may take 10-30 seconds');
   UI.setGenerateButton(false);
 
   try {
@@ -582,11 +582,11 @@ window.generateWorld = async function() {
 
     if (!resp.ok) {
       const err = await resp.json();
-      throw new Error(err.detail || '生成失败');
+      throw new Error(err.detail || 'Generation failed');
     }
 
     const data = await resp.json();
-    UI.setSetupStatus('✅ 世界生成完成！');
+    UI.setSetupStatus('World generation complete!');
 
     setTimeout(() => {
       UI.hideSetup();
@@ -601,7 +601,7 @@ window.generateWorld = async function() {
   }
 };
 
-// ── 剧情存档 ─────────────────────────────────────────
+// --- Story Archive ---
 function openStoryArchive() {
   document.getElementById('settings-menu').classList.remove('show');
   const overlay = document.getElementById('archive-overlay');
@@ -615,13 +615,13 @@ function closeStoryArchive() {
 
 async function loadArchiveList() {
   const listEl = document.getElementById('archive-list');
-  listEl.innerHTML = '加载中…';
+  listEl.innerHTML = 'Loading...';
   try {
     const resp = await fetch('/api/story/archive');
     const data = await resp.json();
     const archives = data.archives || [];
     if (archives.length === 0) {
-      listEl.innerHTML = '<div style="padding:40px 0;color:#8899aa;">暂无存档，异世界模式运行一天后会自动生成</div>';
+      listEl.innerHTML = '<div style="padding:40px 0;color:#8899aa;">No archives yet. They will auto-generate after running one day in alternate world mode.</div>';
       return;
     }
     let html = '';
@@ -632,31 +632,31 @@ async function loadArchiveList() {
         onmouseout="this.style.background='rgba(0,0,0,0.2)'">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span style="color:#e0e0e0;font-weight:bold;">📅 ${a.date}</span>
-          <span style="font-size:12px;color:#8899aa;">${a.node_count} 个节点 · 心情 ${a.mood}/100</span>
+          <span style="font-size:12px;color:#8899aa;">${a.node_count} nodes · Mood ${a.mood}/100</span>
         </div>
-        <div style="font-size:12px;color:#8899aa;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.summary || '暂无记录'}</div>
+        <div style="font-size:12px;color:#8899aa;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.summary || 'No records'}</div>
       </div>`;
     }
     listEl.innerHTML = html;
   } catch (e) {
-    listEl.innerHTML = `<div style="padding:40px 0;color:#e94560;">加载失败：${e.message}</div>`;
+    listEl.innerHTML = `<div style="padding:40px 0;color:#e94560;">Load failed: ${e.message}</div>`;
   }
 }
 
 async function loadArchiveDay(dateStr) {
   const listEl = document.getElementById('archive-list');
-  listEl.innerHTML = '加载中…';
+  listEl.innerHTML = 'Loading...';
   try {
     const resp = await fetch(`/api/story/archive/${dateStr}`);
     const data = await resp.json();
     let html = `<div style="margin-bottom:12px;">
-      <button onclick="loadArchiveList()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:#8899aa;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">← 返回列表</button>
+      <button onclick="loadArchiveList()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:#8899aa;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">← Back to List</button>
       <span style="color:#e0e0e0;font-weight:bold;font-size:15px;margin-left:10px;">📅 ${dateStr}</span>
     </div>`;
-    // 日志
+    // logs
     const logs = data.today_log || [];
     if (logs.length > 0) {
-      html += '<div style="margin-bottom:12px;"><div style="font-size:12px;color:#8899aa;margin-bottom:6px;">📋 日志</div>';
+      html += '<div style="margin-bottom:12px;"><div style="font-size:12px;color:#8899aa;margin-bottom:6px;">📋 Logs</div>';
       for (const log of logs) {
         html += `<div style="padding:4px 0;font-size:13px;color:#e0e0e0;border-bottom:1px solid rgba(255,255,255,0.03);">
           <span style="color:#e94560;opacity:0.7;width:42px;display:inline-block;">${log.time || ''}</span>
@@ -665,10 +665,10 @@ async function loadArchiveDay(dateStr) {
       }
       html += '</div>';
     }
-    // 剧情节点
+    // story nodes
     const plan = data.day_plan || [];
     if (plan.length > 0) {
-      html += '<div style="font-size:12px;color:#8899aa;margin-bottom:6px;">📖 剧情节点</div>';
+      html += '<div style="font-size:12px;color:#8899aa;margin-bottom:6px;">📖 Story Nodes</div>';
       for (const node of plan) {
         html += `<div style="padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:8px;">
           <div style="display:flex;gap:10px;align-items:center;margin-bottom:4px;">
@@ -686,6 +686,6 @@ async function loadArchiveDay(dateStr) {
     }
     listEl.innerHTML = html;
   } catch (e) {
-    listEl.innerHTML = `<div style="padding:40px 0;color:#e94560;">加载失败：${e.message}</div>`;
+    listEl.innerHTML = `<div style="padding:40px 0;color:#e94560;">Load failed: ${e.message}</div>`;
   }
 }

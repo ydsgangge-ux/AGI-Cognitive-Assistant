@@ -1,7 +1,7 @@
 """
-AGI Web Chat — Claude 风格网页版
-Flask + Flask-SocketIO 实现，共享同一个 ConsciousnessAgent 实例
-由 main.py 调用 start_web_chat(agent, auth_manager) 启动
+AGI Web Chat - Claude-style web interface
+Flask + Flask-SocketIO, shares the same ConsciousnessAgent instance
+Started by main.py calling start_web_chat(agent, auth_manager)
 """
 
 import os
@@ -17,7 +17,7 @@ from flask import Flask, request, session, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
 from engine.memory import MemoryStore
 
-# ── 全局共享实例（由 start_web_chat 注入）─────────────────
+# -- Global shared instances (injected by start_web_chat) --
 _agent = None
 _auth_manager = None
 _scheduler = None
@@ -31,7 +31,7 @@ app = Flask(
 app.secret_key = os.environ.get("AGI_WEB_SECRET", uuid.uuid4().hex)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-# ── 聊天记录存储 ────────────────────────────────────────
+# -- Chat history storage --
 CHAT_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "AGI-Desktop" / "web_chats"
 CHAT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -63,7 +63,7 @@ def _check_auth() -> Optional[dict]:
     return {"user_id": uid, "name": session.get("name", "")}
 
 
-# ── HTTP 路由 ───────────────────────────────────────────
+# -- HTTP routes --
 @app.route("/")
 def index():
     return send_from_directory(app.template_folder, "index.html")
@@ -73,14 +73,14 @@ def index():
 def login():
     global _auth_manager
     if not _auth_manager:
-        return jsonify({"ok": False, "error": "认证服务未就绪"}), 503
+        return jsonify({"ok": False, "error": "Auth service not ready"}), 503
     data = request.get_json(silent=True) or {}
     passphrase = data.get("passphrase", "").strip()
     if not passphrase:
-        return jsonify({"ok": False, "error": "请输入密码短语"}), 400
+        return jsonify({"ok": False, "error": "Please enter passphrase"}), 400
     user = _auth_manager.verify_passphrase(passphrase)
     if not user:
-        return jsonify({"ok": False, "error": "密码短语错误"}), 401
+        return jsonify({"ok": False, "error": "Incorrect passphrase"}), 401
     session["user_id"] = user.user_id
     session["name"] = user.name
     return jsonify({"ok": True, "name": user.name, "user_id": user.user_id})
@@ -96,7 +96,7 @@ def logout():
 def me():
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     return jsonify({"ok": True, "name": info["name"], "user_id": info["user_id"]})
 
 
@@ -104,9 +104,9 @@ def me():
 def get_personality():
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     if not _agent:
-        return jsonify({"ok": False, "error": "引擎未就绪"}), 503
+        return jsonify({"ok": False, "error": "Engine not ready"}), 503
     p = _agent.personality
     return jsonify({"ok": True, "personality": p.to_dict()})
 
@@ -115,9 +115,9 @@ def get_personality():
 def update_personality():
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     if not _auth_manager or not _auth_manager.is_verified():
-        return jsonify({"ok": False, "error": "需要身份验证"}), 403
+        return jsonify({"ok": False, "error": "Identity verification required"}), 403
     data = request.get_json(silent=True) or {}
     from desktop.config import PERSONALITY_FILE
     try:
@@ -140,7 +140,7 @@ def update_personality():
 def list_chats():
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     chats = _load_chats(info["user_id"])
     summaries = []
     for c in chats:
@@ -152,7 +152,7 @@ def list_chats():
                 break
         summaries.append({
             "id": c.get("id", ""),
-            "title": c.get("title", first_user or "新对话"),
+            "title": c.get("title", first_user or "New chat"),
             "created_at": c.get("created_at", ""),
             "updated_at": c.get("updated_at", ""),
             "message_count": len(msgs),
@@ -164,19 +164,19 @@ def list_chats():
 def get_chat(chat_id):
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     chats = _load_chats(info["user_id"])
     for c in chats:
         if c.get("id") == chat_id:
             return jsonify({"ok": True, "chat": c})
-    return jsonify({"ok": False, "error": "对话不存在"}), 404
+    return jsonify({"ok": False, "error": "Chat not found"}), 404
 
 
 @app.route("/api/chats/<chat_id>", methods=["DELETE"])
 def delete_chat(chat_id):
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     chats = _load_chats(info["user_id"])
     chats = [c for c in chats if c.get("id") != chat_id]
     _save_chats(info["user_id"], chats)
@@ -193,14 +193,14 @@ def serve_image(filename):
 def list_timed_tasks():
     info = _check_auth()
     if not info:
-        return jsonify({"ok": False, "error": "未登录"}), 401
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
     if not _scheduler:
-        return jsonify({"ok": False, "error": "调度器未就绪"}), 503
+        return jsonify({"ok": False, "error": "Scheduler not ready"}), 503
     tasks = _scheduler.list_tasks(status="pending")
     return jsonify({"ok": True, "tasks": tasks})
 
 
-# ── WebSocket 事件 ──────────────────────────────────────
+# -- WebSocket events --
 @socketio.on("connect")
 def on_connect():
     pass
@@ -209,15 +209,15 @@ def on_connect():
 def on_login(data):
     global _auth_manager
     if not _auth_manager:
-        emit("auth_result", {"ok": False, "error": "认证服务未就绪"})
+        emit("auth_result", {"ok": False, "error": "Auth service not ready"})
         return
     passphrase = (data.get("passphrase") or "").strip()
     if not passphrase:
-        emit("auth_result", {"ok": False, "error": "请输入密码短语"})
+        emit("auth_result", {"ok": False, "error": "Please enter passphrase"})
         return
     user = _auth_manager.verify_passphrase(passphrase)
     if not user:
-        emit("auth_result", {"ok": False, "error": "密码短语错误"})
+        emit("auth_result", {"ok": False, "error": "Incorrect passphrase"})
         return
     session["user_id"] = user.user_id
     session["name"] = user.name
@@ -226,16 +226,16 @@ def on_login(data):
 @socketio.on("logout")
 def on_logout():
     session.clear()
-    emit("auth_result", {"ok": False, "error": "已退出"})
+    emit("auth_result", {"ok": False, "error": "Logged out"})
 
 @socketio.on("chat:message")
 def on_chat_message(data):
     info = _check_auth()
     if not info:
-        emit("error", {"message": "未登录"})
+        emit("error", {"message": "Not logged in"})
         return
     if not _agent:
-        emit("error", {"message": "引擎未就绪"})
+        emit("error", {"message": "Engine not ready"})
         return
 
     message = data.get("message", "").strip()
@@ -281,7 +281,7 @@ def on_chat_message(data):
         tools_used = result.get("tools_used", [])
         emotion = result.get("emotion", {})
     except Exception as e:
-        reply = f"引擎错误：{e}"
+        reply = f"Engine error: {e}"
         tool_steps = []
         tools_used = []
         emotion = {}
@@ -327,7 +327,7 @@ def on_get_chat_list():
     for c in chats:
         result.append({
             "id": c.get("id", ""),
-            "title": c.get("title", "新对话"),
+            "title": c.get("title", "New chat"),
             "created_at": c.get("created_at", ""),
             "updated_at": c.get("updated_at", ""),
             "message_count": len(c.get("messages", [])),
@@ -340,7 +340,7 @@ def on_get_chat_list():
 def on_load_chat(data):
     info = _check_auth()
     if not info:
-        emit("error", {"message": "未登录"})
+        emit("error", {"message": "Not logged in"})
         return
     chat_id = data.get("chat_id", "")
     chats = _load_chats(info["user_id"])
@@ -348,18 +348,18 @@ def on_load_chat(data):
         if c.get("id") == chat_id:
             emit("chat:loaded", {
                 "chat_id": c["id"],
-                "title": c.get("title", "新对话"),
+                "title": c.get("title", "New chat"),
                 "messages": c.get("messages", []),
             })
             return
-    emit("error", {"message": "对话不存在"})
+    emit("error", {"message": "Chat not found"})
 
 
 @socketio.on("delete_chat")
 def on_delete_chat(data):
     info = _check_auth()
     if not info:
-        emit("error", {"message": "未登录"})
+        emit("error", {"message": "Not logged in"})
         return
     chat_id = data.get("chat_id", "")
     chats = _load_chats(info["user_id"])
@@ -416,16 +416,16 @@ def on_get_tool_list():
     emit("tool_list", tools)
 
 
-# ── 定时任务推送 ────────────────────────────────────────
+# -- Scheduled task push --
 def _on_timed_task_for_web(task: dict):
-    """定时任务触发时，通过 SocketIO 推送到所有已连接的 Web 客户端"""
+    """When scheduled task triggers, push to all connected Web clients via SocketIO"""
     action = task.get("action", "speak")
     content = task.get("content", "")
     params = task.get("action_params", {})
     if action == "speak":
         message = params.get("message", content)
     elif action == "tool":
-        message = f"（定时任务）执行了 {params.get('tool_name', '工具')}"
+        message = f"[Scheduled] Executed {params.get('tool_name', 'tool')}"
     else:
         message = content
     socketio.emit("timed:reminder", {
@@ -435,9 +435,9 @@ def _on_timed_task_for_web(task: dict):
     })
 
 
-# ── 对外启动接口 ────────────────────────────────────────
+# -- External start interface --
 def start_web_chat(agent, auth_manager, scheduler=None, host="0.0.0.0", port=18766):
-    """在 daemon 线程里启动 Flask-SocketIO 服务，不阻塞 Qt 主线程"""
+    """Start Flask-SocketIO in daemon thread, non-blocking for Qt"""
     global _agent, _auth_manager, _scheduler
     _agent = agent
     _auth_manager = auth_manager
@@ -448,10 +448,10 @@ def start_web_chat(agent, auth_manager, scheduler=None, host="0.0.0.0", port=187
             import socket
             ip = socket.gethostbyname(socket.gethostname())
         except Exception:
-            ip = "本机IP"
-        print(f"\n🌐 网页版访问 → http://{ip}:{port}")
-        print(f"💻 本机访问 → http://localhost:{port}")
-        print(f"🔑 登录方式：桌面端密码短语\n")
+            ip = "localhost"
+        print(f"\n🌐 Web access → http://{ip}:{port}")
+        print(f"💻 Desktop → http://localhost:{port}")
+        print(f"🔑 Login: desktop passphrase\n")
         socketio.run(app, host=host, port=port, allow_unsafe_werkzeug=True, log_output=False)
 
     t = threading.Thread(target=_run, daemon=True)

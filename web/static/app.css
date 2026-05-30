@@ -1,4 +1,4 @@
-/* ── Claude 原版配色 & 布局 ─────────────────── */
+/* -- Claude-style color scheme & layout -- */
 :root {
   --bg-app: #ffffff;
   --bg-sidebar: #f9f9f9;
@@ -30,7 +30,7 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── 登录页（Claude 风格） ── */
+/* -- Login page (Claude style) -- */
 .login-page {
   height: 100vh;
   display: flex;
@@ -109,14 +109,14 @@ html, body {
   text-align: center;
 }
 
-/* ── 主布局 ── */
+/* -- Main layout -- */
 .app {
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
 
-/* ── 侧边栏（Claude 风格） ── */
+/* -- Sidebar (Claude style) -- */
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
@@ -331,7 +331,7 @@ html, body {
 }
 .btn-icon-sm:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-/* ── 主区域 ── */
+/* -- Main area -- */
 .main-area {
   flex: 1;
   display: flex;
@@ -516,7 +516,7 @@ html, body {
   color: var(--text-muted);
 }
 
-/* ── 消息样式（灰底框） ── */
+/* -- Message style (gray background) -- */
 .message-row {
   max-width: 780px;
   margin: 0 auto;
@@ -548,7 +548,7 @@ html, body {
   background: #f4f4f5;
 }
 
-/* AI 消息中的格式化内容 */
+/* Formatted content in AI messages */
 .message-text strong { font-weight: 650; }
 .message-text h1, .message-text h2, .message-text h3 {
   font-weight: 650;
@@ -646,7 +646,7 @@ html, body {
 .typing-dots span:nth-child(3) { animation-delay: .3s; }
 @keyframes bounce { 0%,60%,100%{transform:translateY(0);opacity:.5} 30%{transform:translateY(-5px);opacity:1} }
 
-/* ── 输入区（Claude 风格） ── */
+/* -- Input area (Claude style) -- */
 .input-area {
   padding: 12px 24px 16px;
   flex-shrink: 0;
@@ -748,7 +748,7 @@ html, body {
   margin-top: 8px;
 }
 
-/* ── 模态框 ── */
+/* -- Modal -- */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;

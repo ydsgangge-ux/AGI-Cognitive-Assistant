@@ -26,9 +26,9 @@ ConfirmCallback = Callable[[str, dict], bool]
 
 def default_confirm(tool_name: str, params: dict) -> bool:
     """默认：命令行询问用户"""
-    print(f"\n⚠️  [高风险操作] 工具：{tool_name}")
-    print(f"   参数：{json.dumps(params, ensure_ascii=False)[:200]}")
-    ans = input("   是否允许执行？(y/N) ").strip().lower()
+    print(f"\n[High Risk] Tool: {tool_name}")
+    print(f"  Parameters: {json.dumps(params, ensure_ascii=False)[:200]}")
+    ans = input("  Allow execution? (y/N) ").strip().lower()
     return ans == "y"
 
 
@@ -130,7 +130,7 @@ class BLayerExecutor:
         # 消息历史
         messages = [{"role": "user", "content": task}]
 
-        self._log("任务", task[:80])
+        self._log("Task", task[:80])
 
         # ── 工具结果最大长度（防止上下文溢出） ──────────
         TOOL_RESULT_MAX_CHARS = 3000
@@ -169,7 +169,7 @@ class BLayerExecutor:
 
             # 如果没有工具调用，这就是最终答案
             if not tool_calls:
-                self._log("完成", f"步骤 {step+1}，无更多工具调用")
+                self._log("Done", f"步骤 {step+1}，无更多工具调用")
                 return {
                     "result": text_content,
                     "steps": steps,
@@ -185,19 +185,19 @@ class BLayerExecutor:
                 tool_params = tc.get("input", {})
                 tool_id = tc.get("id", f"call_{step}")
 
-                self._log("工具", f"调用 {tool_name}({json.dumps(tool_params, ensure_ascii=False)[:100]})")
+                self._log("Tool", f"调用 {tool_name}({json.dumps(tool_params, ensure_ascii=False)[:100]})")
 
                 # 动态工具：每次调用都需用户确认
                 if tool_name in self._dynamic_tools:
                     dyn_info = self._dynamic_tools[tool_name]
-                    self._log("自学习", f"检测到自学习工具：{tool_name}")
+                    self._log("SelfLearn", f"检测到自学习工具：{tool_name}")
                     allowed = self.confirm(
                         tool_name,
                         {"说明": f"执行之前自动学习的代码：{dyn_info['description'][:80]}"}
                     )
                     if not allowed:
                         result_content = {"ok": False, "error": "用户拒绝执行此自学习工具"}
-                        self._log("拒绝", f"{tool_name} 被用户拒绝")
+                        self._log("Denied", f"{tool_name} 被用户拒绝")
                     else:
                         result_content = self._execute_dynamic_tool(tool_name)
                 # 静态工具：按原有风险等级检查
@@ -205,7 +205,7 @@ class BLayerExecutor:
                     allowed = self.confirm(tool_name, tool_params)
                     if not allowed:
                         result_content = {"ok": False, "error": "用户拒绝执行此高风险操作"}
-                        self._log("拒绝", f"{tool_name} 被用户拒绝")
+                        self._log("Denied", f"{tool_name} 被用户拒绝")
                     else:
                         result_content = execute_tool(tool_name, tool_params,
                                                       user_input=getattr(self, '_user_input', ''))
@@ -234,7 +234,7 @@ class BLayerExecutor:
                             tool_name, error_msg, consecutive_failures, MAX_TOOL_RETRIES
                         )
                         result_content["_retry_hint"] = retry_hint
-                        self._log("重试", f"工具失败，提示 LLM 修正（第 {consecutive_failures + 1}/{MAX_TOOL_RETRIES} 次）")
+                        self._log("Retry", f"工具失败，提示 LLM 修正（第 {consecutive_failures + 1}/{MAX_TOOL_RETRIES} 次）")
 
                 tools_used.append(tool_name)
                 steps.append({
@@ -272,7 +272,7 @@ class BLayerExecutor:
                             "tools_used": list(set(tools_used + ["run_python(fallback)"])),
                             "success": True
                         }
-                self._log("终止", f"连续 {consecutive_failures} 次工具失败，终止执行")
+                self._log("Abort", f"连续 {consecutive_failures} 次工具失败，终止执行")
                 summary = self._summarize_steps(steps, tools_used)
                 return {
                     "result": f"连续 {MAX_TOOL_RETRIES} 次工具执行失败，已终止。\n\n{summary}",
@@ -304,7 +304,7 @@ class BLayerExecutor:
 
         # 超过最大步数 — 返回部分结果汇总
         summary = self._summarize_steps(steps, tools_used)
-        self._log("超限", f"超过 {self.max_steps} 步，返回已完成结果汇总")
+        self._log("Limit", f"超过 {self.max_steps} 步，返回已完成结果汇总")
         # 如果最后一步LLM有文本输出（可能是未完成的分析），一并返回
         result_text = f"任务执行达到最大步数（{self.max_steps}步），部分结果如下：\n\n{summary}"
         if last_text_output:
@@ -473,7 +473,7 @@ class BLayerExecutor:
 
         if self.verbose:
             # 调试：打印发出的消息条数和工具数
-            self._log("API请求",
+            self._log("API",
                 f"消息 {len(msgs)} 条, 工具 {len(oai_tools)} 个, "
                 f"max_tokens={max_tokens}"
             )
@@ -519,7 +519,7 @@ class BLayerExecutor:
             err_body = e.read().decode("utf-8", errors="replace")
             # Auto-retry on context length exceeded: compact and retry once
             if e.code == 400 and "context length" in err_body.lower():
-                self._log("API错误", "上下文超限，正在压缩消息重试...")
+                self._log("APIError", "上下文超限，正在压缩消息重试...")
                 compacted = self._compact_messages(messages, max_chars=40000)
                 if len(compacted) < len(messages):
                     body["messages"] = msgs[:1] + []  # rebuild with compacted
@@ -568,7 +568,7 @@ class BLayerExecutor:
                         return blks if blks else [{"type": "text", "text": "任务完成"}]
                     except Exception:
                         pass
-            self._log("API错误", f"HTTP {e.code}: {err_body[:600]}")
+            self._log("APIError", f"HTTP {e.code}: {err_body[:600]}")
             return [{"type": "text",
                      "text": f"API调用失败 HTTP {e.code}: {err_body[:300]}"}]
         except Exception as e:
@@ -813,7 +813,7 @@ class BLayerExecutor:
 6. 工具执行完成后，用一句话总结结果
 7. 高风险操作前简要说明意图
 8. 如果前一步工具已返回所需数据，直接基于该数据生成最终答案，不要再调用不必要的工具
-9. 回答必须基于工具返回的真实数据，直接引用原始内容，禁止用"通常""可能""应该"等推测性语言编造内容"""
+9. 回答必须基于Tool result的真实数据，直接引用原始内容，禁止用"通常""可能""应该"等推测性语言编造内容"""
 
         if context:
             base += f"\n\n任务背景：\n{context}"
@@ -835,7 +835,7 @@ class BLayerExecutor:
         for i in range(0, len(content), CHUNK_SIZE):
             chunks.append(content[i:i + CHUNK_SIZE])
 
-        self._log("长文本", f"文件 {len(content)} 字符，分为 {len(chunks)} 段进行摘要")
+        self._log("LongText", f"文件 {len(content)} 字符，分为 {len(chunks)} 段进行摘要")
 
         chunk_summaries = []
         for idx, chunk in enumerate(chunks):
@@ -858,7 +858,7 @@ class BLayerExecutor:
                 )
                 chunk_summaries.append(summary.strip())
             except Exception as e:
-                self._log("长文本", f"第 {idx + 1} 段摘要失败: {e}，使用截断代替")
+                self._log("LongText", f"第 {idx + 1} 段摘要失败: {e}，使用截断代替")
                 chunk_summaries.append(chunk[:SUMMARY_MAX] + f"\n...[本段截断，共{len(chunk)}字]")
 
         combined = "\n\n".join(
@@ -892,7 +892,7 @@ class BLayerExecutor:
 
     def _process_large_tool_result(self, result: dict, tool_name: str) -> dict:
         """
-        检测工具返回的大文本内容，自动分段摘要。
+        检测Tool result的大文本内容，自动分段摘要。
         目前处理：read_file、read_office 返回的大文本。
         """
         # 只对有 content 字段的文件读取工具做摘要
@@ -909,7 +909,7 @@ class BLayerExecutor:
         result["content"] = summarized
         result["_summarized"] = True
         result["_original_chars"] = len(content)
-        self._log("长文本", f"{tool_name} 内容已摘要：{len(content)} → {len(summarized)} 字符")
+        self._log("LongText", f"{tool_name} 内容已摘要：{len(content)} → {len(summarized)} 字符")
         return result
 
     @staticmethod
@@ -1014,7 +1014,7 @@ class BLayerExecutor:
         返回 {"result": str, "steps": list} 或 None（兜底失败）
         """
         self._python_fallback_attempted = True
-        self._log("兜底", "现有工具无法完成，尝试用 run_python 自写代码解决")
+        self._log("Fallback", "现有工具无法完成，尝试用 run_python 自写代码解决")
 
         # 整理失败历史，让LLM理解哪里卡住了
         failure_summary = "\n".join([
@@ -1028,7 +1028,7 @@ class BLayerExecutor:
             f"请用 run_python 工具，直接编写Python代码来完成这个任务。\n"
             f"要求：\n"
             f"1. 代码必须完整可执行，包含所有必要的import\n"
-            f"2. 把最终结果用 print() 输出\n"
+            f"2. Output the final result using print()\n"
             f"3. 如果是网络请求，用requests库并设置verify=False和timeout=10\n"
             f"4. 代码里加上简短注释说明做了什么\n"
             f"现在直接调用 run_python 工具。"
@@ -1037,7 +1037,7 @@ class BLayerExecutor:
         # 确认是否允许执行（高风险）
         allowed = self.confirm("run_python(自动生成代码)", {"task": original_task[:100]})
         if not allowed:
-            self._log("兜底", "用户拒绝执行自动生成代码")
+            self._log("Fallback", "用户拒绝执行自动生成代码")
             return None
 
         try:
@@ -1056,12 +1056,12 @@ class BLayerExecutor:
                     if not code:
                         continue
 
-                    self._log("兜底·代码", f"执行自动生成代码（{len(code)}字符）")
+                    self._log("Fallback.Code", f"执行自动生成代码（{len(code)}字符）")
                     result_content = execute_tool("run_python", {"code": code})
 
                     if result_content.get("ok"):
                         output = result_content.get("output", "")
-                        self._log("兜底·成功", f"代码执行成功：{output[:100]}")
+                        self._log("Fallback.OK", f"代码执行成功：{output[:100]}")
 
                         # 尝试把这段代码注册为动态工具，方便下次复用
                         tool_name = self._auto_name_dynamic_tool(original_task)
@@ -1078,11 +1078,11 @@ class BLayerExecutor:
                                        "result": result_content}]
                         }
                     else:
-                        self._log("兜底·失败", f"自动代码执行失败：{result_content.get('error','')}")
+                        self._log("Fallback.Fail", f"自动代码执行失败：{result_content.get('error','')}")
                         return None
 
         except Exception as e:
-            self._log("兜底·异常", str(e))
+            self._log("Fallback.Err", str(e))
             return None
 
         return None
@@ -1103,10 +1103,10 @@ class BLayerExecutor:
                 "code": code,
                 "description": description
             }
-            self._log("注册", f"动态工具已注册：{name}（{description[:50]}）")
+            self._log("Register", f"动态工具已注册：{name}（{description[:50]}）")
         except Exception as e:
             # 注册失败不影响主流程，代码已经执行过了
-            self._log("注册·跳过", f"{name} 注册失败（代码无法作为函数调用）：{e}")
+            self._log("Register.Skip", f"{name} 注册失败（代码无法作为函数调用）：{e}")
 
     def _execute_dynamic_tool(self, name: str) -> Dict:
         """执行已注册的动态工具，返回结果"""

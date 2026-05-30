@@ -1,6 +1,6 @@
 """
-截图 + OCR 模块
-支持：全屏截图、区域选择截图、OCR 文字识别
+Screenshot + OCR module
+Supports: fullscreen, region selection, OCR text recognition
 """
 
 import base64
@@ -16,11 +16,11 @@ from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen,
 from PyQt6.QtWidgets import QWidget, QApplication, QRubberBand
 
 
-# ── OCR 引擎（自动降级）──────────────────────────
+# -- OCR engine (auto fallback) --
 def ocr_from_pixmap(pixmap: QPixmap, lang: str = "chi_sim+eng") -> str:
-    """从 QPixmap 提取文字，自动选择可用引擎"""
+    """Extract text from QPixmap, auto-select available engine"""
 
-    # 转为 PIL Image
+    # Convert to PIL Image
     qimg = pixmap.toImage()
     buf = QBuffer()
     buf.open(QIODevice.OpenModeFlag.ReadWrite)
@@ -32,9 +32,9 @@ def ocr_from_pixmap(pixmap: QPixmap, lang: str = "chi_sim+eng") -> str:
         from PIL import Image as PILImage
         pil_img = PILImage.open(pil_buf)
     except ImportError:
-        return "[需要安装 Pillow: pip install Pillow]"
+        return "[Requires Pillow: pip install Pillow]"
 
-    # 优先 pytesseract
+    # Prefer pytesseract
     try:
         import pytesseract
         text = pytesseract.image_to_string(pil_img, lang=lang)
@@ -42,7 +42,7 @@ def ocr_from_pixmap(pixmap: QPixmap, lang: str = "chi_sim+eng") -> str:
     except Exception:
         pass
 
-    # 降级 easyocr
+    # Fallback to easyocr
     try:
         import easyocr
         import numpy as np
@@ -53,14 +53,14 @@ def ocr_from_pixmap(pixmap: QPixmap, lang: str = "chi_sim+eng") -> str:
     except Exception:
         pass
 
-    return "[OCR 不可用：请安装 pytesseract 或 easyocr]"
+    return "[OCR unavailable: install pytesseract or easyocr]"
 
 
 def pixmap_to_base64(pixmap: QPixmap) -> str:
     buf = io.BytesIO()
     img = pixmap.toImage()
     ba = io.BytesIO()
-    # 通过临时文件转换
+    # Convert via temp file
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         tmp = f.name
     pixmap.save(tmp, "PNG")

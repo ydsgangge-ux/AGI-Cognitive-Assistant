@@ -35,7 +35,7 @@ def ensure_config():
         }
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        print("[Setup] 已创建默认配置 simlife_config.json")
+        print("[Setup] Default config created: simlife_config.json")
     else:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -47,21 +47,21 @@ def ensure_data_files():
     from .backend.event_engine import load_event_library
     lib = load_event_library()
     if not lib:
-        print("[Setup] 事件库为空，请确认 event_library.json 存在")
+        print("[Setup] Event library empty，please verify event_library.json exists")
 
 
 def check_frontend():
     """检查前端文件"""
     index = FRONTEND_DIR / "index.html"
     if not index.exists():
-        print("[Setup] 前端文件不存在，需要生成")
+        print("[Setup] Frontend files missing, need generation")
         return False
     return True
 
 
 def main():
     print("=" * 40)
-    print("  SimLife 首次设置")
+    print("  SimLife First-Time Setup")
     print("=" * 40)
     print()
 
@@ -70,13 +70,13 @@ def main():
     ensure_data_files()
 
     if CHARACTER_PATH.exists():
-        print("[Setup] 人物卡已存在，直接启动世界")
+        print("[Setup] Character card exists, starting world directly")
     else:
-        print("[Setup] 人物卡未创建，启动后请在设置页面完成创建")
+        print("[Setup] Character card not created, complete setup on settings page after launch")
 
     port = config.get("backend_port", 8769)
-    print(f"\n[Setup] 启动后端服务 (端口 {port})...")
-    print(f"[Setup] 打开浏览器访问 http://127.0.0.1:{port}")
+    print(f"\n[Setup] Starting backend service (端口 {port})...")
+    print(f"[Setup] Open browser at http://127.0.0.1:{port}")
 
     # 启动后端
     sys.path.insert(0, str(SIMLIFE_DIR.parent))

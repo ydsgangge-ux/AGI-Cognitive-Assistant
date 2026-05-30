@@ -1,12 +1,12 @@
 """
-emotion_bridge.py — 情绪状态映射层
+emotion_bridge.py - Emotion state mapping layer
 
-将 AGI-DPA 内部情绪状态（字符串/数值）映射为 VRM BlendShape 参数。
-主程序只需调用 translate(emotion_key) 即可获取 (表情名, 强度)。
+Map AGI-DPA internal emotion states (string/value) to VRM BlendShape parameters.
+Main program simply calls translate(emotion_key) to get (expression_name, intensity).
 """
 
 EMOTION_MAP: dict[str, tuple[str, float]] = {
-    # AGI-DPA 内部状态  ->  (VRM 表情名,  强度 0~1)
+    # Internal state -> (VRM expression name, intensity 0~1)
     "happy":        ("happy",     1.0),
     "excited":      ("happy",     0.8),
     "curious":      ("surprised", 0.5),
@@ -32,14 +32,14 @@ EMOTION_MAP: dict[str, tuple[str, float]] = {
 
 def translate(emotion_key: str, intensity: float = 1.0) -> tuple[str, float]:
     """
-    将 AGI-DPA 情绪 key 映射为 VRM 表情参数。
+    Map AGI-DPA emotion key to VRM expression parameters.
 
     Args:
-        emotion_key: 情绪字符串，如 "happy", "sad" 等
-        intensity:   原始情绪强度 0~1
+        emotion_key: emotion string, e.g. "happy", "sad"
+        intensity: raw emotion intensity 0~1
 
     Returns:
-        (vrm_expression_name, vrm_intensity) 元组
+        (vrm_expression_name, vrm_intensity) tuple
     """
     name, base = EMOTION_MAP.get(emotion_key.lower(), ("neutral", 1.0))
     return name, base * intensity

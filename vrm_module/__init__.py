@@ -1,7 +1,7 @@
 """
-VRM 虚拟形象模块 — 安全加载入口
+VRM Avatar Module - Safe loading entry
 
-遵循零侵入原则：加载失败不影响主程序运行。
+Zero-intrusion principle: load failure does not affect main program.
 """
 
 VRM_AVAILABLE = False
@@ -12,4 +12,4 @@ try:
     VRM_AVAILABLE = True
     vrm_widget_class = VRMWidget
 except Exception as e:
-    print(f"[VRM] 模块加载失败，已跳过: {e}")
+    print(f"[VRM] Module load failed, skipped: {e}")

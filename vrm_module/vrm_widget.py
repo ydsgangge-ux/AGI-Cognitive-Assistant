@@ -1,7 +1,7 @@
 """
-vrm_widget.py — PyQt6 QWebEngineView 嵌入组件
+vrm_widget.py - PyQt6 QWebEngineView embed component
 
-在右侧工具面板上方显示 VRM 虚拟形象，尺寸固定，不影响下方工具列表。
+Display VRM avatar above right tool panel, fixed size, does not affect tool list below.
 """
 
 import os
@@ -12,8 +12,8 @@ from PyQt6.QtGui import QColor
 
 class VRMWidget(QWidget):
     """
-    VRM 渲染面板，嵌入 QWebEngineView 加载 Three.js 页面。
-    尺寸通过 config 配置，默认 220x220。
+    VRM rendering panel, embed QWebEngineView to load Three.js page.
+    Size configured via config, default 220x220.
     """
 
     WIDTH  = 220
@@ -31,7 +31,7 @@ class VRMWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 占位标签（WebEngine 加载前显示）
+        # Placeholder label (shown before WebEngine loads)
         self._placeholder = QLabel("")
         self._placeholder.setStyleSheet(
             "background:#0d1117;border:1px dashed #30363d;"
@@ -47,11 +47,11 @@ class VRMWidget(QWidget):
         self._load_timer.setSingleShot(True)
         self._load_timer.timeout.connect(self._try_load_webengine)
 
-        # 延迟 500ms 尝试加载，避免阻塞启动
+        # Delay 500ms to attempt loading, avoid blocking startup
         self._load_timer.start(500)
 
     def _try_load_webengine(self):
-        """延迟加载 WebEngine，避免影响启动性能"""
+        """Lazy load WebEngine, avoid affecting startup performance"""
         try:
             from PyQt6.QtWebEngineWidgets import QWebEngineView
 
@@ -64,7 +64,7 @@ class VRMWidget(QWidget):
                 "QWebEngineView{background:transparent;border:none;}"
             )
 
-            # 禁用右键菜单
+            # Disable right-click menu
             self._web.setContextMenuPolicy(
                 __import__("PyQt6.QtCore", fromlist=["Qt"]).Qt.ContextMenuPolicy.NoContextMenu
             )
@@ -77,26 +77,26 @@ class VRMWidget(QWidget):
                     html_path.replace("\\", "/")
                 ))
             else:
-                print(f"[VRM] 渲染页面不存在: {html_path}")
+                print(f"[VRM] Render page not found: {html_path}")
 
             layout.addWidget(self._web)
 
         except ImportError:
-            self._placeholder.setText("VRM: WebEngine\n未安装")
-            print("[VRM] PyQt6-WebEngine 未安装，pip install PyQt6-WebEngine")
+            self._placeholder.setText("VRM: WebEngine\nNot installed")
+            print("[VRM] PyQt6-WebEngine not installed, run: pip install PyQt6-WebEngine")
         except Exception as e:
-            self._placeholder.setText("VRM: 加载失败")
-            print(f"[VRM] WebEngine 加载失败: {e}")
+            self._placeholder.setText("VRM: Load failed")
+            print(f"[VRM] WebEngine load failed: {e}")
 
     def set_emotion(self, emotion: str, intensity: float = 1.0):
-        """驱动 VRM 表情（由 emotion_bridge.translate 生成参数后调用）"""
+        """Drive VRM expression (called after emotion_bridge.translate generates params)"""
         if not self._web:
             return
         js = f"setEmotion('{emotion}', {intensity:.2f})"
         self._web.page().runJavaScript(js)
 
     def set_speaking(self, is_speaking: bool):
-        """触发/停止说话动画"""
+        """Trigger/stop talking animation"""
         if not self._web:
             return
         js = f"setSpeaking({str(is_speaking).lower()})"

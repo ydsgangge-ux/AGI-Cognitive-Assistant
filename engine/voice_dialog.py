@@ -76,7 +76,7 @@ class VoiceDialog:
                 from engine.stt_engine import STTEngine
                 self._stt = STTEngine(self._config)
             except Exception as e:
-                print(f"[VoiceDialog] STT 初始化失败: {e}")
+                print(f"[VoiceDialog] STT init failed: {e}")
         return self._stt
 
     def _get_tts(self):
@@ -86,7 +86,7 @@ class VoiceDialog:
                 from engine.tts_engine import get_tts
                 self._tts = get_tts()
             except Exception as e:
-                print(f"[VoiceDialog] TTS 初始化失败: {e}")
+                print(f"[VoiceDialog] TTS init failed: {e}")
         return self._tts
 
     def _set_state(self, new_state: DialogState):
@@ -111,7 +111,7 @@ class VoiceDialog:
         """
         tts = self._get_tts()
         if not tts or not tts.is_available():
-            print("[VoiceDialog] TTS 不可用，跳过朗读")
+            print("[VoiceDialog] TTS unavailable, skip reading")
             return
 
         self._set_state(DialogState.SPEAKING)
@@ -122,7 +122,7 @@ class VoiceDialog:
             done_event.set()
 
         def _on_error(err):
-            print(f"[VoiceDialog] TTS 播放失败: {err}")
+            print(f"[VoiceDialog] TTS playback failed: {err}")
             self._set_state(DialogState.IDLE)
             done_event.set()
 
@@ -152,7 +152,7 @@ class VoiceDialog:
             return {"ok": False, "error": f"语音识别失败: {stt_result.get('error')}"}
 
         recognized_text = stt_result["text"]
-        print(f"[VoiceDialog] 识别到: {recognized_text[:60]}...")
+        print(f"[VoiceDialog] Recognized: {recognized_text[:60]}...")
 
         if self.on_text_recognized:
             try:
@@ -229,14 +229,14 @@ class VoiceDialog:
         self._stop_flag = False
 
         def _loop():
-            print("[VoiceDialog] 持续监听已启动")
+            print("[VoiceDialog] Continuous listening started")
             while not self._stop_flag:
                 try:
                     result = self.listen_and_respond()
                     if not result.get("ok"):
-                        print(f"[VoiceDialog] 本次对话失败: {result.get('error')}")
+                        print(f"[VoiceDialog] Dialog failed: {result.get('error')}")
                 except Exception as e:
-                    print(f"[VoiceDialog] 循环异常: {e}")
+                    print(f"[VoiceDialog] Loop error: {e}")
 
                 # 等待 TTS 播放完成 + 1秒间隔
                 if self.state == DialogState.SPEAKING:
@@ -244,7 +244,7 @@ class VoiceDialog:
                 else:
                     time.sleep(0.5)
 
-            print("[VoiceDialog] 持续监听已停止")
+            print("[VoiceDialog] Continuous listening stopped")
 
         thread = threading.Thread(target=_loop, daemon=True)
         thread.start()

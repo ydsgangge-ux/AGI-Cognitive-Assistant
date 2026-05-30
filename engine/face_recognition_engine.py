@@ -42,12 +42,12 @@ def _init_engine():
         import face_recognition as fr
         _engine      = fr
         _engine_name = "face_recognition"
-        print("[OK] 人脸识别：face_recognition (dlib，精度99.38%)")
+        print("[OK] Face recog: face_recognition (dlib, accuracy 99.38%)")
         return
     except ImportError:
         pass
     except Exception as e:
-        print(f"  face_recognition 初始化失败: {e}")
+        print(f"  face_recognition init failed: {e}")
 
     # 方案2：InsightFace
     try:
@@ -57,12 +57,12 @@ def _init_engine():
         app.prepare(ctx_id=-1, det_size=(640, 640))
         _engine      = app
         _engine_name = "insightface"
-        print("[OK] 人脸识别：InsightFace (buffalo_sc) - CPU模式")
+        print("[OK] Face recog: InsightFace (buffalo_sc) - CPU mode")
         return
     except ImportError:
         pass
     except Exception as e:
-        print(f"  InsightFace 初始化失败: {e}")
+        print(f"  InsightFace init failed: {e}")
 
     # 方案3：OpenCV
     try:
@@ -74,11 +74,11 @@ def _init_engine():
             net          = cv2.dnn.readNetFromCaffe(proto, model)
             _engine      = {"cv2": cv2, "net": net}
             _engine_name = "opencv_dnn"
-            print("[OK] 人脸识别：OpenCV DNN（仅检测）")
+            print("[OK] Face recog: OpenCV DNN (detection only)")
         else:
             _engine      = {"cv2": cv2}
             _engine_name = "opencv_haar"
-            print("[OK] 人脸识别：OpenCV Haar（仅检测）")
+            print("[OK] Face recog: OpenCV Haar (detection only)")
         return
     except ImportError:
         pass

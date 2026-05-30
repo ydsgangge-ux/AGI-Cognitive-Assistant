@@ -120,7 +120,7 @@ class STTEngine:
         if not backend:
             return {"ok": False, "error": "无可用 STT 后端，请在设置中配置语音识别"}
 
-        print(f"[STT] 后端={backend}, 文件={audio_path}")
+        print(f"[STT] backend={backend}, file={audio_path}")
 
         try:
             if backend == "xunfei":
@@ -134,9 +134,9 @@ class STTEngine:
 
             if result.get("ok"):
                 result["backend"] = backend
-                print(f"[STT] 识别成功: {result['text'][:60]}...")
+                print(f"[STT] Recognition success: {result['text'][:60]}...")
             else:
-                print(f"[STT] 识别失败: {result.get('error', '未知错误')}")
+                print(f"[STT] Recognition failed: {result.get('error', 'unknown error')}")
             return result
 
         except Exception as e:
@@ -472,7 +472,7 @@ def record_audio(duration: float = 5.0, sample_rate: int = 16000) -> Optional[st
             import numpy as np
             import wave
 
-            print(f"[录音] 开始录制 {duration} 秒...")
+            print(f"[Record] Recording started {duration} 秒...")
             audio = sd.rec(
                 int(duration * sample_rate),
                 samplerate=sample_rate,
@@ -480,7 +480,7 @@ def record_audio(duration: float = 5.0, sample_rate: int = 16000) -> Optional[st
                 dtype="int16"
             )
             sd.wait()  # 等待录制完成
-            print("[录音] 录制完成")
+            print("[Record] Recording finished")
 
             # 保存为 WAV
             with wave.open(tmp_path, "wb") as wf:
@@ -508,7 +508,7 @@ def record_audio(duration: float = 5.0, sample_rate: int = 16000) -> Optional[st
                 frames_per_buffer=1024
             )
 
-            print(f"[录音] 开始录制 {duration} 秒...")
+            print(f"[Record] Recording started {duration} 秒...")
             frames = []
             for _ in range(int(sample_rate / 1024 * duration)):
                 data = stream.read(1024, exception_on_overflow=False)
@@ -517,7 +517,7 @@ def record_audio(duration: float = 5.0, sample_rate: int = 16000) -> Optional[st
             stream.stop_stream()
             stream.close()
             p.terminate()
-            print("[录音] 录制完成")
+            print("[Record] Recording finished")
 
             with wave.open(tmp_path, "wb") as wf:
                 wf.setnchannels(1)
@@ -552,7 +552,7 @@ def record_audio(duration: float = 5.0, sample_rate: int = 16000) -> Optional[st
         return None
 
     except Exception as e:
-        print(f"[录音] 录制失败: {e}")
+        print(f"[Record] Recording failed: {e}")
         try:
             os.unlink(tmp_path)
         except Exception:

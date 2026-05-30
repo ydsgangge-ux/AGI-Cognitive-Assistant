@@ -1,6 +1,6 @@
 """
-VRM 模型测试服务
-运行后在浏览器打开 http://localhost:8899 查看效果
+VRM Model Test Server
+Open http://localhost:8899 in browser after running to see the effect
 """
 import http.server
 import threading
@@ -12,23 +12,23 @@ PORT = 8899
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 if not os.path.isdir(STATIC_DIR):
-    print(f"[VRM] static 目录不存在: {STATIC_DIR}")
+    print(f"[VRM] static dir not found: {STATIC_DIR}")
     sys.exit(1)
 
 os.chdir(STATIC_DIR)
 
 handler = http.server.SimpleHTTPRequestHandler
 httpd = http.server.HTTPServer(("127.0.0.1", PORT), handler)
-print(f"[VRM] 测试服务已启动: http://localhost:{PORT}")
-print(f"[VRM] 按 Ctrl+C 停止")
+print(f"[VRM] Test server started: http://localhost:{PORT}")
+print(f"[VRM] Press Ctrl+C to stop")
 print()
 
-# 自动打开浏览器
+# Auto open browser
 url = f"http://localhost:{PORT}/vrm_viewer.html"
 webbrowser.open(url)
 
 try:
     httpd.serve_forever()
 except KeyboardInterrupt:
-    print("\n[VRM] 服务已停止")
+    print("\n[VRM] Server stopped")
     httpd.server_close()

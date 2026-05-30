@@ -65,22 +65,22 @@ class CodingSession:
 # 按 provider 分类的编程模型列表
 CODER_MODELS = {
     "deepseek": [
-        ("deepseek-chat",     "DeepSeek Chat（快速）"),
-        ("deepseek-reasoner", "DeepSeek Reasoner（强推理）"),
+        ("deepseek-chat",     "DeepSeek Chat (Fast)"),
+        ("deepseek-reasoner", "DeepSeek Reasoner (Strong)"),
     ],
     "openai": [
-        ("gpt-4o-mini",  "GPT-4o Mini（快速）"),
-        ("gpt-4o",       "GPT-4o（均衡）"),
-        ("o3-mini",      "O3 Mini（强推理）"),
+        ("gpt-4o-mini",  "GPT-4o Mini (Fast)"),
+        ("gpt-4o",       "GPT-4o (Balanced)"),
+        ("o3-mini",      "O3 Mini (Strong)"),
     ],
     "claude": [
-        ("claude-3-5-haiku-20241022",  "Claude 3.5 Haiku（快速）"),
-        ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet（强推理）"),
+        ("claude-3-5-haiku-20241022",  "Claude 3.5 Haiku (Fast)"),
+        ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet (Strong)"),
     ],
     "qwen": [
-        ("qwen-turbo", "Qwen Turbo（快速）"),
-        ("qwen-plus",  "Qwen Plus（均衡）"),
-        ("qwen-max",   "Qwen Max（强推理）"),
+        ("qwen-turbo", "Qwen Turbo (Fast)"),
+        ("qwen-plus",  "Qwen Plus (Balanced)"),
+        ("qwen-max",   "Qwen Max (Strong)"),
     ],
     "ollama": [],  # 从 list_models 动态获取
 }
@@ -88,8 +88,8 @@ CODER_MODELS = {
 
 def parse_table_file(file_path: str, max_rows: int = 200) -> Dict:
     """
-    解析表格文件（CSV/Excel），返回结构化信息
-    用于传入 coder 的上下文
+    Parse table files (CSV/Excel), return structured info
+    for passing to coder as context
     """
     ext = Path(file_path).suffix.lower()
     rows = []
@@ -97,7 +97,7 @@ def parse_table_file(file_path: str, max_rows: int = 200) -> Dict:
     if ext in (".csv", ".tsv", ".txt"):
         try:
             delimiter = "," if ext == ".csv" else "\t"
-            # 尝试不同编码
+            # Try different encodings
             for enc in ("utf-8", "gbk", "gb2312", "utf-8-sig"):
                 try:
                     with open(file_path, encoding=enc, errors="replace") as f:
@@ -120,21 +120,21 @@ def parse_table_file(file_path: str, max_rows: int = 200) -> Dict:
                     rows.append(row_data)
             wb.close()
         except ImportError:
-            return {"ok": False, "error": "需要安装 openpyxl：pip install openpyxl"}
+            return {"ok": False, "error": "openpyxl required: pip install openpyxl"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
     else:
-        return {"ok": False, "error": f"不支持的文件格式：{ext}"}
+        return {"ok": False, "error": f"Unsupported file format: {ext}"}
 
     if not rows:
-        return {"ok": False, "error": "表格为空"}
+        return {"ok": False, "error": "No data in table"}
 
-    # 提取表头
+    # Extract headers
     headers = rows[0] if rows else []
     data_rows = rows[1:max_rows + 1]
     total_rows = len(rows) - 1
 
-    # 检测每列数据类型
+    # Detect column data types
     col_types = []
     for col_idx in range(len(headers)):
         values = [r[col_idx] if col_idx < len(r) else "" for r in data_rows]
@@ -143,37 +143,37 @@ def parse_table_file(file_path: str, max_rows: int = 200) -> Dict:
             has_pct = any("%" in v for v in values)
             has_money = any(("¥" in v or "$" in v or "￥" in v) for v in values)
             if has_pct:
-                col_types.append("百分比")
+                col_types.append("Percentage")
             elif has_money:
-                col_types.append("金额")
+                col_types.append("Currency")
             else:
-                col_types.append("数字")
+                col_types.append("Number")
         else:
-            col_types.append("文本")
+            col_types.append("Text")
 
-    # 生成 markdown 表格
+    # Generate markdown table
     md_lines = []
-    md_lines.append(f"## 表格数据（共 {total_rows} 行）\n")
+    md_lines.append(f"## Table data (total {total_rows} rows)\n")
     md_lines.append("| " + " | ".join(h for h in headers) + " |")
 
-    # 列类型标注（第二行）
+    # Column type labels (second row)
     type_row = " | ".join(
         f"{headers[i]}: {col_types[i]}"
         for i in range(min(len(headers), len(col_types)))
     )
     md_lines.append(f"| {type_row} |")
 
-    # 分隔行
+    # Separator row
     md_lines.append("| " + " | ".join("---" for _ in headers) + " |")
 
-    # 数据行
+    # Data rows
     for row in data_rows:
         cells = [str(row[i]) if i < len(row) else "" for i in range(len(headers))]
         md_lines.append("| " + " | ".join(cells) + " |")
 
-    # 如果有截断
+    # If truncated
     if total_rows > max_rows:
-        md_lines.append(f"\n> 以上仅显示前 {max_rows} 行，完整数据共 {total_rows} 行")
+        md_lines.append(f"\n> Showing only first {max_rows} rows, full data has {total_rows} rows")
 
     return {
         "ok": True,
@@ -188,8 +188,8 @@ def parse_table_file(file_path: str, max_rows: int = 200) -> Dict:
 
 class CodingAgent:
     """
-    自主编程智能体
-    write → run → analyse → fix → loop
+    Autonomous coding agent
+    write -> run -> analyse -> fix -> loop
     """
 
     MAX_ITERATIONS = 8
@@ -198,7 +198,7 @@ class CodingAgent:
     RUN_CMDS = {
         "python":     ["python", "{main}"],
         "javascript": ["node", "{main}"],
-        "html":       None,   # 直接打开浏览器，不需要命令行运行
+        "html":       None,   # Open directly in browser, no CLI needed
         "bash":       ["bash", "{main}"],
         "bat":        ["cmd", "/c", "{main}"],
         "java":       ["java", "{main}"],
@@ -243,44 +243,44 @@ class CodingAgent:
         proj_dir = self.work_dir / f"proj_{session.session_id}"
         proj_dir.mkdir(parents=True, exist_ok=True)
 
-        self.on_progress(f"🚀 开始任务：{task[:60]}", "start")
-        self.on_progress(f"📁 工作目录：{proj_dir}", "info")
+        self.on_progress(f"Starting task: {task[:60]}", "start")
+        self.on_progress(f"Working dir: {proj_dir}", "info")
 
         for i in range(1, self.MAX_ITERATIONS + 1):
-            self.on_progress(f"\n─── 第 {i}/{self.MAX_ITERATIONS} 轮 ───", "iter")
+            self.on_progress(f"\n--- Round {i}/{self.MAX_ITERATIONS} ---", "iter")
 
-            # ① 写代码（首轮全写，后续只修改有问题的部分）
+            # Write code (full on first round, fix only on subsequent rounds)
             if i == 1:
-                self.on_progress("✍️  正在生成代码…", "write")
+                self.on_progress("Generating code...", "write")
                 code_files = self._write_code(task, language, prev_error=None, context=context)
             else:
                 prev = session.iterations[-1]
-                self.on_progress(f"🔧 正在修复错误…", "fix")
+                self.on_progress(f"Fixing errors...", "fix")
                 code_files = self._fix_code(
                     task, language,
                     prev.code, prev.run_result, prev.fix_reasoning
                 )
 
             if not code_files:
-                self.on_progress("❌ 代码生成失败", "error")
+                self.on_progress("Code generation failed", "error")
                 break
 
-            # ② 写入文件
+            # Write files
             self._write_files(proj_dir, code_files)
-            self.on_progress(f"📄 生成文件：{list(code_files.keys())}", "info")
+            self.on_progress(f"Generated files: {list(code_files.keys())}", "info")
 
-            # ③ 运行
-            self.on_progress("▶️  运行中…", "run")
+            # Run
+            self.on_progress("Running...", "run")
             run_result = self._run_code(proj_dir, code_files, language)
             self.on_progress(
-                f"返回码: {run_result['returncode']}", "info"
+                f"Return code: {run_result['returncode']}", "info"
             )
             if run_result.get("stdout"):
-                self.on_progress(f"输出:\n{run_result['stdout'][:500]}", "stdout")
+                self.on_progress(f"Output:\n{run_result['stdout'][:500]}", "stdout")
             if run_result.get("stderr"):
-                self.on_progress(f"错误:\n{run_result['stderr'][:500]}", "stderr")
+                self.on_progress(f"Error:\n{run_result['stderr'][:500]}", "stderr")
 
-            # ④ 判断是否通过
+            # Judge whether it passes
             passed = self._judge_pass(run_result, language, code_files)
             iteration = CodeIteration(
                 iteration=i,
@@ -290,33 +290,33 @@ class CodingAgent:
             )
 
             if passed:
-                self.on_progress("✅ 运行通过！", "pass")
+                self.on_progress("Run passed!", "pass")
                 session.final_code = code_files
                 session.status = "passed"
                 session.iterations.append(iteration)
                 break
             else:
-                # ⑤ 分析错误
+                # Analyze error
                 error_analysis = self._analyse_error(task, code_files, run_result)
                 iteration.error_msg    = run_result.get("stderr","")[:300]
                 iteration.fix_reasoning = error_analysis
-                self.on_progress(f"🔍 错误分析：{error_analysis[:100]}", "analyse")
+                self.on_progress(f"Error analysis: {error_analysis[:100]}", "analyse")
                 session.iterations.append(iteration)
 
                 if i == self.MAX_ITERATIONS:
-                    self.on_progress("⚠️  达到最大迭代次数，使用最后一次代码", "warn")
+                    self.on_progress("Max iterations reached, using last code", "warn")
                     session.final_code = code_files
                     session.status = "failed"
         else:
             session.status = "failed"
 
-        # ⑥ 打包输出
+        # Package output
         if session.final_code:
             out = save_to or str(_get_desktop())
             session.output_dir = self._package(
                 session, proj_dir, out
             )
-            self.on_progress(f"\n📦 已打包到：{session.output_dir}", "done")
+            self.on_progress(f"\nPackaged to: {session.output_dir}", "done")
 
         return session
 
@@ -328,41 +328,41 @@ class CodingAgent:
         """让 LLM 写代码，返回 {filename: content} 字典"""
 
         lang_hints = {
-            "python":     "使用 Python 3，标准库优先，尽量不用第三方包",
-            "javascript": "使用原生 JavaScript，无需 npm",
-            "html":       "单文件 HTML，内联 CSS 和 JS，无外部依赖",
-            "bash":       "bash shell 脚本",
-            "bat":        "Windows批处理脚本(.bat)，使用 CMD 命令，如 systeminfo、wmic、ipconfig、tasklist、del、dir 等",
-            "java":       "Java 17+，单文件使用 public class Main，不要 package 声明",
-            "c":          "C语言，使用标准库，main函数入口",
-            "cpp":        "C++17，使用标准库，单文件即可",
-            "csharp":     "C#，单文件 Program.cs，使用顶级语句（top-level statements）",
-            "go":         "Go语言，单文件 main.go，package main",
+            "python":     "Use Python 3, standard library first, avoid third-party packages",
+            "javascript": "Use vanilla JavaScript, no npm needed",
+            "html":       "Single-file HTML, inline CSS and JS, no external dependencies",
+            "bash":       "Bash shell script",
+            "bat":        "Windows batch script (.bat), use CMD commands like systeminfo, wmic, ipconfig, tasklist, del, dir etc.",
+            "java":       "Java 17+, single file with public class Main, no package declaration",
+            "c":          "C language, use standard library, main function entry",
+            "cpp":        "C++17, use standard library, single file OK",
+            "csharp":     "C#, single file Program.cs, use top-level statements",
+            "go":         "Go language, single file main.go, package main",
         }
-        hint = lang_hints.get(language, f"使用 {language}")
+        hint = lang_hints.get(language, f"Use {language}")
 
-        prompt = f"""你是一个专业程序员。请完成以下编程任务：
+        prompt = f"""You are a professional programmer. Complete the following coding task:
 
-任务：{task}
-语言：{language}（{hint}）
+Task: {task}
+Language: {language} ({hint})
 
-要求：
-1. 代码必须能直接运行，不需要任何额外配置
-2. 如果是游戏/界面程序，使用标准库（Python用tkinter，不用pygame）
-3. 代码要完整，不要省略任何部分
-{"4. 参考以下代码/上下文来完成任务：\n" + context[:10000] if context.strip() else ""}
+Requirements:
+1. Code must run directly without any extra configuration
+2. For games/GUI programs, use standard library (Python: tkinter, not pygame)
+3. Code must be complete, do not omit any parts
+{"4. Reference the following code/context:\n" + context[:10000] if context.strip() else ""}
 
-请以 JSON 格式返回文件内容，格式如下：
+Return file contents in JSON format:
 {{
   "files": {{
-    "main.py": "完整的代码内容",
-    "utils.py": "如果需要多文件"
+    "main.py": "complete code content",
+    "utils.py": "if multiple files needed"
   }},
   "main_file": "main.py",
-  "description": "简单说明这个程序做什么"
+  "description": "brief description of what this program does"
 }}
 
-只输出 JSON，不要其他内容。"""
+Output JSON only, no other content."""
 
         raw = self.llm.generate(prompt, max_tokens=self.MAX_TOKENS_MAP.get(language, self.DEFAULT_MAX_TOKENS),
                                 temperature=0.3, model=self.model or None)
@@ -371,39 +371,39 @@ class CodingAgent:
     def _fix_code(self, task: str, language: str,
                   prev_code: Dict[str, str],
                   run_result: Dict, prev_reasoning: str) -> Dict[str, str]:
-        """根据错误修改代码"""
+        """Fix code based on errors"""
 
         files_text = "\n\n".join(
             f"=== {fname} ===\n{content}"
             for fname, content in prev_code.items()
         )
 
-        prompt = f"""你是一个专业程序员，需要修复以下代码中的错误。
+        prompt = f"""You are a professional programmer. Fix the errors in the following code.
 
-原始任务：{task}
+Original task: {task}
 
-当前代码：
+Current code:
 {files_text}
 
-运行错误：
-{run_result.get('stderr', '无错误输出')[:800]}
+Runtime error:
+{run_result.get('stderr', 'No error output')[:800]}
 
-标准输出：
-{run_result.get('stdout', '无输出')[:400]}
+Standard output:
+{run_result.get('stdout', 'No output')[:400]}
 
-返回码：{run_result.get('returncode', '?')}
+Return code: {run_result.get('returncode', '?')}
 
-请分析错误原因并修复代码。以 JSON 格式返回完整的修复后代码：
+Analyze the error and fix the code. Return the complete fixed code in JSON format:
 {{
   "files": {{
-    "main.py": "完整的修复后代码内容"
+    "main.py": "complete fixed code content"
   }},
   "main_file": "main.py",
-  "fix_summary": "简述修复了什么问题",
-  "description": "程序说明"
+  "fix_summary": "brief summary of what was fixed",
+  "description": "program description"
 }}
 
-注意：返回完整代码，不是只返回修改部分。只输出 JSON。"""
+Note: return the complete code, not just the modified parts. Output JSON only."""
 
         raw = self.llm.generate(prompt, max_tokens=self.MAX_TOKENS_MAP.get(language, self.DEFAULT_MAX_TOKENS),
                                 temperature=0.2, model=self.model or None)
@@ -411,13 +411,13 @@ class CodingAgent:
 
     def _analyse_error(self, task: str, code: Dict[str, str],
                        run_result: Dict) -> str:
-        """分析错误，给出修复思路"""
-        prompt = f"""分析以下 Python 程序的运行错误，给出简洁的修复建议（50字以内）：
+        """Analyze error and suggest fix"""
+        prompt = f"""Analyze the runtime error below and give a concise fix suggestion (under 50 words):
 
-错误信息：{run_result.get('stderr','')[:400]}
-返回码：{run_result.get('returncode','?')}
+Error message: {run_result.get('stderr','')[:400]}
+Return code: {run_result.get('returncode','?')}
 
-只输出修复建议，不要解释。"""
+Output only the fix suggestion, no explanation."""
 
         try:
             return self.llm.generate(prompt, max_tokens=100, temperature=0.2)
@@ -564,27 +564,27 @@ class CodingAgent:
 
     def _build_report(self, session: CodingSession) -> str:
         lines = [
-            f"# AGI 编程报告",
+            f"# AGI Build Report",
             f"",
-            f"**任务**: {session.task}",
-            f"**语言**: {session.language}",
-            f"**状态**: {'✅ 成功' if session.status=='passed' else '⚠️ 达到最大迭代'}",
-            f"**迭代次数**: {len(session.iterations)}",
-            f"**生成时间**: {session.created_at}",
+            f"**Task**: {session.task}",
+            f"**Language**: {session.language}",
+            f"**Status**: {'Passed' if session.status=='passed' else 'Max iterations reached'}",
+            f"**Iterations**: {len(session.iterations)}",
+            f"**Generated at**: {session.created_at}",
             f"",
-            f"## 迭代历史",
+            f"## Iteration History",
         ]
         for it in session.iterations:
-            icon = "✅" if it.passed else "❌"
-            lines.append(f"\n### {icon} 第 {it.iteration} 轮")
+            icon = "PASS" if it.passed else "FAIL"
+            lines.append(f"\n### {icon} Round {it.iteration}")
             if it.error_msg:
-                lines.append(f"**错误**: `{it.error_msg[:150]}`")
+                lines.append(f"**Error**: `{it.error_msg[:150]}`")
             if it.fix_reasoning:
-                lines.append(f"**修复思路**: {it.fix_reasoning[:150]}")
+                lines.append(f"**Fix Approach**: {it.fix_reasoning[:150]}")
 
         lines += [
             f"",
-            f"## 最终文件",
+            f"## Final Files",
         ]
         for fname in session.final_code:
             if not fname.startswith("__"):

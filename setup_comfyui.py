@@ -1,7 +1,7 @@
 """
-ComfyUI 自动检测与配置工具
-双击运行即可自动检测 ComfyUI 安装路径、端口、模型，并写入配置。
-无需手动修改任何代码。
+ComfyUI auto-detection & configuration tool
+Double-click to auto-detect ComfyUI path, port, models, and write config.
+No manual code changes required.
 """
 
 import sys
@@ -13,10 +13,10 @@ import urllib.error
 from pathlib import Path
 
 
-# ── 配置文件路径 ─────────────────────────────────────
+# -- Config file path --
 SCRIPT_DIR = Path(__file__).parent
 
-# 数据目录（与 desktop/config.py 保持一致）
+# Data directory (consistent with desktop/config.py)
 if sys.platform == "win32":
     DATA_ROOT = Path(os.environ.get("APPDATA", str(Path.home()))) / "AGI-Desktop"
 else:
@@ -26,11 +26,11 @@ DATA_ROOT.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE = DATA_ROOT / "config.json"
 
 
-# ── 常见 ComfyUI 安装路径 ────────────────────────────
+# -- Common ComfyUI installation paths --
 SEARCH_PATHS = []
 
 if sys.platform == "win32":
-    # 盘符 C-Z
+    # Drives C-Z
     for drive in "CDEFGHIJKLMNOPQRSTUVWXYZ":
         base = f"{drive}:\\"
         if os.path.isdir(base):
@@ -83,8 +83,8 @@ def print_warn(msg: str):
 
 
 def find_comfyui_install() -> list:
-    """搜索本机所有可能的 ComfyUI 安装路径"""
-    print_header("第一步：检测 ComfyUI 安装路径")
+    """Search all possible ComfyUI installation paths on this machine"""
+    print_header("Step 1: Detect ComfyUI installation")
     found = []
 
     for p in SEARCH_PATHS:
@@ -92,7 +92,7 @@ def find_comfyui_install() -> list:
         if not path.exists():
             continue
 
-        # 检测特征：存在 main.py 或 run_nvidia_gpu.bat 等
+        # Detection: existence of main.py or run_nvidia_gpu.bat etc.
         indicators = ["main.py", "run_nvidia_gpu.bat", "run_cpu.bat",
                        "update", "ComfyUI"]
         has_indicator = any((path / ind).exists() for ind in indicators)
@@ -228,7 +228,7 @@ def save_config(comfyui_url: str, comfyui_output: str, comfyui_model: str = "", 
 
 def main():
     print()
-    print("  ComfyUI 自动检测与配置工具")
+    print("  ComfyUI auto-detection & configuration tool")
     print("  双击运行即可，无需手动改代码")
     print()
 
@@ -286,7 +286,7 @@ def main():
     print_ok(f"Output 目录: {output_dir}")
 
     # 5. 检测可用模型
-    print_header("第三步：检测可用模型")
+    print_header("Step 3: Detect available models")
     models = detect_models(chosen)
     if models:
         for m in models:

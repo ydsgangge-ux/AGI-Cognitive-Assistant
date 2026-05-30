@@ -1,6 +1,6 @@
 """
-主窗口
-包含：对话、记忆库、人格设定、工具箱、系统设置 五个标签页
+Main Window
+Contains five tabs: Chat, Memory, Personality, Toolbox, System Settings
 """
 
 import json
@@ -48,39 +48,39 @@ def _get_desktop() -> Path:
     return Path.home()
 
 def _make_label(text: str, style: str) -> QLabel:
-    """创建带样式的 QLabel（PyQt6 不支持构造函数传 styleSheet）"""
+    """Create styled QLabel (PyQt6 does not support styleSheet in constructor)"""
     lbl = QLabel(text)
     lbl.setStyleSheet(style)
     return lbl
 
 
 
-# ── AGI 工作线程 ──────────────────────────────────
+# -- AGI Worker Thread --
 class AGIWorker(QThread):
-    """在后台线程运行 A 层处理，避免卡界面"""
+    """Run A layer processing in background thread to avoid UI freezing"""
 
     finished = pyqtSignal(dict)
     error    = pyqtSignal(str)
     confirm_requested = pyqtSignal(str, object)  # (tool_name, params_dict)
 
-    TIMEOUT_SEC = 120   # 最长等待时间，超时后报错
+    TIMEOUT_SEC = 120   # Max wait time, error on timeout
 
     def __init__(self, agent, user_input: str):
         super().__init__()
         self.agent = agent
         self.user_input = user_input
-        self._confirm_result = None   # 主线程写，子线程读
-        self._confirm_event  = None   # threading.Event 用于跨线程等待
+        self._confirm_result = None   # Main thread writes, worker thread reads
+        self._confirm_event  = None   # threading.Event for cross-thread waiting
 
     def run(self):
         if self.agent is None:
-            self.error.emit("AGI 引擎尚未初始化，请稍候再试")
+            self.error.emit("AGI engine not initialized yet, please wait")
             return
 
         import threading
         self._confirm_event = threading.Event()
 
-        # 把 confirm 替换为线程安全的版本
+        # Replace confirm with thread-safe version
         original_confirm = self.agent.b.confirm
         self.agent.b.confirm = self._thread_safe_confirm
 
@@ -94,24 +94,24 @@ class AGIWorker(QThread):
             self.agent.b.confirm = original_confirm
 
     def _thread_safe_confirm(self, tool_name: str, params: dict) -> bool:
-        """从工作线程调用 → 发信号给主线程弹窗 → 等待结果"""
+        """Called from worker thread -> signal to main thread for popup -> wait for result"""
         self._confirm_result = None
         self._confirm_event.clear()
         self.confirm_requested.emit(tool_name, params)
-        # 等待主线程设置结果（超时 120 秒）
+        # Wait for main thread to set result (timeout 120s)
         self._confirm_event.wait(timeout=120)
         return self._confirm_result if self._confirm_result is not None else False
 
     def set_confirm_result(self, allowed: bool):
-        """主线程槽：设置确认结果并唤醒工作线程"""
+        """Main thread slot: set confirmation result and wake worker thread"""
         self._confirm_result = allowed
         if self._confirm_event:
             self._confirm_event.set()
 
 
-# ── 消息气泡组件 ─────────────────────────────────
+# -- Message Bubble Component --
 class MessageBubble(QFrame):
-    """消息气泡 — QLabel + wordWrap，高度可靠"""
+    """Message Bubble - QLabel + wordWrap, highly reliable"""
 
     def __init__(self, text: str, is_user: bool,
                  meta: dict = None, parent=None):
@@ -126,12 +126,12 @@ class MessageBubble(QFrame):
 
         bg = "#1f6feb" if is_user else "#21262d"
 
-        # ── 主动消息：顶部勾选栏 ──
+        # -- Proactive message: top checkbox bar --
         if not is_user and self._is_proactive:
             top_bar = QHBoxLayout()
             top_bar.setContentsMargins(2, 0, 2, 0)
             self._reply_chk = QCheckBox()
-            self._reply_chk.setText("已回复")
+            self._reply_chk.setText("Replied")
             self._reply_chk.setStyleSheet(
                 "QCheckBox{color:#8b949e;font-size:11px;spacing:4px;}"
                 "QCheckBox::indicator{width:14px;height:14px;"
@@ -141,7 +141,7 @@ class MessageBubble(QFrame):
             )
             self._reply_chk.stateChanged.connect(self._on_reply_checked)
 
-            self._reply_status = QLabel("📌 未回复")
+            self._reply_status = QLabel("📌 Not replied")
             self._reply_status.setStyleSheet("color:#d29922;font-size:11px;")
 
             top_bar.addWidget(self._reply_chk)
@@ -149,7 +149,7 @@ class MessageBubble(QFrame):
             top_bar.addStretch()
             layout.addLayout(top_bar)
 
-        # ── 内容气泡：QLabel，wordWrap，可选中 ──
+        # -- Content bubble: QLabel, wordWrap, selectable --
         content = QLabel(text)
         content.setWordWrap(True)
         content.setTextInteractionFlags(
@@ -179,22 +179,22 @@ class MessageBubble(QFrame):
         else:
             layout.addWidget(content)
 
-        # ── AI 消息底部：元信息 + 朗读按钮 ──
+        # -- AI message bottom: metadata + speak button --
         if not is_user:
             bottom = QHBoxLayout()
             bottom.setContentsMargins(2, 0, 2, 0)
 
-            # 元信息
+            # Metadata
             if meta:
                 parts = []
                 if meta.get("emotion"):
                     e = meta["emotion"]
-                    parts.append(f"情绪:{e.get('primary','?')} "
+                    parts.append(f"Emotion:{e.get('primary','?')} "
                                  f"{int(e.get('intensity',0)*10)}/10")
                 if meta.get("tools_used"):
                     parts.append(f"🔧 {','.join(meta['tools_used'])}")
                 if meta.get("stored"):
-                    parts.append("📝 已记忆")
+                    parts.append("📝 Memorized")
                 if parts:
                     ml = QLabel("  ·  ".join(parts))
                     ml.setStyleSheet("color:#6e7681;font-size:10px;")
@@ -202,10 +202,9 @@ class MessageBubble(QFrame):
 
             bottom.addStretch()
 
-            # 朗读按钮
-            btn_tts = QPushButton("朗读")
+            btn_tts = QPushButton("Speak")
             btn_tts.setFixedSize(36, 22)
-            btn_tts.setToolTip("朗读此消息 / 点击停止")
+            btn_tts.setToolTip("Speak this message / Click to stop")
             btn_tts.setStyleSheet(
                 "QPushButton{background:#21262d;border:1px solid #30363d;"
                 "border-radius:6px;color:#58a6ff;font-size:11px;padding:0 4px;}"
@@ -221,30 +220,30 @@ class MessageBubble(QFrame):
                     if active[0]:
                         tts.stop()
                         active[0] = False
-                        b.setText("朗读")
+                        b.setText("Speak")
                         return
                     from desktop.config import load_config
                     cfg = load_config()
                     tts.set_voice(cfg.get("tts_voice", "zh-CN-XiaoxiaoNeural"))
                     tts.set_rate(cfg.get("tts_rate", 0))
                     active[0] = True
-                    b.setText("停止")
+                    b.setText("Stop")
                     def _done():
                         active[0] = False
-                        b.setText("朗读")
+                        b.setText("Speak")
                     def _on_err(e):
-                        print(f"[TTS] 朗读失败: {e}")
+                        print(f"[TTS] Speak failed: {e}")
                         active[0] = False
-                        b.setText("朗读")
+                        b.setText("Speak")
                     tts.speak(t, on_done=_done, on_error=_on_err)
                 except Exception as ex:
-                    print(f"[TTS] 调用异常: {ex}")
+                    print(f"[TTS] Call error: {ex}")
 
             btn_tts.clicked.connect(_speak)
             bottom.addWidget(btn_tts)
             layout.addLayout(bottom)
 
-            # 工具步骤
+            # Tool steps
             if meta:
                 for s in (meta.get("tool_steps") or [])[:5]:
                     ok  = s.get("result", {}).get("ok", False)
@@ -259,26 +258,26 @@ class MessageBubble(QFrame):
                     layout.addWidget(lbl)
 
     def _on_reply_checked(self, state):
-        """勾选回复状态"""
+        """Check reply status"""
         self._replied = (state == Qt.CheckState.Checked.value)
         if self._replied:
-            self._reply_status.setText("✅ 已回复")
+            self._reply_status.setText("✅ Replied")
             self._reply_status.setStyleSheet("color:#3fb950;font-size:11px;")
         else:
-            self._reply_status.setText("📌 未回复")
+            self._reply_status.setText("📌 Not replied")
             self._reply_status.setStyleSheet("color:#d29922;font-size:11px;")
 
 
-# ── 工具面板（右侧）─────────────────────────────
+# -- Tool Panel (right side) --
 class ToolPanel(QWidget):
     """
-    右侧工具面板
-    显示全部17个工具，点击填入输入框
+    Right-side tool panel
+    Shows all tools, click to fill input box
     """
     tool_clicked = pyqtSignal(str, str)   # (tool_name, description)
 
     RISK_COLOR = {"low": "#3fb950", "medium": "#d29922", "high": "#f85149"}
-    RISK_LABEL = {"low": "安全", "medium": "中等", "high": "高危"}
+    RISK_LABEL = {"low": "Safe", "medium": "Medium", "high": "High Risk"}
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -292,7 +291,7 @@ class ToolPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 标题栏
+        # Title bar
         header = QWidget()
         header.setFixedHeight(42)
         header.setStyleSheet(
@@ -300,21 +299,21 @@ class ToolPanel(QWidget):
         )
         hlay = QHBoxLayout(header)
         hlay.setContentsMargins(12, 0, 12, 0)
-        title = QLabel("🔧  工具箱")
+        title = QLabel("🔧  Toolbox")
         title.setStyleSheet("color:#58a6ff;font-weight:700;font-size:13px;")
-        hint = QLabel("点击填入输入框")
+        hint = QLabel("Click to insert")
         hint.setStyleSheet("color:#8b949e;font-size:10px;")
         hlay.addWidget(title)
         hlay.addStretch()
         hlay.addWidget(hint)
 
-        # 搜索框
+        # Search box
         search_wrap = QWidget()
         search_wrap.setStyleSheet("background:#161b22;padding:8px;")
         slay = QVBoxLayout(search_wrap)
         slay.setContentsMargins(8, 8, 8, 4)
         self._search = QLineEdit()
-        self._search.setPlaceholderText("搜索工具…")
+        self._search.setPlaceholderText("Search tools…")
         self._search.setStyleSheet(
             "QLineEdit{background:#21262d;border:1px solid #30363d;"
             "border-radius:6px;padding:5px 8px;color:#e6edf3;font-size:11px;}"
@@ -323,7 +322,7 @@ class ToolPanel(QWidget):
         self._search.textChanged.connect(self._filter)
         slay.addWidget(self._search)
 
-        # 工具列表
+        # Tool list
         self._list = QListWidget()
         self._list.setStyleSheet(
             "QListWidget{background:#161b22;border:none;outline:none;}"
@@ -364,7 +363,7 @@ class ToolPanel(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, t)
             self._list.addItem(item)
 
-            # 自定义卡片 widget
+            # Custom card widget
             card = self._make_card(t)
             self._list.setItemWidget(item, card)
 
@@ -378,7 +377,7 @@ class ToolPanel(QWidget):
         lay.setContentsMargins(10, 7, 10, 7)
         lay.setSpacing(3)
 
-        # 第一行：名称 + 风险标签
+        # First row: name + risk label
         top = QHBoxLayout()
         name_lbl = QLabel(t["name"])
         name_lbl.setStyleSheet(
@@ -395,7 +394,7 @@ class ToolPanel(QWidget):
         top.addStretch()
         top.addWidget(risk_lbl)
 
-        # 第二行：描述
+        # Second row: description
         desc_lbl = QLabel(t["desc"][:52] + ("…" if len(t["desc"]) > 52 else ""))
         desc_lbl.setStyleSheet(
             "color:#8b949e;font-size:11px;background:transparent;"
@@ -420,13 +419,13 @@ class ToolPanel(QWidget):
             self.tool_clicked.emit(t["name"], t["desc"])
 
 
-# ── 斜杠命令补全弹窗 ──────────────────────────────
+# -- Slash Command Completer Popup --
 class SlashCompleter(QWidget):
     """
-    输入 / 时弹出的命令补全列表
-    选中后填入输入框
+    Command completion list when typing /
+    Fills input box on selection
     """
-    selected = pyqtSignal(str)   # 选中的命令文本
+    selected = pyqtSignal(str)   # Selected command text
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Popup)
@@ -454,14 +453,14 @@ class SlashCompleter(QWidget):
         self._all_commands = []
 
     def load_commands(self):
-        """从工具注册表加载所有命令"""
+        """Load all commands from tool registry"""
         try:
             from engine.tools import TOOL_REGISTRY
             self._all_commands = [
                 {
                     "cmd":   f"/{name}",
                     "label": f"/{name}  —  {info['schema']['description'][:40]}",
-                    "fill":  f"请帮我使用 {name} 工具，"
+                    "fill":  f"Please help me use the {name} tool, "
                 }
                 for name, info in TOOL_REGISTRY.items()
             ]
@@ -469,7 +468,7 @@ class SlashCompleter(QWidget):
             self._all_commands = []
 
     def show_for(self, text: str, pos):
-        """根据已输入的 /xxx 过滤并显示"""
+        """Filter and show based on typed /xxx"""
         query = text.lstrip("/").lower()
         filtered = [
             c for c in self._all_commands
@@ -491,11 +490,11 @@ class SlashCompleter(QWidget):
             self.hide()
 
 
-# ── 对话页 ────────────────────────────────────────
+# -- Chat Page --
 class ChatPage(QWidget):
 
     message_sent = pyqtSignal(str)
-    simlife_toggled = pyqtSignal(bool)  # SimLife 场景模式切换
+    simlife_toggled = pyqtSignal(bool)  # SimLife scene mode toggle
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -508,13 +507,13 @@ class ChatPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # 左侧：消息 + 输入
+        # Left: messages + input
         left = QWidget()
         layout = QVBoxLayout(left)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 消息滚动区
+        # Message scroll area
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setStyleSheet(
@@ -528,7 +527,7 @@ class ChatPage(QWidget):
         self._msg_layout.addStretch()
         self._scroll.setWidget(self._msg_container)
 
-        # 输入区
+        # Input area
         input_frame = QFrame()
         input_frame.setStyleSheet(
             "QFrame{background:#161b22;border-top:1px solid #30363d;}"
@@ -539,10 +538,10 @@ class ChatPage(QWidget):
 
         self._input = QTextEdit()
         self._input.setPlaceholderText(
-            "输入消息或任务… / 输入 / 选择工具  (Enter发送, Shift+Enter换行)"
+            "Enter message or task… / Type / to select tool  (Enter to send, Shift+Enter for newline)"
         )
         self._input.setFixedHeight(72)
-        # 禁用自动URL检测，防止输入网址时丢失前面的文字
+        # Disable auto URL detection to prevent text loss when typing URLs
         self._input.setAutoFormatting(QTextEdit.AutoFormattingFlag.AutoNone)
         self._input.setStyleSheet(
             "QTextEdit{background:#21262d;border:1px solid #30363d;"
@@ -552,11 +551,11 @@ class ChatPage(QWidget):
         self._input.installEventFilter(self)
         self._input.textChanged.connect(self._on_text_changed)
 
-        # 附件按钮（图片/文件）
-        self._pending_file = None   # 待发送的附件路径
-        btn_attach = QPushButton("📎 文件")
+        # Attachment button (image/file)
+        self._pending_file = None   # Pending attachment path
+        btn_attach = QPushButton("📎 File")
         btn_attach.setFixedSize(56, 72)
-        btn_attach.setToolTip("上传图片或 Office 文件")
+        btn_attach.setToolTip("Upload image or Office file")
         btn_attach.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
             "border-radius:8px;color:#8b949e;font-size:12px;padding:2px;}"
@@ -564,7 +563,7 @@ class ChatPage(QWidget):
         )
         btn_attach.clicked.connect(self._pick_file)
 
-        # 附件预览标签
+        # Attachment preview label
         self._attach_lbl = QLabel("")
         self._attach_lbl.setStyleSheet(
             "color:#58a6ff;font-size:11px;padding:0 4px;"
@@ -572,7 +571,7 @@ class ChatPage(QWidget):
         self._attach_lbl.setMaximumWidth(160)
         self._attach_lbl.setWordWrap(False)
 
-        btn_send = QPushButton("发送")
+        btn_send = QPushButton("Send")
         btn_send.setObjectName("btn_primary")
         btn_send.setFixedSize(72, 72)
         btn_send.setStyleSheet(
@@ -588,11 +587,11 @@ class ChatPage(QWidget):
         in_layout.addWidget(self._attach_lbl)
         in_layout.addWidget(self._input)
 
-        # SimLife 场景切换按钮
+        # SimLife scene toggle button
         self._simlife_mode = False
-        self.btn_simlife = QPushButton("🌱 进入场景")
+        self.btn_simlife = QPushButton("🌱 Enter Scene")
         self.btn_simlife.setFixedSize(72, 72)
-        self.btn_simlife.setToolTip("左键：进入/离开场景\n右键：打开 SimLife 设置")
+        self.btn_simlife.setToolTip("Left click: Enter/Exit scene\nRight click: Open SimLife settings")
         self._style_simlife_btn()
         self.btn_simlife.clicked.connect(self._toggle_simlife)
         self.btn_simlife.setContextMenuPolicy(
@@ -608,7 +607,7 @@ class ChatPage(QWidget):
         layout.addWidget(self._scroll)
         layout.addWidget(input_frame)
 
-        # 右侧：VRM 虚拟形象 + 工具面板
+        # Right: VRM avatar + tool panel
         right_col = QWidget()
         right_col.setFixedWidth(220)
         right_col.setStyleSheet("background:#161b22;")
@@ -616,7 +615,7 @@ class ChatPage(QWidget):
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.setSpacing(0)
 
-        # VRM 面板（模块化加载，失败则不显示）
+        # VRM panel (modular loading, hide on failure)
         self.vrm_widget = None
         try:
             from vrm_module import VRM_AVAILABLE, vrm_widget_class
@@ -630,27 +629,27 @@ class ChatPage(QWidget):
                 )
                 right_lay.addWidget(self.vrm_widget)
         except Exception as e:
-            print(f"[VRM] ChatPage 加载跳过: {e}")
+            print(f"[VRM] ChatPage load skipped: {e}")
 
-        # 工具面板
+        # Tool panel
         self.tool_panel = ToolPanel()
         self.tool_panel.tool_clicked.connect(self._on_tool_clicked)
-        # 工具面板去掉自己的固定宽度和背景（由父容器统一控制）
+        # Tool panel removes own fixed width and background (controlled by parent)
         self.tool_panel.setFixedWidth(220)
-        self.tool_panel.setStyleSheet("")  # 清除自带背景
+        self.tool_panel.setStyleSheet("")  # Clear own background
         right_lay.addWidget(self.tool_panel, stretch=1)
 
-        # 补全选中
+        # Completion selected
         self._completer.selected.connect(self._on_completer_selected)
 
         outer.addWidget(left, stretch=1)
         outer.addWidget(right_col)
 
     def _on_text_changed(self):
-        """检测 / 开头，弹出补全"""
+        """Detect / prefix, show completion"""
         text = self._input.toPlainText()
         if text.startswith("/") and "\n" not in text:
-            # 计算弹窗位置（输入框上方）
+            # Calculate popup position (above input box)
             pos = self._input.mapToGlobal(self._input.pos())
             from PyQt6.QtCore import QPoint
             popup_pos = self._input.mapToGlobal(
@@ -661,25 +660,25 @@ class ChatPage(QWidget):
             self._completer.hide()
 
     def _on_completer_selected(self, fill_text: str):
-        """补全选中：替换输入框内容"""
+        """Completion selected: replace input box content"""
         self._input.setPlainText(fill_text)
         self._completer.hide()
-        # 光标移到末尾
+        # Move cursor to end
         cursor = self._input.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         self._input.setTextCursor(cursor)
         self._input.setFocus()
 
     def _on_tool_clicked(self, tool_name: str, desc: str):
-        """点击工具面板卡片：填入输入框"""
+        """Click tool panel card: fill input box"""
         current = self._input.toPlainText().strip()
         if current:
-            # 已有内容：追加工具指令
+            # Existing content: append tool instruction
             self._input.setPlainText(
-                f"{current}（使用 {tool_name} 工具完成）"
+                f"{current} (use {tool_name} tool to complete)"
             )
         else:
-            self._input.setPlainText(f"请帮我使用 {tool_name} 工具，")
+            self._input.setPlainText(f"Please use the {tool_name} tool, ")
         cursor = self._input.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         self._input.setTextCursor(cursor)
@@ -688,7 +687,7 @@ class ChatPage(QWidget):
     def eventFilter(self, obj, event):
         from PyQt6.QtCore import QEvent
         if obj is self._input and event.type() == QEvent.Type.KeyPress:
-            # Tab / Enter 确认补全
+            # Tab / Enter confirm completion
             if (self._completer.isVisible() and
                     event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Down)):
                 self._completer._list.setFocus()
@@ -705,15 +704,15 @@ class ChatPage(QWidget):
         return super().eventFilter(obj, event)
 
     def _style_simlife_btn(self):
-        """根据 simlife_mode 状态更新按钮样式"""
+        """Update button style based on simlife_mode state"""
         if self._simlife_mode:
-            self.btn_simlife.setText("🌱 场景中")
+            self.btn_simlife.setText("🌱 In Scene")
             self.btn_simlife.setStyleSheet(
                 "QPushButton{background:#238636;border:none;"
                 "border-radius:8px;color:white;font-size:11px;font-weight:700;}"
             )
         else:
-            self.btn_simlife.setText("🌱 进入场景")
+            self.btn_simlife.setText("🌱 Enter Scene")
             self.btn_simlife.setStyleSheet(
                 "QPushButton{background:#21262d;border:1px solid #30363d;"
                 "border-radius:8px;color:#8b949e;font-size:11px;font-weight:700;}"
@@ -726,7 +725,7 @@ class ChatPage(QWidget):
         self.simlife_toggled.emit(self._simlife_mode)
 
     def _simlife_context_menu(self, pos):
-        """SimLife 按钮右键菜单"""
+        """SimLife button right-click menu"""
         from PyQt6.QtWidgets import QMenu
         menu = QMenu(self.btn_simlife)
         menu.setStyleSheet(
@@ -735,8 +734,8 @@ class ChatPage(QWidget):
             "QMenu::item{padding:6px 16px;}"
             "QMenu::item:hover{background:#30363d;}"
         )
-        act_setup = menu.addAction("🔧 打开 SimLife 设置")
-        act_open = menu.addAction("🌐 在浏览器中打开")
+        act_setup = menu.addAction("🔧 Open SimLife Settings")
+        act_open = menu.addAction("🌐 Open in Browser")
 
         chosen = menu.exec(self.btn_simlife.mapToGlobal(pos))
         if chosen == act_setup:
@@ -747,14 +746,14 @@ class ChatPage(QWidget):
             webbrowser.open("http://127.0.0.1:8769")
 
     def _pick_file(self):
-        """打开文件选择器，支持图片和 Office 文件"""
+        """Open file picker, supports images and Office files"""
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择文件",
+            self, "Select File",
             str(Path.home()),
-            "图片和文档 (*.png *.jpg *.jpeg *.gif *.webp "
+            "Images and Documents (*.png *.jpg *.jpeg *.gif *.webp "
             "*.docx *.xlsx *.pptx *.pdf *.csv *.txt *.md);;"
-            "图片 (*.png *.jpg *.jpeg *.gif *.webp);;"
-            "Office 文档 (*.docx *.xlsx *.pptx *.pdf *.csv)"
+            "Images (*.png *.jpg *.jpeg *.gif *.webp);;"
+            "Office Documents (*.docx *.xlsx *.pptx *.pdf *.csv)"
         )
         if path:
             self._pending_file = path
@@ -769,7 +768,7 @@ class ChatPage(QWidget):
         if not text and not pending:
             return
 
-        # ── 从富文本中提取 URL（浏览器复制链接时 toPlainText 只返回标题）──
+        # -- Extract URL from rich text (browser copy link returns only title in toPlainText) --
         html = self._input.toHtml()
         if "<a href=" in html and "http" not in text:
             import re
@@ -778,7 +777,7 @@ class ChatPage(QWidget):
                 url_str = "\n".join(urls)
                 text = (text + "\n" + url_str).strip()
 
-        # 清空输入
+        # Clear input
         self._input.clear()
         self._pending_file = None
         self._attach_lbl.setText("")
@@ -788,25 +787,22 @@ class ChatPage(QWidget):
             is_image = ext in (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
             if is_image:
-                # 显示图片气泡
                 self._show_image_bubble(pending)
-                # 构建含图片路径的消息
-                msg = f"[图片: {pending}]"
+                msg = f"[Image: {pending}]"
                 if text:
                     msg += f"\n{text}"
                 else:
-                    msg += "\n请分析这张图片"
+                    msg += "\nPlease analyze this image"
             else:
-                # 非图片文件：显示文件标记
-                self.add_user_message(f"📎 {Path(pending).name}\n{text or '请分析这个文件'}")
-                msg = f"[文件: {pending}]\n{text or '请分析这个文件的内容'}"
+                self.add_user_message(f"📎 {Path(pending).name}\n{text or 'Please analyze this file'}")
+                msg = f"[File: {pending}]\n{text or 'Please analyze this file content'}"
 
             self.message_sent.emit(msg)
         elif text:
             self.message_sent.emit(text)
 
     def _show_image_bubble(self, image_path: str, is_user: bool = True):
-        """在聊天区显示图片预览气泡"""
+        """Show image preview bubble in chat area"""
         from PyQt6.QtGui import QPixmap
         bubble = QFrame()
         bubble.setFrameShape(QFrame.Shape.NoFrame)
@@ -836,7 +832,7 @@ class ChatPage(QWidget):
         self._scroll_to_bottom()
 
     def fill_input(self, text: str):
-        """外部调用：填入输入框（如 OCR 结果）"""
+        """External call: fill input box (e.g. OCR result)"""
         self._input.setPlainText(text)
         cursor = self._input.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
@@ -858,7 +854,7 @@ class ChatPage(QWidget):
         self._scroll_to_bottom()
 
     def add_thinking_indicator(self) -> QLabel:
-        lbl = QLabel("⏳ 思考中…")
+        lbl = QLabel("⏳ Thinking…")
         lbl.setStyleSheet(
             "color:#8b949e;font-size:12px;padding:8px 14px;"
             "background:#21262d;border-radius:8px;"
@@ -890,7 +886,7 @@ class ChatPage(QWidget):
         )
 
 
-# ── 记忆库页 ──────────────────────────────────────
+# -- Memory Page --
 class MemoryPage(QWidget):
     def __init__(self, db_file: str, auth_ref=None, parent=None):
         super().__init__(parent)
@@ -902,18 +898,18 @@ class MemoryPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        # 搜索栏
+        # Search bar
         search_row = QHBoxLayout()
         self._search = QLineEdit()
-        self._search.setPlaceholderText("语义搜索记忆…")
+        self._search.setPlaceholderText("Semantic search memories…")
         self._search.returnPressed.connect(self.search)
-        btn_search = QPushButton("搜索")
+        btn_search = QPushButton("Search")
         btn_search.clicked.connect(self.search)
-        btn_refresh = QPushButton("刷新")
+        btn_refresh = QPushButton("Refresh")
         btn_refresh.clicked.connect(self.load)
 
-        # 清除记忆按钮（红色，放在右侧）
-        btn_clear = QPushButton("🗑  清除记忆")
+        # Clear memory button (red, right side)
+        btn_clear = QPushButton("🗑  Clear Memory")
         btn_clear.setFixedHeight(30)
         btn_clear.setStyleSheet(
             "QPushButton{background:rgba(248,81,73,.1);border:1px solid #f85149;"
@@ -928,12 +924,12 @@ class MemoryPage(QWidget):
         search_row.addStretch()
         search_row.addWidget(btn_clear)
 
-        # 过滤标签
+        # Filter tags
         filter_row = QHBoxLayout()
         self._filters = {}
-        for f, lbl in [("all","全部"),("detail","细节"),
-                        ("outline","细纲"),("summary","大纲"),
-                        ("emotional","情感"),("semantic","语义")]:
+        for f, lbl in [("all","All"),("detail","Detail"),
+                        ("outline","Outline"),("summary","Summary"),
+                        ("emotional","Emotional"),("semantic","Semantic")]:
             btn = QPushButton(lbl)
             btn.setCheckable(True)
             btn.setChecked(f == "all")
@@ -949,11 +945,11 @@ class MemoryPage(QWidget):
             filter_row.addWidget(btn)
         filter_row.addStretch()
 
-        # 统计栏
+        # Statistics bar
         self._stats_lbl = QLabel("")
         self._stats_lbl.setStyleSheet("color:#8b949e;font-size:11px;margin:4px 0;")
 
-        # 记忆列表
+        # Memory list
         self._list = QListWidget()
         self._list.setSpacing(4)
         self._list.setStyleSheet(
@@ -975,16 +971,16 @@ class MemoryPage(QWidget):
     def load(self):
         from engine.db_guard import guarded_connect
 
-        # 未登录时显示提示
+        # Show hint when not logged in
         if self._auth_ref and self._auth_ref() and self._auth_ref().is_guest():
             self._list.clear()
             self._stats_lbl.setText("")
-            item = QListWidgetItem("🔒  请先登录后查看记忆库")
+            item = QListWidgetItem("🔒  Please login to view memory")
             item.setForeground(QColor("#8b949e"))
             self._list.addItem(item)
             return
 
-        # 获取当前用户 ID
+        # Get current user ID
         user_id = None
         if self._auth_ref and self._auth_ref() and not self._auth_ref().is_guest():
             user_id = self._auth_ref().user_id
@@ -1016,14 +1012,14 @@ class MemoryPage(QWidget):
                 ).fetchone()[0] if self._table_exists(conn, "memory_edges") else 0
             self._all_items = rows
             self._stats_lbl.setText(
-                f"共 {total} 条记忆  ·  {edges} 条关联边  "
-                f"·  当前显示 {min(len(rows), 300)} 条  "
-                f"·  双击查看完整内容"
+                f"Total {total} memories  ·  {edges} edges  "
+                f"·  Showing {min(len(rows), 300)}  "
+                f"·  Double-click for full content"
             )
             self._render(rows)
         except Exception as e:
             self._list.clear()
-            self._list.addItem(f"加载失败: {e}")
+            self._list.addItem(f"Load failed: {e}")
 
     def _table_exists(self, conn, table_name: str) -> bool:
         res = conn.execute(
@@ -1034,18 +1030,18 @@ class MemoryPage(QWidget):
 
     def _clear_memory_dialog(self):
         """
-        三次确认清除记忆
-        第1次：选择清除范围
-        第2次：文字确认
-        第3次：最终确认
+        Triple confirm memory clear
+        1st: Select clear scope
+        2nd: Text confirmation
+        3rd: Final confirmation
         """
         from engine.db_guard import guarded_connect
 
-        # ── 第1次：选择清除范围 ──────────────────
+        # -- Step 1: Select clear scope --
         from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QRadioButton, QButtonGroup
 
         dlg1 = QDialog(self)
-        dlg1.setWindowTitle("清除记忆 — 第 1/3 步")
+        dlg1.setWindowTitle("Clear Memory — Step 1/3")
         dlg1.setFixedWidth(420)
         dlg1.setStyleSheet(
             "QDialog{background:#161b22;color:#e6edf3;}"
@@ -1061,8 +1057,8 @@ class MemoryPage(QWidget):
         lay1.setContentsMargins(20, 20, 20, 20)
 
         warning_lbl = QLabel(
-            "⚠️  <b style='color:#f85149;'>清除记忆不可撤销！</b><br>"
-            "请选择要清除的范围："
+            "⚠️  <b style='color:#f85149;'>Clearing memory is irreversible!</b><br>"
+            "Please select the scope to clear:"
         )
         warning_lbl.setTextFormat(Qt.TextFormat.RichText)
         warning_lbl.setWordWrap(True)
@@ -1070,12 +1066,12 @@ class MemoryPage(QWidget):
 
         btn_group = QButtonGroup(dlg1)
         options = [
-            ("all",      "🗑  清除全部记忆（包括关联网络）"),
-            ("detail",   "清除细节层记忆（保留大纲和细纲）"),
-            ("outline",  "清除细纲层记忆"),
-            ("summary",  "清除大纲层记忆"),
-            ("emotional","清除情感模态记忆"),
-            ("semantic", "清除语义模态记忆"),
+            ("all",      "🗑  Clear all memories (including association network)"),
+            ("detail",   "Clear detail level memories (keep outline and summary)"),
+            ("outline",  "Clear outline level memories"),
+            ("summary",  "Clear summary level memories"),
+            ("emotional","Clear emotional modality memories"),
+            ("semantic", "Clear semantic modality memories"),
         ]
         radios = {}
         for val, text in options:
@@ -1090,8 +1086,8 @@ class MemoryPage(QWidget):
             QDialogButtonBox.StandardButton.Ok |
             QDialogButtonBox.StandardButton.Cancel
         )
-        btns1.button(QDialogButtonBox.StandardButton.Ok).setText("下一步 →")
-        btns1.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        btns1.button(QDialogButtonBox.StandardButton.Ok).setText("Next →")
+        btns1.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancel")
         btns1.accepted.connect(dlg1.accept)
         btns1.rejected.connect(dlg1.reject)
         lay1.addWidget(btns1)
@@ -1102,34 +1098,34 @@ class MemoryPage(QWidget):
         clear_scope = next((v for rb, v in radios.items() if rb.isChecked()), "all")
         scope_label = dict(options)[clear_scope]
 
-        # ── 第2次：输入确认文字 ──────────────────
+        # -- Step 2: Enter confirmation text --
         from PyQt6.QtWidgets import QInputDialog
-        confirm_word = "确认清除"
+        confirm_word = "CONFIRM CLEAR"
         text, ok = QInputDialog.getText(
             self,
-            "清除记忆 — 第 2/3 步",
-            f"即将执行：{scope_label}\n\n"
-            f"请在下方输入「{confirm_word}」以继续：",
+            "Clear Memory — Step 2/3",
+            f"Action: {scope_label}\n\n"
+            f"Please type '{confirm_word}' to continue:",
         )
         if not ok or text.strip() != confirm_word:
-            QMessageBox.warning(self, "已取消", "输入不匹配，操作已取消。")
+            QMessageBox.warning(self, "Cancelled", "Input mismatch, operation cancelled.")
             return
 
-        # ── 第3次：最终确认弹窗 ──────────────────
+        # -- Step 3: Final confirmation popup --
         final = QMessageBox(self)
-        final.setWindowTitle("清除记忆 — 第 3/3 步 · 最终确认")
+        final.setWindowTitle("Clear Memory — Step 3/3 · Final Confirmation")
         final.setIcon(QMessageBox.Icon.Critical)
         final.setText(
-            f"<b style='color:#f85149; font-size:14px;'>最后一次确认</b><br><br>"
-            f"操作：<b>{scope_label}</b><br><br>"
-            "此操作 <b>不可撤销</b>，确定要继续吗？"
+            f"<b style='color:#f85149; font-size:14px;'>Final Confirmation</b><br><br>"
+            f"Action: <b>{scope_label}</b><br><br>"
+            "This operation <b>cannot be undone</b>, are you sure?"
         )
         final.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         final.setDefaultButton(QMessageBox.StandardButton.No)
-        final.button(QMessageBox.StandardButton.Yes).setText("✅ 确认清除")
-        final.button(QMessageBox.StandardButton.No).setText("❌ 取消")
+        final.button(QMessageBox.StandardButton.Yes).setText("✅ Confirm Clear")
+        final.button(QMessageBox.StandardButton.No).setText("❌ Cancel")
         final.setStyleSheet(
             "QMessageBox{background:#161b22;}"
             "QLabel{color:#e6edf3;font-size:13px;}"
@@ -1140,11 +1136,11 @@ class MemoryPage(QWidget):
         if final.exec() != QMessageBox.StandardButton.Yes:
             return
 
-        # ── 执行清除 ─────────────────────────────
+        # -- Execute clear --
         self._do_clear(clear_scope)
 
     def _do_clear(self, scope: str):
-        """实际执行清除操作"""
+        """Actually execute clear operation"""
         from engine.db_guard import guarded_connect
         try:
             with guarded_connect(self.db_file) as conn:
@@ -1156,44 +1152,44 @@ class MemoryPage(QWidget):
                         conn.execute("DELETE FROM memory_entities")
                     if self._table_exists(conn, "formed_cognition"):
                         conn.execute("DELETE FROM formed_cognition")
-                    # 重置自增序列
+                    # Reset auto-increment sequence
                     conn.execute(
                         "DELETE FROM sqlite_sequence WHERE name='memories'"
                     ) if self._table_exists(conn, "sqlite_sequence") else None
-                    deleted_msg = "全部记忆及关联网络"
+                    deleted_msg = "All memories and association network"
                 elif scope in ("detail", "outline", "summary"):
                     count = conn.execute(
                         "SELECT COUNT(*) FROM memories WHERE level=?", (scope,)
                     ).fetchone()[0]
                     conn.execute("DELETE FROM memories WHERE level=?", (scope,))
-                    deleted_msg = f"{count} 条{scope}层记忆"
+                    deleted_msg = f"{count} {scope} level memories"
                 elif scope in ("emotional", "semantic", "visual",
                                "auditory", "procedural", "autobio"):
                     count = conn.execute(
                         "SELECT COUNT(*) FROM memories WHERE modality=?", (scope,)
                     ).fetchone()[0]
                     conn.execute("DELETE FROM memories WHERE modality=?", (scope,))
-                    deleted_msg = f"{count} 条{scope}模态记忆"
+                    deleted_msg = f"{count} {scope} modality memories"
                 else:
-                    deleted_msg = "未知范围"
+                    deleted_msg = "Unknown scope"
 
                 conn.commit()
 
-            # 刷新列表
+            # Refresh list
             self.load()
             QMessageBox.information(
-                self, "清除完成",
-                f"✅ 已清除：{deleted_msg}\n\n记忆库已更新。"
+                self, "Clear Complete",
+                f"✅ Cleared: {deleted_msg}\n\nMemory database updated."
             )
         except Exception as e:
-            QMessageBox.critical(self, "清除失败", f"❌ 操作失败：{e}")
+            QMessageBox.critical(self, "Clear Failed", f"❌ Operation failed: {e}")
 
     def search(self):
         q = self._search.text().strip()
         if not q:
             self._render(self._all_items)
             return
-        # 简单关键词过滤（真实环境用向量搜索）
+        # Simple keyword filter (vector search in production)
         filtered = [r for r in self._all_items if q.lower() in r[1].lower()]
         self._render(filtered)
 
@@ -1218,22 +1214,22 @@ class MemoryPage(QWidget):
             except Exception:
                 em = {}
             color = level_color.get(level, "#8b949e")
-            lbl = {"detail":"细节","outline":"细纲","summary":"大纲"}.get(level, level)
+            lbl = {"detail":"Detail","outline":"Outline","summary":"Summary"}.get(level, level)
             preview = content[:120] + ("…" if len(content) > 120 else "")
 
             item = QListWidgetItem(
                 f"[{lbl}·{modality}]  {preview}\n"
-                f"重要性:{int(importance*10)}/10  "
-                f"情绪:{em.get('primary','—')}  "
+                f"Importance:{int(importance*10)}/10  "
+                f"Emotion:{em.get('primary','—')}  "
                 f"{(created or '')[:16]}"
             )
             item.setForeground(QColor(color))
-            # 完整内容放在 tooltip
+            # Full content in tooltip
             item.setToolTip(content)
             item.setData(Qt.ItemDataRole.UserRole, content)
             self._list.addItem(item)
 
-        # 双击显示完整内容
+        # Double-click to show full content
         try:
             self._list.itemDoubleClicked.disconnect()
         except Exception:
@@ -1241,7 +1237,7 @@ class MemoryPage(QWidget):
         def _show_full(item):
             full = item.data(Qt.ItemDataRole.UserRole) or item.text()
             dlg = QTextBrowser()
-            dlg.setWindowTitle("完整记忆内容")
+            dlg.setWindowTitle("Full Memory Content")
             dlg.setWindowFlag(Qt.WindowType.Window)
             dlg.setPlainText(full)
             dlg.setMinimumSize(500, 300)
@@ -1254,16 +1250,16 @@ class MemoryPage(QWidget):
         self._list.itemDoubleClicked.connect(_show_full)
 
 
-# ── 设置页 ────────────────────────────────────────
+# -- Settings Page --
 class LearnerPage(QWidget):
     """
-    主动学习页
-    - 手动触发 AGI 主动学习（抓新闻/文章）
-    - 配置学习主题、学习时间
-    - 查看经历认知列表
-    - 实时日志
+    Active Learning Page
+    - Manually trigger AGI active learning (fetch news/articles)
+    - Configure learning topics, learning time
+    - View experience/cognition list
+    - Real-time log
     """
-    learn_requested = pyqtSignal(list)  # 发出主题列表
+    learn_requested = pyqtSignal(list)  # Emit topic list
 
     def __init__(self, db_file: str, parent=None):
         super().__init__(parent)
@@ -1276,33 +1272,33 @@ class LearnerPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 顶部栏
+        # Top bar
         header = QWidget()
         header.setFixedHeight(48)
         header.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(16, 0, 16, 0)
-        title = QLabel("🎓  主动学习")
+        title = QLabel("🎓  Active Learning")
         title.setStyleSheet("color:#e6edf3;font-size:15px;font-weight:700;")
-        self._status_lbl = QLabel("就绪")
+        self._status_lbl = QLabel("Ready")
         self._status_lbl.setStyleSheet("color:#8b949e;font-size:12px;")
         h_lay.addWidget(title)
         h_lay.addStretch()
         h_lay.addWidget(self._status_lbl)
         layout.addWidget(header)
 
-        # 主体：上下分割
+        # Main body: top-bottom split
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setStyleSheet("QSplitter::handle{background:#21262d;height:1px;}")
 
-        # ── 上半：配置 + 经历认知 ──
+        # -- Top: config + experience cognition --
         top_widget = QWidget()
         top_widget.setStyleSheet("background:#0d1117;")
         top_lay = QHBoxLayout(top_widget)
         top_lay.setContentsMargins(16, 16, 16, 16)
         top_lay.setSpacing(16)
 
-        # 左：学习配置
+        # Left: learning config
         config_box = QWidget()
         config_box.setStyleSheet(
             "QWidget{background:#161b22;border:1px solid #30363d;border-radius:10px;}"
@@ -1312,19 +1308,19 @@ class LearnerPage(QWidget):
         cl.setContentsMargins(16, 14, 16, 14)
         cl.setSpacing(10)
 
-        cl.addWidget(_make_label("📚  学习配置", "color:#e6edf3;font-size:13px;font-weight:700;background:transparent;border:none;"))
+        cl.addWidget(_make_label("📚  Learning Configuration", "color:#e6edf3;font-size:13px;font-weight:700;background:transparent;border:none;"))
 
-        cl.addWidget(_make_label("学习主题（每行一个）", "color:#8b949e;font-size:11px;background:transparent;border:none;"))
+        cl.addWidget(_make_label("Learning topics (one per line)", "color:#8b949e;font-size:11px;background:transparent;border:none;"))
         self._topics_edit = QTextEdit()
         self._topics_edit.setFixedHeight(100)
         self._topics_edit.setStyleSheet(
             "QTextEdit{background:#0d1117;border:1px solid #30363d;border-radius:6px;"
             "color:#e6edf3;font-size:12px;padding:6px;}"
         )
-        self._topics_edit.setPlainText("AI人工智能\n科技新闻\n世界新闻")
+        self._topics_edit.setPlainText("AI Artificial Intelligence\nTechnology News\nWorld News")
         cl.addWidget(self._topics_edit)
 
-        cl.addWidget(_make_label("定时学习（每天几点）", "color:#8b949e;font-size:11px;background:transparent;border:none;"))
+        cl.addWidget(_make_label("Scheduled learning (daily time)", "color:#8b949e;font-size:11px;background:transparent;border:none;"))
         hour_row = QHBoxLayout()
         self._hour_spin = QComboBox()
         self._hour_spin.addItems([f"{h:02d}:00" for h in range(24)])
@@ -1335,7 +1331,7 @@ class LearnerPage(QWidget):
             "QComboBox::drop-down{border:none;}"
             "QComboBox QAbstractItemView{background:#161b22;color:#e6edf3;border:1px solid #30363d;}"
         )
-        self._auto_learn_chk = QCheckBox("启用定时学习")
+        self._auto_learn_chk = QCheckBox("Enable scheduled learning")
         self._auto_learn_chk.setStyleSheet("color:#c9d1d9;font-size:12px;")
         hour_row.addWidget(self._hour_spin)
         hour_row.addWidget(self._auto_learn_chk)
@@ -1343,7 +1339,7 @@ class LearnerPage(QWidget):
 
         cl.addStretch()
 
-        btn_learn = QPushButton("🚀  立即学习")
+        btn_learn = QPushButton("🚀  Start Learning")
         btn_learn.setFixedHeight(36)
         btn_learn.setStyleSheet(
             "QPushButton{background:rgba(31,111,235,.2);border:1px solid #1f6feb;"
@@ -1357,7 +1353,7 @@ class LearnerPage(QWidget):
 
         top_lay.addWidget(config_box)
 
-        # 右：经历认知展示
+        # Right: experience cognition display
         cognition_box = QWidget()
         cognition_box.setStyleSheet(
             "QWidget{background:#161b22;border:1px solid #30363d;border-radius:10px;}"
@@ -1367,13 +1363,13 @@ class LearnerPage(QWidget):
         cog_lay.setSpacing(8)
 
         cog_header = QHBoxLayout()
-        cog_header.addWidget(_make_label("🧠  经历认知（不可外部修改）",
+        cog_header.addWidget(_make_label("🧠  Formed Cognitions (immutable)",
             "color:#e6edf3;font-size:13px;font-weight:700;background:transparent;border:none;"))
-        self._cog_count = QLabel("0 条")
+        self._cog_count = QLabel("0 items")
         self._cog_count.setStyleSheet("color:#8b949e;font-size:11px;")
         cog_header.addStretch()
         cog_header.addWidget(self._cog_count)
-        btn_refresh_cog = QPushButton("刷新")
+        btn_refresh_cog = QPushButton("Refresh")
         btn_refresh_cog.setFixedHeight(24)
         btn_refresh_cog.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -1384,7 +1380,7 @@ class LearnerPage(QWidget):
         cog_header.addWidget(btn_refresh_cog)
         cog_lay.addLayout(cog_header)
 
-        hint = QLabel("💡 由对话和学习自动形成，只有清除全部记忆才能删除")
+        hint = QLabel("💡 Automatically formed from conversations and learning, only clearing all memory can delete them")
         hint.setStyleSheet("color:#6e7681;font-size:11px;font-style:italic;")
         cog_lay.addWidget(hint)
 
@@ -1401,15 +1397,15 @@ class LearnerPage(QWidget):
 
         splitter.addWidget(top_widget)
 
-        # ── 下半：实时日志 ──
+        # -- Bottom: real-time log --
         log_widget = QWidget()
         log_widget.setStyleSheet("background:#0d1117;")
         ll = QVBoxLayout(log_widget)
         ll.setContentsMargins(16, 8, 16, 12)
         ll.setSpacing(6)
         log_header = QHBoxLayout()
-        log_header.addWidget(_make_label("📋  学习日志", "color:#8b949e;font-size:12px;font-weight:600;"))
-        btn_clear_log = QPushButton("清空")
+        log_header.addWidget(_make_label("📋  Learning Log", "color:#8b949e;font-size:12px;font-weight:600;"))
+        btn_clear_log = QPushButton("Clear")
         btn_clear_log.setFixedHeight(22)
         btn_clear_log.setStyleSheet(
             "QPushButton{background:transparent;border:none;color:#6e7681;font-size:11px;}"
@@ -1438,7 +1434,7 @@ class LearnerPage(QWidget):
             from engine.learner import FormedCognitionStore
             store = FormedCognitionStore(self.db_file)
             items = store.get_all()
-            self._cog_count.setText(f"{len(items)} 条")
+            self._cog_count.setText(f"{len(items)} entries")
             self._cog_list.clear()
             SOURCE_ICON = {"conversation": "💬", "learning": "📖", "reflection": "🔍"}
             for it in items:
@@ -1447,12 +1443,12 @@ class LearnerPage(QWidget):
                 text = f"{icon} {it['content']}{strength_mark}"
                 item = QListWidgetItem(text)
                 item.setToolTip(
-                    f"来源：{it['source']}\n触发：{it.get('trigger','')}\n"
-                    f"时间：{it['formed_at'][:16]}\n强度：{it['strength']:.1f}"
+                    f"Source: {it['source']}\nTrigger: {it.get('trigger','')}\n"
+                    f"Time: {it['formed_at'][:16]}\nStrength: {it['strength']:.1f}"
                 )
                 self._cog_list.addItem(item)
             if not items:
-                self._cog_list.addItem("（暂无，继续对话和学习后会自动形成）")
+                self._cog_list.addItem("(None yet, will form automatically through conversations and learning)")
         except Exception:
             pass
 
@@ -1462,10 +1458,10 @@ class LearnerPage(QWidget):
         if not topics:
             return
         self._btn_learn.setEnabled(False)
-        self._btn_learn.setText("学习中…")
-        self._status_lbl.setText("🔄 学习中…")
+        self._btn_learn.setText("Learning…")
+        self._status_lbl.setText("🔄 Learning…")
         self._log("=" * 40)
-        self._log(f"开始学习，主题：{', '.join(topics)}")
+        self._log(f"Starting learning, topics: {', '.join(topics)}")
         self.learn_requested.emit(topics)
 
     def _log(self, msg: str):
@@ -1476,10 +1472,10 @@ class LearnerPage(QWidget):
 
     def on_learn_done(self):
         self._btn_learn.setEnabled(True)
-        self._btn_learn.setText("🚀  立即学习")
-        self._status_lbl.setText("✅ 学习完成")
+        self._btn_learn.setText("🚀  Start Learning")
+        self._status_lbl.setText("✅ Learning complete")
         self._load_cognitions()
-        QTimer.singleShot(3000, lambda: self._status_lbl.setText("就绪"))
+        QTimer.singleShot(3000, lambda: self._status_lbl.setText("Ready"))
 
     def on_learn_log(self, msg: str):
         self._log(msg)
@@ -1504,7 +1500,7 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
 
-        # ── LLM 配置（多服务商）──
+        # -- LLM Config (multi-provider) --
         from engine.llm_client import PROVIDER_INFO
         from engine.i18n import LANGUAGES, set_language, get_language
 
@@ -1517,7 +1513,7 @@ class SettingsPage(QWidget):
             "selection-background-color:#1f6feb;border:1px solid #30363d;}"
         )
 
-        # 语言选择
+        # Language selection
         api_lay.addWidget(QLabel("Interface Language:"), 0, 0)
         self._lang_combo = QComboBox()
         self._lang_combo.setStyleSheet(COMBO_STYLE)
@@ -1529,7 +1525,7 @@ class SettingsPage(QWidget):
                 self._lang_combo.setCurrentIndex(i); break
         api_lay.addWidget(self._lang_combo, 0, 1)
 
-        # Provider 选择
+        # Provider selection
         api_lay.addWidget(QLabel("LLM Provider:"), 1, 0)
         self._provider = QComboBox()
         self._provider.setStyleSheet(COMBO_STYLE)
@@ -1543,7 +1539,7 @@ class SettingsPage(QWidget):
         self._provider.currentIndexChanged.connect(self._on_provider_changed)
         api_lay.addWidget(self._provider, 1, 1)
 
-        # 模型选择
+        # Model selection
         api_lay.addWidget(QLabel("Model:"), 2, 0)
         self._model_combo = QComboBox()
         self._model_combo.setStyleSheet(COMBO_STYLE)
@@ -1557,33 +1553,32 @@ class SettingsPage(QWidget):
         self._api_key.setPlaceholderText("Enter your API key")
         api_lay.addWidget(self._api_key, 3, 1)
 
-        # 注册链接
+        # Registration link
         self._api_link_lbl = QLabel("")
         self._api_link_lbl.setOpenExternalLinks(True)
         self._api_link_lbl.setStyleSheet("color:#58a6ff;font-size:11px;")
         api_lay.addWidget(self._api_link_lbl, 4, 1)
 
-        # ── 多模态模型配置（Vision）──
+        # -- Multimodal Model Config (Vision) --
         from engine.vision_client import VISION_PROVIDER_INFO, check_vision_available
 
-        vision_box = QGroupBox("👁️ 多模态模型（Vision）")
+        vision_box = QGroupBox("👁️ Multimodal Model (Vision)")
         vision_lay = QGridLayout(vision_box)
 
-        # 说明标签
+        # Info label
         vision_desc = QLabel(
-            "配置独立的多模态模型，用于图片/视频/音频理解分析。\n"
-            "与文本 LLM 独立运行，互不影响。留空则自动继承主 LLM 的多模态能力。"
+            "Configure independent multimodal model for image/video/audio understanding.\n"
+            "Runs independently from text LLM. Leave empty to auto-inherit main LLM multimodal capability."
         )
         vision_desc.setStyleSheet("color:#8b949e;font-size:11px;")
         vision_desc.setWordWrap(True)
         vision_lay.addWidget(vision_desc, 0, 0, 1, 2)
 
-        # Vision Provider 选择
-        vision_lay.addWidget(QLabel("多模态服务商:"), 1, 0)
+        # Vision Provider selection
+        vision_lay.addWidget(QLabel("Vision Provider:"), 1, 0)
         self._vision_provider = QComboBox()
         self._vision_provider.setStyleSheet(COMBO_STYLE)
-        # 添加"自动继承"选项
-        self._vision_provider.addItem("🔄 自动继承主 LLM", "")
+        self._vision_provider.addItem("🔄 Auto inherit from main LLM", "")
         for key in VISION_PROVIDER_INFO:
             info = VISION_PROVIDER_INFO[key]
             self._vision_provider.addItem(info["name"], key)
@@ -1594,8 +1589,8 @@ class SettingsPage(QWidget):
         self._vision_provider.currentIndexChanged.connect(self._on_vision_provider_changed)
         vision_lay.addWidget(self._vision_provider, 1, 1)
 
-        # Vision 模型选择
-        vision_lay.addWidget(QLabel("Vision 模型:"), 2, 0)
+        # Vision Model selection
+        vision_lay.addWidget(QLabel("Vision Model:"), 2, 0)
         self._vision_model = QComboBox()
         self._vision_model.setStyleSheet(COMBO_STYLE)
         self._vision_model.setEditable(True)
@@ -1605,30 +1600,30 @@ class SettingsPage(QWidget):
         vision_lay.addWidget(QLabel("API Key:"), 3, 0)
         self._vision_api_key = QLineEdit(self._cfg.get("vision_api_key", ""))
         self._vision_api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self._vision_api_key.setPlaceholderText("留空则继承主 LLM 的 API Key")
+        self._vision_api_key.setPlaceholderText("Leave empty to inherit main LLM API Key")
         vision_lay.addWidget(self._vision_api_key, 3, 1)
 
-        # Vision Base URL（高级设置）
-        vision_lay.addWidget(QLabel("自定义地址:"), 4, 0)
+        # Vision Base URL (advanced settings)
+        vision_lay.addWidget(QLabel("Custom URL:"), 4, 0)
         self._vision_base_url = QLineEdit(self._cfg.get("vision_base_url", ""))
-        self._vision_base_url.setPlaceholderText("留空使用默认地址")
+        self._vision_base_url.setPlaceholderText("Leave empty for default URL")
         vision_lay.addWidget(self._vision_base_url, 4, 1)
 
-        # 支持的模态标签
+        # Supported modality labels
         self._vision_support_lbl = QLabel("")
         self._vision_support_lbl.setStyleSheet("font-size:11px;color:#8b949e;")
         vision_lay.addWidget(self._vision_support_lbl, 5, 0, 1, 2)
 
-        # Vision 注册链接
+        # Vision registration link
         self._vision_link_lbl = QLabel("")
         self._vision_link_lbl.setOpenExternalLinks(True)
         self._vision_link_lbl.setStyleSheet("color:#58a6ff;font-size:11px;")
         vision_lay.addWidget(self._vision_link_lbl, 6, 1)
 
-        # 初始化 vision provider 状态
+        # Initialize vision provider state
         self._on_vision_provider_changed(self._vision_provider.currentIndex())
 
-        # Ollama 额外设置（只有选 Ollama 时显示）
+        # Ollama extra settings (shown only when Ollama selected)
         self._ollama_widget = QWidget()
         ol_lay = QGridLayout(self._ollama_widget)
         ol_lay.setContentsMargins(0, 0, 0, 0)
@@ -1658,38 +1653,38 @@ class SettingsPage(QWidget):
 
         self._on_provider_changed(self._provider.currentIndex())
 
-        # 热键配置
-        hotkey_box = QGroupBox("全局热键")
+        # Hotkey config
+        hotkey_box = QGroupBox("Global Hotkeys")
         hk_lay = QGridLayout(hotkey_box)
 
-        hk_lay.addWidget(QLabel("唤醒悬浮窗:"), 0, 0)
+        hk_lay.addWidget(QLabel("Activate floating window:"), 0, 0)
         self._hk_activate = QLineEdit(
             self._cfg.get("hotkey_activate", "ctrl+shift+space")
         )
         hk_lay.addWidget(self._hk_activate, 0, 1)
 
-        hk_lay.addWidget(QLabel("截图识别:"), 1, 0)
+        hk_lay.addWidget(QLabel("Screenshot OCR:"), 1, 0)
         self._hk_screenshot = QLineEdit(
             self._cfg.get("hotkey_screenshot", "ctrl+shift+s")
         )
         hk_lay.addWidget(self._hk_screenshot, 1, 1)
 
-        # 窗口行为
-        win_box = QGroupBox("窗口行为")
+        # Window behavior
+        win_box = QGroupBox("Window Behavior")
         win_lay = QVBoxLayout(win_box)
 
-        self._chk_tray = QCheckBox("关闭窗口时最小化到托盘（不退出）")
+        self._chk_tray = QCheckBox("Minimize to tray on close (don't quit)")
         self._chk_tray.setChecked(self._cfg.get("tray_minimize", True))
         win_lay.addWidget(self._chk_tray)
 
-        self._chk_autostart = QCheckBox("开机自启动")
+        self._chk_autostart = QCheckBox("Launch at startup")
         from desktop.system import AutoStart
         self._chk_autostart.setChecked(AutoStart.is_enabled())
         self._chk_autostart.stateChanged.connect(self._toggle_autostart)
         win_lay.addWidget(self._chk_autostart)
 
         opacity_row = QHBoxLayout()
-        opacity_row.addWidget(QLabel("悬浮窗透明度:"))
+        opacity_row.addWidget(QLabel("Floating window opacity:"))
         self._opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self._opacity_slider.setRange(40, 100)
         self._opacity_slider.setValue(int(self._cfg.get("float_opacity", 0.95) * 100))
@@ -1702,18 +1697,18 @@ class SettingsPage(QWidget):
         win_lay.addLayout(opacity_row)
 
         # OCR
-        ocr_box = QGroupBox("OCR 设置")
+        ocr_box = QGroupBox("OCR Settings")
         ocr_lay = QGridLayout(ocr_box)
-        ocr_lay.addWidget(QLabel("识别语言:"), 0, 0)
+        ocr_lay.addWidget(QLabel("Recognition language:"), 0, 0)
         self._ocr_lang = QLineEdit(self._cfg.get("ocr_language", "chi_sim+eng"))
         ocr_lay.addWidget(self._ocr_lang, 0, 1)
         ocr_lay.addWidget(QLabel(
-            "Tesseract 语言代码，如 chi_sim+eng\n"
-            "需要安装：https://github.com/tesseract-ocr/tesseract"
+            "Tesseract language codes, e.g. chi_sim+eng\n"
+            "Install from: https://github.com/tesseract-ocr/tesseract"
         ), 1, 1)
 
-        # 保存按钮
-        btn_save = QPushButton("💾  保存设置")
+        # Save button
+        btn_save = QPushButton("💾  Save Settings")
         btn_save.setObjectName("btn_primary")
         btn_save.setFixedHeight(40)
         btn_save.clicked.connect(self._save)
@@ -1721,16 +1716,16 @@ class SettingsPage(QWidget):
         self._save_msg = QLabel("")
         self._save_msg.setStyleSheet("color:#3fb950;font-size:12px;")
 
-        # 语音合成（TTS）
-        tts_box = QGroupBox("🔊 语音合成（TTS）")
+        # Text-to-Speech (TTS)
+        tts_box = QGroupBox("🔊 Text-to-Speech (TTS)")
         tts_lay = QGridLayout(tts_box)
 
-        tts_lay.addWidget(QLabel("启用语音："), 0, 0)
-        self._tts_enable = QCheckBox("回复完成后自动朗读")
+        tts_lay.addWidget(QLabel("Enable TTS:"), 0, 0)
+        self._tts_enable = QCheckBox("Auto-read after reply")
         self._tts_enable.setChecked(self._cfg.get("tts_enabled", False))
         tts_lay.addWidget(self._tts_enable, 0, 1)
 
-        tts_lay.addWidget(QLabel("声音选择："), 1, 0)
+        tts_lay.addWidget(QLabel("Voice:"), 1, 0)
         self._tts_voice = QComboBox()
         from engine.tts_engine import VOICE_OPTIONS
         for vid, vname in VOICE_OPTIONS:
@@ -1748,7 +1743,7 @@ class SettingsPage(QWidget):
         )
         tts_lay.addWidget(self._tts_voice, 1, 1)
 
-        tts_lay.addWidget(QLabel("语速调节："), 2, 0)
+        tts_lay.addWidget(QLabel("Speech rate:"), 2, 0)
         rate_row = QHBoxLayout()
         self._tts_rate = QSlider(Qt.Orientation.Horizontal)
         self._tts_rate.setRange(-50, 50)
@@ -1761,57 +1756,57 @@ class SettingsPage(QWidget):
         rate_row.addWidget(self._tts_rate_lbl)
         tts_lay.addLayout(rate_row, 2, 1)
 
-        # 检测 edge-tts 是否安装
+        # Check if edge-tts is installed
         try:
             import edge_tts
-            tts_status = "✅ edge-tts 已安装（高质量）"
+            tts_status = "✅ edge-tts installed (high quality)"
             tts_status_color = "#3fb950"
         except ImportError:
-            tts_status = "⚠️ 未安装 edge-tts，运行：pip install edge-tts"
+            tts_status = "⚠️ edge-tts not installed, run: pip install edge-tts"
             tts_status_color = "#d29922"
         tts_status_lbl = QLabel(tts_status)
         tts_status_lbl.setStyleSheet(f"color:{tts_status_color};font-size:11px;")
         tts_lay.addWidget(tts_status_lbl, 3, 1)
 
-        # ── 思考模式（Thinking Mode）──
-        think_box = QGroupBox("🧠 思考模式（Thinking Mode）")
+        # -- Thinking Mode --
+        think_box = QGroupBox("🧠 Thinking Mode")
         think_lay = QGridLayout(think_box)
 
         think_desc = QLabel(
-            "让模型在推理阶段进行深度思考，提升回答质量。\n"
-            "自动模式：感知层判断问题简单就跳过思考，复杂才深度推理。\n"
-            "不支持思考的厂商（Groq/百度/讯飞/Ollama）会自动忽略。"
+            "Enable deep thinking during reasoning to improve response quality.\n"
+            "Auto mode: Perception layer judges question complexity, skips thinking for simple ones.\n"
+            "Providers without thinking support (Groq/Baidu/Xunfei/Ollama) will auto-ignore."
         )
         think_desc.setStyleSheet("color:#8b949e;font-size:11px;")
         think_desc.setWordWrap(True)
         think_lay.addWidget(think_desc, 0, 0, 1, 2)
 
-        think_lay.addWidget(QLabel("思考模式："), 1, 0)
+        think_lay.addWidget(QLabel("Thinking mode:"), 1, 0)
         self._thinking_mode = QComboBox()
         self._thinking_mode.setStyleSheet(COMBO_STYLE)
-        self._thinking_mode.addItem("自动（推荐）— 感知层判断简单/复杂", "auto")
-        self._thinking_mode.addItem("始终开启 — 所有推理都深度思考", "always_on")
-        self._thinking_mode.addItem("始终关闭 — 追求速度", "always_off")
+        self._thinking_mode.addItem("Auto (recommended) — Perception layer judges complexity", "auto")
+        self._thinking_mode.addItem("Always on — Deep thinking for all reasoning", "always_on")
+        self._thinking_mode.addItem("Always off — Prioritize speed", "always_off")
         saved_mode = self._cfg.get("thinking_mode", "auto")
         for i in range(self._thinking_mode.count()):
             if self._thinking_mode.itemData(i) == saved_mode:
                 self._thinking_mode.setCurrentIndex(i); break
         think_lay.addWidget(self._thinking_mode, 1, 1)
 
-        think_lay.addWidget(QLabel("思考深度："), 2, 0)
+        think_lay.addWidget(QLabel("Thinking depth:"), 2, 0)
         self._thinking_effort = QComboBox()
         self._thinking_effort.setStyleSheet(COMBO_STYLE)
-        self._thinking_effort.addItem("低（Low）", "low")
-        self._thinking_effort.addItem("中（Medium）", "medium")
-        self._thinking_effort.addItem("高（High）", "high")
-        self._thinking_effort.addItem("最大（Max）", "max")
+        self._thinking_effort.addItem("Low", "low")
+        self._thinking_effort.addItem("Medium", "medium")
+        self._thinking_effort.addItem("High", "high")
+        self._thinking_effort.addItem("Max", "max")
         saved_effort = self._cfg.get("thinking_effort", "high")
         for i in range(self._thinking_effort.count()):
             if self._thinking_effort.itemData(i) == saved_effort:
                 self._thinking_effort.setCurrentIndex(i); break
         think_lay.addWidget(self._thinking_effort, 2, 1)
 
-        think_lay.addWidget(QLabel("思考预算："), 3, 0)
+        think_lay.addWidget(QLabel("Thinking budget:"), 3, 0)
         budget_row = QHBoxLayout()
         self._thinking_budget = QSpinBox()
         self._thinking_budget.setRange(1024, 32768)
@@ -1823,31 +1818,31 @@ class SettingsPage(QWidget):
             "border-radius:5px;padding:5px 8px;color:#e6edf3;}"
         )
         budget_row.addWidget(self._thinking_budget)
-        budget_lbl = QLabel("（Claude/Gemini/通义/智谱用，DeepSeek/OpenAI 忽略）")
+        budget_lbl = QLabel("(Claude/Gemini/Qwen/Zhipu use, DeepSeek/OpenAI ignore)")
         budget_lbl.setStyleSheet("color:#8b949e;font-size:11px;")
         budget_row.addWidget(budget_lbl)
         budget_row.addStretch()
         think_lay.addLayout(budget_row, 3, 1)
 
-        # ── 语音识别（STT）──
-        stt_box = QGroupBox("🎤 语音识别（STT）")
+        # -- Speech Recognition (STT) --
+        stt_box = QGroupBox("🎤 Speech Recognition (STT)")
         stt_lay = QGridLayout(stt_box)
 
         stt_desc = QLabel(
-            "语音输入功能。将麦克风录音转成文字发送给 AI。\n"
-            "选择识别引擎，配置对应的参数。"
+            "Voice input feature. Convert microphone audio to text and send to AI.\n"
+            "Select recognition engine and configure parameters."
         )
         stt_desc.setStyleSheet("color:#8b949e;font-size:11px;")
         stt_desc.setWordWrap(True)
         stt_lay.addWidget(stt_desc, 0, 0, 1, 2)
 
-        # STT Provider 选择
-        stt_lay.addWidget(QLabel("识别引擎："), 1, 0)
+        # STT Provider selection
+        stt_lay.addWidget(QLabel("Recognition engine:"), 1, 0)
         self._stt_provider = QComboBox()
         self._stt_provider.setStyleSheet(COMBO_STYLE)
-        self._stt_provider.addItem("DeepSeek Whisper（在线，复用主 API Key）", "deepseek")
-        self._stt_provider.addItem("讯飞语音识别（在线，中文最优）", "xunfei")
-        self._stt_provider.addItem("本地 Whisper（离线，需下载模型）", "whisper_local")
+        self._stt_provider.addItem("DeepSeek Whisper (online, reuse main API Key)", "deepseek")
+        self._stt_provider.addItem("Xunfei Speech (online, best for Chinese)", "xunfei")
+        self._stt_provider.addItem("Local Whisper (offline, need download model)", "whisper_local")
         saved_stt = self._cfg.get("stt_provider", "deepseek")
         for i in range(self._stt_provider.count()):
             if self._stt_provider.itemData(i) == saved_stt:
@@ -1855,39 +1850,39 @@ class SettingsPage(QWidget):
         self._stt_provider.currentIndexChanged.connect(self._on_stt_provider_changed)
         stt_lay.addWidget(self._stt_provider, 1, 1)
 
-        # 讯飞凭证区域（默认隐藏）
+        # Xunfei credentials area (hidden by default)
         self._stt_xunfei_widget = QWidget()
         xunfei_lay = QGridLayout(self._stt_xunfei_widget)
         xunfei_lay.setContentsMargins(0, 0, 0, 0)
 
-        xunfei_lay.addWidget(QLabel("APPID："), 0, 0)
+        xunfei_lay.addWidget(QLabel("APPID:"), 0, 0)
         self._xunfei_app_id = QLineEdit(self._cfg.get("xunfei_app_id", ""))
-        self._xunfei_app_id.setPlaceholderText("讯飞开放平台 APPID")
+        self._xunfei_app_id.setPlaceholderText("Xunfei platform APPID")
         xunfei_lay.addWidget(self._xunfei_app_id, 0, 1)
 
-        xunfei_lay.addWidget(QLabel("API Key："), 1, 0)
+        xunfei_lay.addWidget(QLabel("API Key:"), 1, 0)
         self._xunfei_api_key = QLineEdit(self._cfg.get("xunfei_api_key", ""))
-        self._xunfei_api_key.setPlaceholderText("讯飞 API Key")
+        self._xunfei_api_key.setPlaceholderText("Xunfei API Key")
         xunfei_lay.addWidget(self._xunfei_api_key, 1, 1)
 
-        xunfei_lay.addWidget(QLabel("API Secret："), 2, 0)
+        xunfei_lay.addWidget(QLabel("API Secret:"), 2, 0)
         self._xunfei_api_secret = QLineEdit(self._cfg.get("xunfei_api_secret", ""))
         self._xunfei_api_secret.setEchoMode(QLineEdit.EchoMode.Password)
-        self._xunfei_api_secret.setPlaceholderText("讯飞 API Secret")
+        self._xunfei_api_secret.setPlaceholderText("Xunfei API Secret")
         xunfei_lay.addWidget(self._xunfei_api_secret, 2, 1)
 
-        xunfei_link = QLabel('<a href="https://www.xfyun.cn/services/voicedictation" style="color:#58a6ff;">免费申请讯飞语音 API →</a>')
+        xunfei_link = QLabel('<a href="https://www.xfyun.cn/services/voicedictation" style="color:#58a6ff;">Apply for free Xunfei Speech API →</a>')
         xunfei_link.setOpenExternalLinks(True)
         xunfei_link.setStyleSheet("font-size:11px;")
         xunfei_lay.addWidget(xunfei_link, 3, 1)
 
         stt_lay.addWidget(self._stt_xunfei_widget, 2, 0, 1, 2)
 
-        # 本地 Whisper 模型选择（默认隐藏）
+        # Local Whisper model selection (hidden by default)
         self._stt_whisper_widget = QWidget()
         whisper_lay = QHBoxLayout(self._stt_whisper_widget)
         whisper_lay.setContentsMargins(0, 0, 0, 0)
-        whisper_lay.addWidget(QLabel("模型："))
+        whisper_lay.addWidget(QLabel("Model:"))
         self._whisper_model = QComboBox()
         self._whisper_model.setStyleSheet(COMBO_STYLE)
         for m in ["tiny", "base", "small", "medium", "large"]:
@@ -1902,74 +1897,74 @@ class SettingsPage(QWidget):
         whisper_lay.addStretch()
         stt_lay.addWidget(self._stt_whisper_widget, 3, 0, 1, 2)
 
-        # STT 状态检测
+        # STT status check
         try:
             import sounddevice
-            stt_status = "✅ sounddevice 已安装（录音可用）"
+            stt_status = "✅ sounddevice installed (recording available)"
             stt_status_color = "#3fb950"
         except ImportError:
-            stt_status = "⚠️ 未安装 sounddevice，运行：pip install sounddevice SoundFile"
+            stt_status = "⚠️ sounddevice not installed, run: pip install sounddevice SoundFile"
             stt_status_color = "#d29922"
         stt_status_lbl = QLabel(stt_status)
         stt_status_lbl.setStyleSheet(f"color:{stt_status_color};font-size:11px;")
         stt_lay.addWidget(stt_status_lbl, 4, 1)
 
-        # 初始化讯飞/Whisper 区域的可见性
+        # Initialize Xunfei/Whisper area visibility
         self._on_stt_provider_changed(self._stt_provider.currentIndex())
 
-        # ── 传感器模块（Sensor Agent）──
-        sensor_box = QGroupBox("🤖 传感器模块（Sensor Agent）")
+        # -- Sensor Module (Sensor Agent) --
+        sensor_box = QGroupBox("🤖 Sensor Agent Module")
         sensor_lay = QGridLayout(sensor_box)
 
         sensor_desc = QLabel(
-            "对接机器狗/机器人硬件传感器。\n"
-            "无硬件时可开启模拟模式测试功能。"
+            "Connect to robot dog/robot hardware sensors.\n"
+            "Enable mock mode to test without hardware."
         )
         sensor_desc.setStyleSheet("color:#8b949e;font-size:11px;")
         sensor_desc.setWordWrap(True)
         sensor_lay.addWidget(sensor_desc, 0, 0, 1, 2)
 
-        sensor_lay.addWidget(QLabel("启用传感器："), 1, 0)
-        self._sensor_enable = QCheckBox("启用传感器模块")
+        sensor_lay.addWidget(QLabel("Enable sensor:"), 1, 0)
+        self._sensor_enable = QCheckBox("Enable sensor module")
         self._sensor_enable.setChecked(self._cfg.get("sensor_enabled", False))
         sensor_lay.addWidget(self._sensor_enable, 1, 1)
 
-        sensor_lay.addWidget(QLabel("模拟模式："), 2, 0)
-        self._sensor_mock = QCheckBox("使用模拟数据（无硬件时）")
+        sensor_lay.addWidget(QLabel("Mock mode:"), 2, 0)
+        self._sensor_mock = QCheckBox("Use mock data (no hardware)")
         self._sensor_mock.setChecked(self._cfg.get("sensor_mock", True))
         sensor_lay.addWidget(self._sensor_mock, 2, 1)
 
-        sensor_lay.addWidget(QLabel("设备类型："), 3, 0)
+        sensor_lay.addWidget(QLabel("Device type:"), 3, 0)
         self._sensor_type = QComboBox()
         self._sensor_type.setStyleSheet(COMBO_STYLE)
-        self._sensor_type.addItem("机器狗", "robot_dog")
-        self._sensor_type.addItem("机械臂", "robot_arm")
-        self._sensor_type.addItem("自定义", "custom")
+        self._sensor_type.addItem("Robot Dog", "robot_dog")
+        self._sensor_type.addItem("Robot Arm", "robot_arm")
+        self._sensor_type.addItem("Custom", "custom")
         saved_stype = self._cfg.get("sensor_type", "robot_dog")
         for i in range(self._sensor_type.count()):
             if self._sensor_type.itemData(i) == saved_stype:
                 self._sensor_type.setCurrentIndex(i); break
         sensor_lay.addWidget(self._sensor_type, 3, 1)
 
-        sensor_lay.addWidget(QLabel("MQTT 地址："), 4, 0)
+        sensor_lay.addWidget(QLabel("MQTT address:"), 4, 0)
         mqtt_row = QHBoxLayout()
         self._sensor_mqtt_host = QLineEdit(self._cfg.get("sensor_mqtt_host", "localhost"))
         self._sensor_mqtt_host.setPlaceholderText("localhost")
         self._sensor_mqtt_host.setMaximumWidth(180)
         mqtt_row.addWidget(self._sensor_mqtt_host)
-        mqtt_row.addWidget(QLabel("端口："))
+        mqtt_row.addWidget(QLabel("Port:"))
         self._sensor_mqtt_port = QLineEdit(str(self._cfg.get("sensor_mqtt_port", 1883)))
         self._sensor_mqtt_port.setMaximumWidth(80)
         mqtt_row.addWidget(self._sensor_mqtt_port)
         mqtt_row.addStretch()
         sensor_lay.addLayout(mqtt_row, 4, 1)
 
-        sensor_lay.addWidget(QLabel("推送间隔："), 5, 0)
+        sensor_lay.addWidget(QLabel("Push interval:"), 5, 0)
         interval_row = QHBoxLayout()
         self._sensor_interval = QSpinBox()
         self._sensor_interval.setRange(5, 300)
         self._sensor_interval.setValue(self._cfg.get("sensor_push_interval", 30))
-        self._sensor_interval.setSuffix(" 秒")
+        self._sensor_interval.setSuffix(" sec")
         self._sensor_interval.setStyleSheet(
             "QSpinBox{background:#21262d;border:1px solid #30363d;"
             "border-radius:5px;padding:5px 8px;color:#e6edf3;}"
@@ -1978,41 +1973,40 @@ class SettingsPage(QWidget):
         interval_row.addStretch()
         sensor_lay.addLayout(interval_row, 5, 1)
 
-        # MQTT 状态检测
+        # MQTT status check
         try:
             import paho.mqtt
-            sensor_status = "✅ paho-mqtt 已安装"
+            sensor_status = "✅ paho-mqtt installed"
             sensor_status_color = "#3fb950"
         except ImportError:
-            sensor_status = "⚠️ 未安装 paho-mqtt，运行：pip install paho-mqtt"
+            sensor_status = "⚠️ paho-mqtt not installed, run: pip install paho-mqtt"
             sensor_status_color = "#d29922"
         sensor_status_lbl = QLabel(sensor_status)
         sensor_status_lbl.setStyleSheet(f"color:{sensor_status_color};font-size:11px;")
         sensor_lay.addWidget(sensor_status_lbl, 6, 1)
 
-        # 新闻 API（NewsAPI）
-        news_box = QGroupBox("📰 新闻 API（NewsAPI）")
+        # News API (NewsAPI)
+        news_box = QGroupBox("📰 News API (NewsAPI)")
         news_lay = QGridLayout(news_box)
 
         news_lay.addWidget(QLabel("API Key:"), 0, 0)
         self._newsapi_key = QLineEdit(self._cfg.get("newsapi_key", ""))
         self._newsapi_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self._newsapi_key.setPlaceholderText("来自 newsapi.org 的 API Key")
+        self._newsapi_key.setPlaceholderText("API Key from newsapi.org")
         news_lay.addWidget(self._newsapi_key, 0, 1)
 
-        # 检测 newsapi-python 是否安装
         try:
             import newsapi
-            news_status = "✅ newsapi-python 已安装"
+            news_status = "✅ newsapi-python installed"
             news_status_color = "#3fb950"
         except ImportError:
-            news_status = "⚠️ 未安装，运行 install_newsapi.bat"
+            news_status = "⚠️ Not installed, run install_newsapi.bat"
             news_status_color = "#d29922"
         news_status_lbl = QLabel(news_status)
         news_status_lbl.setStyleSheet(f"color:{news_status_color};font-size:11px;")
         news_lay.addWidget(news_status_lbl, 1, 1)
 
-        news_link = QLabel('<a href="https://newsapi.org/register" style="color:#58a6ff;">免费申请 NewsAPI Key →</a>')
+        news_link = QLabel('<a href="https://newsapi.org/register" style="color:#58a6ff;">Apply for free NewsAPI Key →</a>')
         news_link.setOpenExternalLinks(True)
         news_link.setStyleSheet("font-size:11px;")
         news_lay.addWidget(news_link, 2, 1)
@@ -2042,14 +2036,14 @@ class SettingsPage(QWidget):
         info = PROVIDER_INFO.get(key, {})
         is_ollama = key == "ollama"
 
-        # 更新模型列表
+        # Update model list
         self._model_combo.clear()
         for m in info.get("models", []):
             self._model_combo.addItem(m)
         saved_model = self._cfg.get("llm_model") or info.get("default_model", "")
         self._model_combo.setCurrentText(saved_model)
 
-        # 更新注册链接
+        # Update registration link
         url = info.get("url", "")
         name = info.get("name", "")
         if url:
@@ -2059,7 +2053,7 @@ class SettingsPage(QWidget):
         else:
             self._api_link_lbl.setText("")
 
-        # Ollama 额外设置显示/隐藏
+        # Ollama extra settings show/hide
         self._ollama_widget.setVisible(is_ollama)
         self._api_key.setEnabled(not is_ollama)
         self._api_key.setPlaceholderText("" if is_ollama else "Enter your API key")
@@ -2068,7 +2062,7 @@ class SettingsPage(QWidget):
         from engine.vision_client import VISION_PROVIDER_INFO
         key = self._vision_provider.itemData(idx) or ""
 
-        # 更新模型列表
+        # Update model list
         self._vision_model.clear()
         if key and key in VISION_PROVIDER_INFO:
             info = VISION_PROVIDER_INFO[key]
@@ -2077,35 +2071,33 @@ class SettingsPage(QWidget):
             saved_vision_model = self._cfg.get("vision_model") or info.get("default_model", "")
             self._vision_model.setCurrentText(saved_vision_model)
 
-            # 显示支持的模态
+            # Show supported modalities
             supports = info.get("supports", [])
-            support_icons = {"image": "🖼️ 图片", "video": "🎬 视频", "audio_note": "📝 视频帧", "audio": "🎵 音频"}
-            support_text = "支持: " + " | ".join(
+            support_icons = {"image": "🖼️ Image", "video": "🎬 Video", "audio_note": "📝 Video frame", "audio": "🎵 Audio"}
+            support_text = "Supports: " + " | ".join(
                 support_icons.get(s, s) for s in supports
             )
             self._vision_support_lbl.setText(support_text)
 
-            # 注册链接
+            # Registration link
             url = info.get("url", "")
             if url:
                 self._vision_link_lbl.setText(
-                    f'注册地址: <a href="{url}" style="color:#58a6ff;">{url}</a>'
+                    f'Register: <a href="{url}" style="color:#58a6ff;">{url}</a>'
                 )
             else:
                 self._vision_link_lbl.setText("")
 
-            # Ollama 不需要 API Key
             self._vision_api_key.setEnabled(key != "ollama")
             self._vision_api_key.setPlaceholderText(
-                "Ollama 本地运行，无需 API Key" if key == "ollama"
-                else "留空则继承主 LLM 的 API Key"
+                "Ollama runs locally, no API Key needed" if key == "ollama"
+                else "Leave empty to inherit main LLM API Key"
             )
         else:
-            # 自动继承模式
-            self._vision_support_lbl.setText("将自动使用主 LLM 的多模态能力")
+            self._vision_support_lbl.setText("Will auto-use main LLM's multimodal capability")
             self._vision_link_lbl.setText("")
             self._vision_api_key.setEnabled(False)
-            self._vision_api_key.setPlaceholderText("自动继承，无需单独配置")
+            self._vision_api_key.setPlaceholderText("Auto inherit, no separate config needed")
 
     def _check_ollama(self):
         from engine.llm_client import OllamaClient
@@ -2113,7 +2105,7 @@ class SettingsPage(QWidget):
         client = OllamaClient(base_url=url)
         if client.is_running():
             models = client.list_models()
-            # 更新模型下拉
+            # Update model dropdown
             self._ollama_model.setText(models[0] if models else "qwen2.5:7b")
             self._ollama_status.setText(
                 f"✅ Connected  |  Models: {', '.join(models[:4]) or 'none'}"
@@ -2124,7 +2116,7 @@ class SettingsPage(QWidget):
             self._ollama_status.setStyleSheet("font-size:11px;color:#f85149;")
 
     def _on_stt_provider_changed(self, idx: int):
-        """切换 STT 引擎时显示/隐藏对应的配置区域"""
+        """Show/hide corresponding config area when switching STT engine"""
         provider = self._stt_provider.itemData(idx) or "deepseek"
         self._stt_xunfei_widget.setVisible(provider == "xunfei")
         self._stt_whisper_widget.setVisible(provider == "whisper_local")
@@ -2153,32 +2145,32 @@ class SettingsPage(QWidget):
         self._cfg["tts_enabled"]       = self._tts_enable.isChecked()
         self._cfg["tts_voice"]         = self._tts_voice.currentData()
         self._cfg["tts_rate"]          = self._tts_rate.value()
-        # STT 语音识别
+        # STT Speech Recognition
         self._cfg["stt_provider"]      = self._stt_provider.currentData() or "deepseek"
         self._cfg["xunfei_app_id"]     = self._xunfei_app_id.text().strip()
         self._cfg["xunfei_api_key"]    = self._xunfei_api_key.text().strip()
         self._cfg["xunfei_api_secret"] = self._xunfei_api_secret.text().strip()
         self._cfg["whisper_model"]     = self._whisper_model.currentData() or "base"
-        # 传感器模块
+        # Sensor Module
         self._cfg["sensor_enabled"]    = self._sensor_enable.isChecked()
         self._cfg["sensor_mock"]       = self._sensor_mock.isChecked()
         self._cfg["sensor_type"]       = self._sensor_type.currentData() or "robot_dog"
         self._cfg["sensor_mqtt_host"]  = self._sensor_mqtt_host.text().strip()
         self._cfg["sensor_mqtt_port"]  = int(self._sensor_mqtt_port.text() or 1883)
         self._cfg["sensor_push_interval"] = self._sensor_interval.value()
-        # 思考模式
+        # Thinking Mode
         self._cfg["thinking_mode"]     = self._thinking_mode.currentData() or "auto"
         self._cfg["thinking_effort"]   = self._thinking_effort.currentData() or "high"
         self._cfg["thinking_budget"]   = self._thinking_budget.value()
         # OCR      = self._ocr_lang.text().strip()
         self._cfg["newsapi_key"]       = self._newsapi_key.text().strip()
-        # 多模态 Vision 配置
+        # Multimodal Vision Config
         self._cfg["vision_provider"]   = self._vision_provider.currentData() or ""
         self._cfg["vision_model"]      = self._vision_model.currentText().strip()
         self._cfg["vision_api_key"]    = self._vision_api_key.text().strip()
         self._cfg["vision_base_url"]   = self._vision_base_url.text().strip()
 
-        # 立即应用语言
+        # Apply language immediately
         try:
             from engine.i18n import set_language
             set_language(lang_key)
@@ -2191,34 +2183,34 @@ class SettingsPage(QWidget):
         QTimer.singleShot(3000, lambda: self._save_msg.setText(""))
 
 
-# ── 工具测试页 ────────────────────────────────────
+# -- Tool Test Page --
 class ToolTestPage(QWidget):
     """
-    工具测试台
-    左：工具列表 + 参数填写
-    右：执行结果（原始 JSON + 格式化展示）
-    历史记录可回溯
+    Tool Test Bench
+    Left: Tool list + param input
+    Right: Results (raw JSON + formatted)
+    History is traceable
     """
 
     RISK_COLOR = {"low": "#3fb950", "medium": "#d29922", "high": "#f85149"}
-    RISK_LABEL = {"low": "🟢 安全", "medium": "🟡 中等风险", "high": "🔴 高危"}
+    RISK_LABEL = {"low": "🟢 Safe", "medium": "🟡 Medium Risk", "high": "🔴 High Risk"}
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tools      = {}   # name -> info
-        self._current    = None # 当前选中工具名
+        self._current    = None # Currently selected tool name
         self._param_widgets = {}  # param_name -> QLineEdit/QTextEdit
-        self._history    = []   # 执行历史
+        self._history    = []   # Execution history
         self._setup_ui()
         self._load_tools()
 
-    # ────────────────── UI 构建 ──────────────────
+    # ---- UI Build ----
     def _setup_ui(self):
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 左侧：工具列表 ───────────────────────
+        # -- Left: tool list --
         left = QWidget()
         left.setFixedWidth(240)
         left.setStyleSheet(
@@ -2228,19 +2220,19 @@ class ToolTestPage(QWidget):
         left_lay.setContentsMargins(0, 0, 0, 0)
         left_lay.setSpacing(0)
 
-        # 左侧标题
-        left_header = QLabel("  🔧  选择工具")
+        # Left title
+        left_header = QLabel("  🔧  Select Tool")
         left_header.setFixedHeight(42)
         left_header.setStyleSheet(
             "background:#1c2128;color:#58a6ff;font-weight:700;"
             "font-size:13px;border-bottom:1px solid #30363d;padding-left:8px;"
         )
 
-        # 分类过滤
+        # Category filter
         filter_row = QHBoxLayout()
         filter_row.setContentsMargins(8, 6, 8, 4)
         self._risk_filter = QComboBox()
-        self._risk_filter.addItems(["全部风险", "🟢 安全", "🟡 中等", "🔴 高危"])
+        self._risk_filter.addItems(["All Risks", "🟢 Safe", "🟡 Medium", "🔴 High Risk"])
         self._risk_filter.setStyleSheet(
             "QComboBox{background:#21262d;border:1px solid #30363d;"
             "border-radius:5px;padding:4px 8px;color:#e6edf3;font-size:11px;}"
@@ -2251,9 +2243,9 @@ class ToolTestPage(QWidget):
         self._risk_filter.currentIndexChanged.connect(self._apply_filter)
         filter_row.addWidget(self._risk_filter)
 
-        # 搜索
+        # Search
         self._tool_search = QLineEdit()
-        self._tool_search.setPlaceholderText("搜索…")
+        self._tool_search.setPlaceholderText("Search…")
         self._tool_search.setStyleSheet(
             "QLineEdit{background:#21262d;border:1px solid #30363d;"
             "border-radius:5px;padding:4px 8px;color:#e6edf3;font-size:11px;}"
@@ -2261,7 +2253,7 @@ class ToolTestPage(QWidget):
         )
         self._tool_search.textChanged.connect(self._apply_filter)
 
-        # 工具列表
+        # Tool list
         self._tool_list = QListWidget()
         self._tool_list.setStyleSheet(
             "QListWidget{background:transparent;border:none;outline:none;}"
@@ -2272,9 +2264,9 @@ class ToolTestPage(QWidget):
         )
         self._tool_list.currentItemChanged.connect(self._on_tool_selected)
 
-        # 历史记录按钮 + 自检按钮
+        # History button + self-test button
         bottom_row = QHBoxLayout()
-        btn_history = QPushButton("📋  历史")
+        btn_history = QPushButton("📋  History")
         btn_history.setFixedHeight(34)
         btn_history.setStyleSheet(
             "QPushButton{background:#1c2128;border:none;color:#8b949e;"
@@ -2283,7 +2275,7 @@ class ToolTestPage(QWidget):
         )
         btn_history.clicked.connect(self._show_history)
 
-        btn_self_test = QPushButton("🔬  自检")
+        btn_self_test = QPushButton("🔬  Self Test")
         btn_self_test.setFixedHeight(34)
         btn_self_test.setStyleSheet(
             "QPushButton{background:#1c2128;border:none;color:#8b949e;"
@@ -2303,7 +2295,7 @@ class ToolTestPage(QWidget):
         left_lay.addWidget(self._tool_list, stretch=1)
         left_lay.addLayout(bottom_row)
 
-        # ── 中间：参数填写 + 执行 ────────────────
+        # -- Middle: param input + execution --
         mid = QWidget()
         mid.setMinimumWidth(340)
         mid.setStyleSheet("background:#0d1117;")
@@ -2311,8 +2303,8 @@ class ToolTestPage(QWidget):
         mid_lay.setContentsMargins(16, 12, 16, 12)
         mid_lay.setSpacing(10)
 
-        # 工具标题
-        self._tool_title = QLabel("← 请先选择一个工具")
+        # Tool title
+        self._tool_title = QLabel("← Please select a tool first")
         self._tool_title.setStyleSheet(
             "color:#58a6ff;font-size:15px;font-weight:700;"
         )
@@ -2324,7 +2316,7 @@ class ToolTestPage(QWidget):
         self._risk_badge = QLabel("")
         self._risk_badge.setStyleSheet("font-size:12px;")
 
-        # 参数区（动态生成）
+        # Param area (dynamically generated)
         params_scroll = QScrollArea()
         params_scroll.setWidgetResizable(True)
         params_scroll.setStyleSheet(
@@ -2339,9 +2331,9 @@ class ToolTestPage(QWidget):
         self._params_layout.addStretch()
         params_scroll.setWidget(self._params_container)
 
-        # 执行按钮区
+        # Execution button area
         exec_row = QHBoxLayout()
-        self._btn_run = QPushButton("▶  执行工具")
+        self._btn_run = QPushButton("▶  Execute Tool")
         self._btn_run.setFixedHeight(40)
         self._btn_run.setEnabled(False)
         self._btn_run.setObjectName("btn_primary")
@@ -2356,7 +2348,7 @@ class ToolTestPage(QWidget):
         )
         self._btn_run.clicked.connect(self._run_tool)
 
-        self._btn_clear = QPushButton("清空参数")
+        self._btn_clear = QPushButton("Clear Params")
         self._btn_clear.setFixedHeight(40)
         self._btn_clear.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -2371,11 +2363,11 @@ class ToolTestPage(QWidget):
         mid_lay.addWidget(self._tool_title)
         mid_lay.addWidget(self._risk_badge)
         mid_lay.addWidget(self._tool_desc)
-        mid_lay.addWidget(_make_label("参数：", "color:#8b949e;font-size:11px;margin-top:4px;"))
+        mid_lay.addWidget(_make_label("Parameters:", "color:#8b949e;font-size:11px;margin-top:4px;"))
         mid_lay.addWidget(params_scroll, stretch=1)
         mid_lay.addLayout(exec_row)
 
-        # ── 右侧：执行结果 ───────────────────────
+        # -- Right: execution result --
         right = QWidget()
         right.setStyleSheet("background:#0d1117;")
         right_lay = QVBoxLayout(right)
@@ -2383,14 +2375,14 @@ class ToolTestPage(QWidget):
         right_lay.setSpacing(8)
 
         result_header = QHBoxLayout()
-        result_lbl = QLabel("执行结果")
+        result_lbl = QLabel("Execution Result")
         result_lbl.setStyleSheet(
             "color:#e6edf3;font-size:13px;font-weight:700;"
         )
         self._result_status = QLabel("")
         self._result_status.setStyleSheet("font-size:12px;")
 
-        self._btn_copy = QPushButton("复制结果")
+        self._btn_copy = QPushButton("Copy Result")
         self._btn_copy.setFixedHeight(28)
         self._btn_copy.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -2399,7 +2391,7 @@ class ToolTestPage(QWidget):
         )
         self._btn_copy.clicked.connect(self._copy_result)
 
-        self._btn_send_to_chat = QPushButton("发送到对话")
+        self._btn_send_to_chat = QPushButton("Send to Chat")
         self._btn_send_to_chat.setFixedHeight(28)
         self._btn_send_to_chat.setStyleSheet(
             "QPushButton{background:rgba(31,111,235,.15);border:1px solid #1f6feb;"
@@ -2415,7 +2407,7 @@ class ToolTestPage(QWidget):
         result_header.addWidget(self._btn_copy)
         result_header.addWidget(self._btn_send_to_chat)
 
-        # 结果展示（Tab：格式化 / 原始 JSON）
+        # Result display (Tabs: formatted / raw JSON)
         self._result_tabs = QTabWidget()
         self._result_tabs.setStyleSheet(
             "QTabWidget::pane{border:1px solid #30363d;border-radius:6px;}"
@@ -2426,7 +2418,7 @@ class ToolTestPage(QWidget):
             "border-bottom-color:#21262d;}"
         )
 
-        # 格式化视图
+        # Formatted view
         self._result_formatted = QTextEdit()
         self._result_formatted.setReadOnly(True)
         self._result_formatted.setStyleSheet(
@@ -2434,7 +2426,7 @@ class ToolTestPage(QWidget):
             "font-size:13px;padding:12px;line-height:1.6;}"
         )
 
-        # 原始 JSON 视图
+        # Raw JSON view
         self._result_raw = QTextEdit()
         self._result_raw.setReadOnly(True)
         self._result_raw.setStyleSheet(
@@ -2443,13 +2435,13 @@ class ToolTestPage(QWidget):
             "font-size:12px;padding:12px;}"
         )
 
-        self._result_tabs.addTab(self._result_formatted, "📄 格式化")
-        self._result_tabs.addTab(self._result_raw,       "{ } 原始 JSON")
+        self._result_tabs.addTab(self._result_formatted, "📄 Formatted")
+        self._result_tabs.addTab(self._result_raw,       "{ } Raw JSON")
 
         right_lay.addLayout(result_header)
         right_lay.addWidget(self._result_tabs, stretch=1)
 
-        # ── 拼合三列 ─────────────────────────────
+        # -- Combine three columns --
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet(
             "QSplitter::handle{background:#30363d;width:1px;}"
@@ -2463,7 +2455,7 @@ class ToolTestPage(QWidget):
 
         root.addWidget(splitter)
 
-    # ────────────────── 工具加载 ──────────────────
+    # ------ Tool Loading ------
     def _load_tools(self):
         try:
             from engine.tools import TOOL_REGISTRY
@@ -2497,7 +2489,7 @@ class ToolTestPage(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, name)
             self._tool_list.addItem(item)
 
-    # ────────────────── 工具选中 ──────────────────
+    # ------ Tool Selected ------
     def _on_tool_selected(self, current, previous):
         if not current:
             return
@@ -2507,7 +2499,7 @@ class ToolTestPage(QWidget):
         self._current = name
         info = self._tools[name]
 
-        # 更新标题
+        # Update title
         self._tool_title.setText(f"🔧  {name}")
         self._tool_desc.setText(info["desc"])
         self._risk_badge.setText(
@@ -2518,18 +2510,18 @@ class ToolTestPage(QWidget):
             f"color:{risk_color};font-size:12px;"
         )
 
-        # 动态生成参数输入框
+        # Dynamically generate param input fields
         self._build_param_widgets(info["params"], info["required"])
         self._btn_run.setEnabled(True)
 
-        # 清空结果
+        # Clear result
         self._result_formatted.clear()
         self._result_raw.clear()
         self._result_status.setText("")
 
     def _build_param_widgets(self, params: dict, required: list):
-        """动态生成参数输入区"""
-        # 清除旧控件
+        """Dynamically generate param input area"""
+        # Clear old widgets
         while self._params_layout.count() > 1:
             item = self._params_layout.takeAt(0)
             if item.widget():
@@ -2538,7 +2530,7 @@ class ToolTestPage(QWidget):
         self._param_widgets.clear()
 
         if not params:
-            lbl = QLabel("该工具无需参数，直接点击执行")
+            lbl = QLabel("This tool requires no parameters, click Execute directly")
             lbl.setStyleSheet("color:#8b949e;font-size:12px;")
             self._params_layout.insertWidget(0, lbl)
             return
@@ -2548,13 +2540,13 @@ class ToolTestPage(QWidget):
             pdesc  = pinfo.get("description", "")
             ptype  = pinfo.get("type", "string")
 
-            # 标签行
+            # Label row
             lbl_row = QHBoxLayout()
             name_lbl = QLabel(pname)
             name_lbl.setStyleSheet(
                 "color:#e6edf3;font-size:12px;font-weight:600;"
             )
-            req_lbl = QLabel("必填" if is_req else "选填")
+            req_lbl = QLabel("Required" if is_req else "Optional")
             req_lbl.setStyleSheet(
                 f"color:{'#f85149' if is_req else '#8b949e'};"
                 "font-size:10px;"
@@ -2571,14 +2563,14 @@ class ToolTestPage(QWidget):
             lbl_row.addWidget(type_lbl)
             lbl_row.addStretch()
 
-            # 描述
+            # Description
             desc_lbl = QLabel(pdesc)
             desc_lbl.setStyleSheet(
                 "color:#8b949e;font-size:11px;margin-bottom:3px;"
             )
             desc_lbl.setWordWrap(True)
 
-            # 输入控件：长文本用 QTextEdit，其他用 QLineEdit
+            # Input widget: QTextEdit for long text, QLineEdit otherwise
             if ptype == "boolean":
                 widget = QComboBox()
                 widget.addItems(["false", "true"])
@@ -2591,7 +2583,7 @@ class ToolTestPage(QWidget):
             elif pname in ("content", "code", "text") or ptype in ("object", "array"):
                 widget = QTextEdit()
                 widget.setFixedHeight(90)
-                widget.setPlaceholderText(f"输入 {pname}…")
+                widget.setPlaceholderText(f"Enter {pname}…")
                 widget.setStyleSheet(
                     "QTextEdit{background:#21262d;border:1px solid #30363d;"
                     "border-radius:5px;padding:6px;color:#e6edf3;font-size:12px;"
@@ -2601,7 +2593,7 @@ class ToolTestPage(QWidget):
             else:
                 widget = QLineEdit()
                 widget.setFixedHeight(34)
-                widget.setPlaceholderText(f"输入 {pname}…")
+                widget.setPlaceholderText(f"Enter {pname}…")
                 widget.setStyleSheet(
                     "QLineEdit{background:#21262d;border:1px solid #30363d;"
                     "border-radius:5px;padding:5px 8px;color:#e6edf3;font-size:12px;}"
@@ -2623,7 +2615,7 @@ class ToolTestPage(QWidget):
 
             self._params_layout.insertWidget(i, container)
 
-    # ────────────────── 工具执行 ──────────────────
+    # ------ Tool Execution ------
     def _run_tool(self):
         if not self._current:
             return
@@ -2631,14 +2623,14 @@ class ToolTestPage(QWidget):
         info = self._tools.get(self._current, {})
         risk = info.get("risk", "low")
 
-        # 高危操作二次确认
+        # High-risk operation double confirmation
         if risk == "high":
             box = QMessageBox(self)
-            box.setWindowTitle("⚠️ 高危操作确认")
+            box.setWindowTitle("⚠️ High-Risk Operation Confirmation")
             box.setText(
-                f"<b>工具 {self._current}</b> 是高危操作（风险等级：🔴 高危）<br><br>"
-                "此操作可能修改/删除文件或执行系统命令，<b>不可撤销</b>。<br>"
-                "确认要直接执行吗？"
+                f"<b>Tool {self._current}</b> is a high-risk operation (Risk Level: 🔴 High)<br><br>"
+                "This operation may modify/delete files or execute system commands, <b>irreversible</b>.<br>"
+                "Confirm to execute directly?"
             )
             box.setStandardButtons(
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
@@ -2647,7 +2639,7 @@ class ToolTestPage(QWidget):
             if box.exec() != QMessageBox.StandardButton.Yes:
                 return
 
-        # 收集参数
+        # Collect parameters
         params = {}
         for pname, widget in self._param_widgets.items():
             if isinstance(widget, QTextEdit):
@@ -2659,20 +2651,20 @@ class ToolTestPage(QWidget):
             if val != "" and val != False:
                 params[pname] = val
 
-        # 检查必填
+        # Check required
         required = info.get("required", [])
         missing = [r for r in required if not params.get(r)]
         if missing:
             self._show_result(
-                {"ok": False, "error": f"缺少必填参数：{', '.join(missing)}"},
+                    {"ok": False, "error": f"Missing required params: {', '.join(missing)}"},
                 success=False
             )
             return
 
-        # 执行
-        self._btn_run.setText("⏳ 执行中…")
+        # Execute
+        self._btn_run.setText("⏳ Executing…")
         self._btn_run.setEnabled(False)
-        self._result_status.setText("执行中…")
+        self._result_status.setText("Executing…")
         self._result_status.setStyleSheet("color:#d29922;font-size:12px;")
         QApplication.processEvents()
 
@@ -2682,7 +2674,7 @@ class ToolTestPage(QWidget):
             success = result.get("ok", True)
             self._show_result(result, success=success)
 
-            # 记录历史
+            # Record history
             self._history.append({
                 "tool":    self._current,
                 "params":  params,
@@ -2695,58 +2687,58 @@ class ToolTestPage(QWidget):
         except Exception as e:
             self._show_result({"ok": False, "error": str(e)}, success=False)
         finally:
-            self._btn_run.setText("▶  执行工具")
+            self._btn_run.setText("▶  Execute Tool")
             self._btn_run.setEnabled(True)
 
     def _show_result(self, result: dict, success: bool = True):
-        """展示执行结果"""
-        # 状态标签
+        """Show execution result"""
+        # Status label
         if success:
-            self._result_status.setText("✅ 执行成功")
+            self._result_status.setText("✅ Execution succeeded")
             self._result_status.setStyleSheet("color:#3fb950;font-size:12px;")
         else:
-            self._result_status.setText("❌ 执行失败")
+            self._result_status.setText("❌ Execution failed")
             self._result_status.setStyleSheet("color:#f85149;font-size:12px;")
 
-        # 原始 JSON
+        # Raw JSON
         raw_json = json.dumps(result, ensure_ascii=False, indent=2)
         self._result_raw.setPlainText(raw_json)
         self._result_to_send = raw_json
 
-        # 格式化视图
+        # Formatted view
         formatted = self._format_result(result)
         self._result_formatted.setHtml(formatted)
 
-        # 切到格式化 tab
+        # Switch to formatted tab
         self._result_tabs.setCurrentIndex(0)
 
     def _format_result(self, result: dict) -> str:
-        """把结果转成可读 HTML"""
+        """Convert result to readable HTML"""
         if not result.get("ok", True):
-            err = result.get("error", "未知错误")
+            err = result.get("error", "Unknown error")
             return (
                 f"<div style='color:#f85149;font-size:13px;padding:8px;'>"
-                f"<b>❌ 错误</b><br><br>{err}</div>"
+                f"<b>❌ Error</b><br><br>{err}</div>"
             )
 
         lines = ["<div style='padding:8px;font-size:13px;line-height:1.8;'>"]
-        lines.append("<span style='color:#3fb950;font-weight:700;'>✅ 执行成功</span><br><br>")
+        lines.append("<span style='color:#3fb950;font-weight:700;'>✅ Success</span><br><br>")
 
         for key, val in result.items():
             if key == "ok":
                 continue
             key_html = f"<span style='color:#58a6ff;font-weight:600;'>{key}</span>"
             if isinstance(val, str) and len(val) > 200:
-                # 长文本展示
+                # Long text display
                 lines.append(
-                    f"{key_html}：<br>"
+                    f"{key_html}:<br>"
                     f"<pre style='background:#161b22;padding:10px;border-radius:6px;"
                     f"white-space:pre-wrap;color:#e6edf3;font-size:12px;"
                     f"font-family:Consolas,monospace;max-height:300px;overflow-y:auto;'>"
-                    f"{val[:3000]}{'...(截断)' if len(val)>3000 else ''}</pre>"
+                    f"{val[:3000]}{'...(truncated)' if len(val)>3000 else ''}</pre>"
                 )
             elif isinstance(val, list):
-                lines.append(f"{key_html}（{len(val)} 项）：<br>")
+                lines.append(f"{key_html}({len(val)} items):<br>")
                 for item in val[:20]:
                     if isinstance(item, dict):
                         name = item.get("name", item.get("file", str(item)))
@@ -2766,22 +2758,22 @@ class ToolTestPage(QWidget):
                 if len(val) > 20:
                     lines.append(
                         f"<span style='color:#8b949e;font-size:11px;'>"
-                        f"  … 共 {len(val)} 项</span><br>"
+                        f"  … {len(val)} total</span><br>"
                     )
             elif isinstance(val, dict):
-                lines.append(f"{key_html}：<br>")
+                lines.append(f"{key_html}:<br>")
                 for k2, v2 in val.items():
                     lines.append(
                         f"&nbsp;&nbsp;<span style='color:#8b949e;'>{k2}</span>: "
                         f"<span style='color:#e6edf3;'>{v2}</span><br>"
                     )
             else:
-                lines.append(f"{key_html}：<span style='color:#e6edf3;'>{val}</span><br>")
+                lines.append(f"{key_html}: <span style='color:#e6edf3;'>{val}</span><br>")
 
         lines.append("</div>")
         return "".join(lines)
 
-    # ────────────────── 辅助功能 ──────────────────
+    # ---- Helpers ----
     def _clear_params(self):
         for w in self._param_widgets.values():
             if isinstance(w, QTextEdit):
@@ -2794,13 +2786,13 @@ class ToolTestPage(QWidget):
     def _copy_result(self):
         QApplication.clipboard().setText(self._result_to_send)
         orig = self._btn_copy.text()
-        self._btn_copy.setText("✅ 已复制")
+        self._btn_copy.setText("✅ Copied")
         QTimer.singleShot(1500, lambda: self._btn_copy.setText(orig))
 
     def _send_result_to_chat(self):
-        """把结果发送到对话页输入框（由主窗口中转）"""
+        """Send result to chat page input box (routed through main window)"""
         self.parent_ref and self.parent_ref.chat_page.fill_input(
-            f"工具 {self._current} 的执行结果：\n{self._result_to_send[:500]}"
+            f"Execution result of tool {self._current}:\n{self._result_to_send[:500]}"
         )
 
     def set_parent_ref(self, main_win):
@@ -2808,48 +2800,48 @@ class ToolTestPage(QWidget):
 
     def _show_history(self):
         if not self._history:
-            QMessageBox.information(self, "执行历史", "暂无执行记录")
+            QMessageBox.information(self, "Execution History", "No execution records yet")
             return
         lines = []
         for i, h in enumerate(reversed(self._history[-20:]), 1):
             ok = "✅" if h["success"] else "❌"
             lines.append(
                 f"{ok} #{i}  {h['tool']}\n"
-                f"   参数: {json.dumps(h['params'], ensure_ascii=False)[:80]}\n"
+                f"   Params: {json.dumps(h['params'], ensure_ascii=False)[:80]}\n"
             )
-        QMessageBox.information(self, f"执行历史（共{len(self._history)}条）",
+        QMessageBox.information(self, f"Execution History ({len(self._history)} records)",
                                 "\n".join(lines))
 
     def run_self_test(self):
-        """一键自检：测试所有安全工具 + 检测依赖"""
+        """One-click self-test: test all safe tools + check deps"""
         from engine.tools import self_test, check_all_deps
-        self._result_status.setText("🔄 自检中…")
+        self._result_status.setText("🔄 Self-testing…")
         self._result_status.setStyleSheet("color:#d29922;font-size:12px;")
         QApplication.processEvents()
 
         results  = self_test()
         dep_results = check_all_deps()
 
-        # 收集缺失依赖的安装命令
+        # Collect install commands for missing deps
         all_missing_cmds = []
         for dep in dep_results.values():
             if not dep["ok"]:
                 all_missing_cmds.extend(dep["install"])
-        # 去重
+        # Deduplicate
         all_missing_cmds = list(dict.fromkeys(all_missing_cmds))
 
-        # 整理 HTML 报告
+        # Organize HTML report
         lines_fmt = ["<div style='padding:8px;font-size:13px;line-height:1.9;'>"]
-        lines_fmt.append("<b style='color:#58a6ff;'>🔬 工具自检报告</b><br><br>")
+        lines_fmt.append("<b style='color:#58a6ff;'>🔬 Tool Self-Test Report</b><br><br>")
 
         pass_n = sum(1 for r in results if r["status"] == "pass")
         fail_n = sum(1 for r in results if r["status"] == "fail")
         skip_n = sum(1 for r in results if r["status"] == "skipped")
 
         lines_fmt.append(
-            f"<b>安全工具测试：</b> ✅ {pass_n} 通过  "
-            f"{'❌ '+str(fail_n)+' 失败  ' if fail_n else ''}"
-            f"⏭ {skip_n} 跳过<br><br>"
+            f"<b>Safe tool tests:</b> ✅ {pass_n} passed  "
+            f"{'❌ '+str(fail_n)+' failed  ' if fail_n else ''}"
+            f"⏭ {skip_n} skipped<br><br>"
         )
         for r in results:
             icon  = {"pass":"✅","fail":"❌","skipped":"⏭","error":"💥"}.get(r["status"],"❓")
@@ -2858,35 +2850,35 @@ class ToolTestPage(QWidget):
             err_hint = ""
             if r["status"] in ("fail","error"):
                 err_text = (r.get("result",{}).get("error","") or r.get("error",""))[:120]
-                err_hint = f"<br><span style='color:#8b949e;font-size:11px;font-family:monospace;'>&nbsp;&nbsp;原因: {err_hint}{err_text}</span>"
+                err_hint = f"<br><span style='color:#8b949e;font-size:11px;font-family:monospace;'>&nbsp;&nbsp;Reason: {err_text}</span>"
             lines_fmt.append(
                 f"<span style='color:{color};'>{icon} {r['tool']}</span>"
                 f"<span style='color:#8b949e;font-size:11px;'> {r.get('reason','')}</span>"
                 f"{err_hint}<br>"
             )
 
-        # 依赖检查
-        lines_fmt.append("<br><b style='color:#58a6ff;'>📦 依赖检查</b><br>")
+        # Dependency check
+        lines_fmt.append("<br><b style='color:#58a6ff;'>📦 Dependency Check</b><br>")
         for tool_name, dep in dep_results.items():
             if dep["ok"]:
                 lines_fmt.append(
                     f"✅ <span style='color:#3fb950;'>{tool_name}</span>"
-                    f"<span style='color:#8b949e;font-size:11px;'>  依赖已安装</span><br>"
+                    f"<span style='color:#8b949e;font-size:11px;'>  deps installed</span><br>"
                 )
             else:
                 cmds = " && ".join(dep["install"])
                 lines_fmt.append(
                     f"⚠️ <span style='color:#d29922;'>{tool_name}</span>"
                     f"<span style='color:#8b949e;font-size:11px;'>"
-                    f"  缺少: {', '.join(dep['missing'])}</span><br>"
+                    f"  missing: {', '.join(dep['missing'])}</span><br>"
                     f"<span style='color:#8b949e;font-size:11px;font-family:monospace;'>"
-                    f"  安装: {cmds}</span><br>"
+                    f"  install: {cmds}</span><br>"
                 )
 
         if all_missing_cmds:
             lines_fmt.append(
-                "<br><span style='color:#d29922;'>⚠️ 有缺失依赖，"
-                "点击右上角「安装缺失依赖」按钮一键安装</span><br>"
+                "<br><span style='color:#d29922;'>⚠️ Missing dependencies, "
+                "click top-right \"Install Missing Deps\" button for one-click install</span><br>"
             )
 
         lines_fmt.append("</div>")
@@ -2898,10 +2890,10 @@ class ToolTestPage(QWidget):
         )
         self._result_tabs.setCurrentIndex(0)
 
-        # 如果有缺失依赖，显示安装按钮
+        # If missing deps, show install button
         if all_missing_cmds:
             self._btn_install = QPushButton(
-                f"📦  安装缺失依赖 ({len(all_missing_cmds)} 条命令)"
+                f"📦  Install Missing Deps ({len(all_missing_cmds)} commands)"
             )
             self._btn_install.setFixedHeight(36)
             self._btn_install.setStyleSheet(
@@ -2912,24 +2904,24 @@ class ToolTestPage(QWidget):
             self._btn_install.clicked.connect(
                 lambda: self._install_deps(all_missing_cmds)
             )
-            # 插入到结果 tab 上方
+            # Insert above result tab
             parent_lay = self._result_tabs.parent().layout()
             if parent_lay:
                 idx = parent_lay.indexOf(self._result_tabs)
                 parent_lay.insertWidget(idx, self._btn_install)
 
-        status = f"{'✅' if fail_n==0 else '⚠️'} 自检完成 ({pass_n}通过/{fail_n}失败/{skip_n}跳过)"
+        status = f"{'✅' if fail_n==0 else '⚠️'} Self-test complete ({pass_n} passed/{fail_n} failed/{skip_n} skipped)"
         self._result_status.setText(status)
         self._result_status.setStyleSheet(
             f"color:{'#3fb950' if fail_n==0 else '#d29922'};font-size:12px;"
         )
 
     def _install_deps(self, cmds: list):
-        """在终端执行安装命令"""
+        """Execute install commands in terminal"""
         import subprocess
         from engine.tools import execute_tool
 
-        self._btn_install.setText("⏳ 安装中…")
+        self._btn_install.setText("⏳ Installing…")
         self._btn_install.setEnabled(False)
         QApplication.processEvents()
 
@@ -2945,23 +2937,23 @@ class ToolTestPage(QWidget):
         )
         QMessageBox.information(
             self,
-            "安装完成" if all_ok else "部分安装失败",
-            f"{'✅ 全部安装成功！' if all_ok else '⚠️ 部分失败，请手动检查'}\n\n{msg[:1000]}"
+            "Install Complete" if all_ok else "Partial Install Failed",
+            f"{'✅ All installed successfully!' if all_ok else '⚠️ Partial failure, please check manually'}\n\n{msg[:1000]}"
         )
 
         if all_ok:
-            self._btn_install.setText("✅ 已安装")
+            self._btn_install.setText("✅ Installed")
         else:
-            self._btn_install.setText("⚠️ 部分失败，点击重试")
+            self._btn_install.setText("⚠️ Partially failed, click to retry")
             self._btn_install.setEnabled(True)
 
-        # 重新自检
+        # Re-run self-test
         self.run_self_test()
 
 
-# ── 编程智能体页 ─────────────────────────────────
+# -- Coder Page --
 class CoderWorker(QThread):
-    """后台运行编程智能体，实时推送日志"""
+    """Run coding agent in background, push logs in real-time"""
     log     = pyqtSignal(str, str)    # (message, level)
     done    = pyqtSignal(object)      # CodingSession
     error   = pyqtSignal(str)
@@ -2994,8 +2986,8 @@ class CoderWorker(QThread):
 
 class CoderPage(QWidget):
     """
-    自主编程智能体界面
-    输入任务 → 实时看日志 → 自动打包保存
+    Autonomous Coding Agent Interface
+    Input task -> real-time log -> auto package save
     """
 
     LOG_COLORS = {
@@ -3022,11 +3014,11 @@ class CoderPage(QWidget):
 
     def set_llm(self, llm_client):
         self._agent_llm = llm_client
-        # 根据 provider 填充模型下拉框
+        # Populate model combo based on provider
         self._populate_model_combo(llm_client)
 
     def _populate_model_combo(self, llm_client):
-        """根据 LLM 类型填充可用的编程模型"""
+        """Populate available coding models based on LLM type"""
         self._model_combo.clear()
         provider = ""
         try:
@@ -3055,7 +3047,7 @@ class CoderPage(QWidget):
             for model_id, model_desc in models:
                 self._model_combo.addItem(f"{model_id}  {model_desc}", model_id)
 
-        # 默认选中"强推理"模型（第二个选项）
+        # Default to "strong reasoning" model (second option)
         if self._model_combo.count() >= 2:
             self._model_combo.setCurrentIndex(1)
 
@@ -3064,7 +3056,7 @@ class CoderPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── 顶部工具栏 ──────────────────────────
+        # -- Top toolbar --
         toolbar = QWidget()
         toolbar.setFixedHeight(56)
         toolbar.setStyleSheet(
@@ -3073,7 +3065,7 @@ class CoderPage(QWidget):
         tb_lay = QHBoxLayout(toolbar)
         tb_lay.setContentsMargins(16, 8, 16, 8)
 
-        title = QLabel("💻  编程智能体")
+        title = QLabel("💻  Coding Agent")
         title.setStyleSheet(
             "color:#58a6ff;font-size:14px;font-weight:700;"
         )
@@ -3091,10 +3083,10 @@ class CoderPage(QWidget):
             "selection-background-color:#1f6feb;}"
         )
 
-        save_lbl = QLabel("保存到:")
+        save_lbl = QLabel("Save to:")
         save_lbl.setStyleSheet("color:#8b949e;font-size:12px;")
         self._save_path = QLineEdit()
-        self._save_path.setPlaceholderText("默认保存到桌面")
+        self._save_path.setPlaceholderText("Default save to Desktop")
         self._save_path.setFixedWidth(200)
         self._save_path.setStyleSheet(
             "QLineEdit{background:#21262d;border:1px solid #30363d;"
@@ -3111,14 +3103,14 @@ class CoderPage(QWidget):
 
         tb_lay.addWidget(title)
         tb_lay.addStretch()
-        tb_lay.addWidget(_make_label("语言:", "color:#8b949e;font-size:12px;"))
+        tb_lay.addWidget(_make_label("Language:", "color:#8b949e;font-size:12px;"))
         tb_lay.addWidget(self._lang_combo)
         tb_lay.addSpacing(12)
-        tb_lay.addWidget(_make_label("模型:", "color:#8b949e;font-size:12px;"))
+        tb_lay.addWidget(_make_label("Model:", "color:#8b949e;font-size:12px;"))
         self._model_combo = QComboBox()
         self._model_combo.setEditable(True)
         self._model_combo.setFixedWidth(180)
-        self._model_combo.setPlaceholderText("使用默认模型")
+        self._model_combo.setPlaceholderText("Use default model")
         self._model_combo.setStyleSheet(
             "QComboBox{background:#21262d;border:1px solid #30363d;"
             "border-radius:5px;padding:4px 8px;color:#e6edf3;font-size:12px;}"
@@ -3131,7 +3123,7 @@ class CoderPage(QWidget):
         tb_lay.addWidget(self._save_path)
         tb_lay.addWidget(btn_browse)
 
-        # ── 任务输入区 ─────────────────────────
+        # -- Task input area --
         task_widget = QWidget()
         task_widget.setStyleSheet("background:#0d1117;")
         task_lay = QVBoxLayout(task_widget)
@@ -3139,12 +3131,12 @@ class CoderPage(QWidget):
         task_lay.setSpacing(8)
 
         task_header = QHBoxLayout()
-        task_lbl = QLabel("📋  任务描述")
+        task_lbl = QLabel("📋  Task Description")
         task_lbl.setStyleSheet(
             "color:#e6edf3;font-size:13px;font-weight:600;"
         )
 
-        self._btn_run = QPushButton("▶  开始编程")
+        self._btn_run = QPushButton("▶  Start Coding")
         self._btn_run.setFixedSize(120, 34)
         self._btn_run.setStyleSheet(
             "QPushButton{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
@@ -3155,7 +3147,7 @@ class CoderPage(QWidget):
         )
         self._btn_run.clicked.connect(self._start)
 
-        self._btn_stop = QPushButton("⏹  停止")
+        self._btn_stop = QPushButton("⏹  Stop")
         self._btn_stop.setFixedSize(80, 34)
         self._btn_stop.setEnabled(False)
         self._btn_stop.setStyleSheet(
@@ -3174,7 +3166,7 @@ class CoderPage(QWidget):
         self._task_input = QLineEdit()
         self._task_input.setMinimumHeight(36)
         self._task_input.setPlaceholderText(
-            "例：写一个贪吃蛇游戏  /  写一个计算器  /  写一个文件批量重命名工具"
+            "Example: Write a Snake game / Write a calculator / Write a batch file rename tool"
         )
         self._task_input.setStyleSheet(
             "QLineEdit{background:#21262d;border:1px solid #30363d;"
@@ -3186,11 +3178,11 @@ class CoderPage(QWidget):
         task_lay.addLayout(task_header)
         task_lay.addWidget(self._task_input)
 
-        # 参考代码/上下文输入
+        # Reference code/context input
         ctx_header = QHBoxLayout()
-        ctx_lbl = QLabel("📎  参考代码 / 表格数据（可选）")
+        ctx_lbl = QLabel("📎  Reference Code / Table Data (optional)")
         ctx_lbl.setStyleSheet("color:#8b949e;font-size:11px;")
-        self._ctx_toggle = QPushButton("展开")
+        self._ctx_toggle = QPushButton("Expand")
         self._ctx_toggle.setFixedSize(40, 20)
         self._ctx_toggle.setStyleSheet(
             "QPushButton{background:transparent;border:1px solid #30363d;"
@@ -3199,7 +3191,7 @@ class CoderPage(QWidget):
         )
         self._ctx_toggle.clicked.connect(self._toggle_context)
 
-        self._btn_upload_table = QPushButton("📤 上传表格")
+        self._btn_upload_table = QPushButton("📤 Upload Table")
         self._btn_upload_table.setFixedSize(70, 20)
         self._btn_upload_table.setStyleSheet(
             "QPushButton{background:transparent;border:1px solid #30363d;"
@@ -3215,8 +3207,8 @@ class CoderPage(QWidget):
 
         self._context_input = QTextEdit()
         self._context_input.setPlaceholderText(
-            "粘贴参考代码或文件内容，AI 生成时会参考这些上下文…\n"
-            "例如：已有的项目代码、API 文档、数据结构等"
+            "Paste reference code or file content, AI will use this as context…\n"
+            "Examples: existing project code, API docs, data structures, etc."
         )
         self._context_input.setMaximumHeight(0)
         self._context_input.setStyleSheet(
@@ -3230,13 +3222,13 @@ class CoderPage(QWidget):
         task_lay.addLayout(ctx_header)
         task_lay.addWidget(self._context_input)
 
-        # ── 主体：日志 + 代码预览 ─────────────
+        # -- Main: Log + Code Preview --
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet(
             "QSplitter::handle{background:#30363d;width:1px;}"
         )
 
-        # 左：执行日志
+        # Left: execution log
         log_widget = QWidget()
         log_widget.setStyleSheet("background:#0d1117;")
         log_lay = QVBoxLayout(log_widget)
@@ -3244,9 +3236,9 @@ class CoderPage(QWidget):
         log_lay.setSpacing(6)
 
         log_header = QHBoxLayout()
-        log_header.addWidget(_make_label("执行日志", "color:#e6edf3;font-size:13px;font-weight:600;"))
+        log_header.addWidget(_make_label("Execution Log", "color:#e6edf3;font-size:13px;font-weight:600;"))
         log_header.addStretch()
-        btn_clear_log = QPushButton("清空")
+        btn_clear_log = QPushButton("Clear")
         btn_clear_log.setFixedHeight(24)
         btn_clear_log.setStyleSheet(
             "QPushButton{background:transparent;border:none;"
@@ -3265,8 +3257,8 @@ class CoderPage(QWidget):
             "padding:8px;}"
         )
 
-        # 状态栏
-        self._status_lbl = QLabel("就绪")
+        # Status bar
+        self._status_lbl = QLabel("Ready")
         self._status_lbl.setStyleSheet(
             "color:#8b949e;font-size:11px;padding-top:4px;"
         )
@@ -3275,7 +3267,7 @@ class CoderPage(QWidget):
         log_lay.addWidget(self._log_view)
         log_lay.addWidget(self._status_lbl)
 
-        # 右：代码预览 + 操作
+        # Right: code preview + actions
         code_widget = QWidget()
         code_widget.setStyleSheet("background:#0d1117;")
         code_lay = QVBoxLayout(code_widget)
@@ -3283,7 +3275,7 @@ class CoderPage(QWidget):
         code_lay.setSpacing(6)
 
         code_header = QHBoxLayout()
-        code_header.addWidget(_make_label("代码预览", "color:#e6edf3;font-size:13px;font-weight:600;"))
+        code_header.addWidget(_make_label("Code Preview", "color:#e6edf3;font-size:13px;font-weight:600;"))
         code_header.addStretch()
 
         self._file_combo = QComboBox()
@@ -3306,9 +3298,9 @@ class CoderPage(QWidget):
             "padding:10px;}"
         )
 
-        # 操作按钮行
+        # Action button row
         action_row = QHBoxLayout()
-        self._btn_open_folder = QPushButton("📂  打开输出目录")
+        self._btn_open_folder = QPushButton("📂  Open Output Directory")
         self._btn_open_folder.setEnabled(False)
         self._btn_open_folder.setFixedHeight(34)
         self._btn_open_folder.setStyleSheet(
@@ -3319,7 +3311,7 @@ class CoderPage(QWidget):
         )
         self._btn_open_folder.clicked.connect(self._open_output)
 
-        self._btn_run_preview = QPushButton("▶  直接运行")
+        self._btn_run_preview = QPushButton("▶  Run Directly")
         self._btn_run_preview.setEnabled(False)
         self._btn_run_preview.setFixedHeight(34)
         self._btn_run_preview.setStyleSheet(
@@ -3347,21 +3339,21 @@ class CoderPage(QWidget):
         splitter.addWidget(code_widget)
         splitter.setSizes([480, 520])
 
-        # 预设任务快捷按钮
+        # Preset task quick buttons
         preset_bar = QWidget()
         preset_bar.setStyleSheet(
             "background:#161b22;border-top:1px solid #30363d;"
         )
         preset_lay = QHBoxLayout(preset_bar)
         preset_lay.setContentsMargins(16, 6, 16, 6)
-        preset_lay.addWidget(_make_label("快速任务：", "color:#8b949e;font-size:11px;"))
+        preset_lay.addWidget(_make_label("Quick Tasks:", "color:#8b949e;font-size:11px;"))
         presets = [
-            ("🐍 贪吃蛇",       "python", "写一个贪吃蛇游戏，用tkinter实现，有分数显示"),
-            ("🧮 计算器",       "python", "写一个图形界面计算器，支持加减乘除和括号"),
-            ("📝 记事本",       "python", "写一个简单记事本应用，可以打开保存文件"),
-            ("⏰ 番茄钟",       "python", "写一个番茄工作法计时器，25分钟工作5分钟休息"),
-            ("🎮 扫雷",         "python", "写一个扫雷游戏，10x10方格，随机30个地雷"),
-            ("📊 表格转网页",   "html",   "把参考代码中的表格数据做成一个精美的HTML数据看板网页，使用Chart.js绘制图表，包含数据表格、筛选排序功能，风格现代简洁，支持响应式布局"),
+            ("🐍 Snake Game",   "python", "Write a Snake game with tkinter, with score display"),
+            ("🧮 Calculator",   "python", "Write a GUI calculator supporting +,-,*,/ and parentheses"),
+            ("📝 Notepad",      "python", "Write a simple notepad app that can open and save files"),
+            ("⏰ Pomodoro",      "python", "Write a Pomodoro timer, 25min work 5min break"),
+            ("🎮 Minesweeper",    "python", "Write a minesweeper game, 10x10 grid, 30 random mines"),
+            ("📊 Table to Web", "html",   "Convert table data from reference code into a beautiful HTML dashboard with Chart.js, data tables, filtering, sorting, modern responsive layout"),
         ]
         for label, lang, task in presets:
             btn = QPushButton(label)
@@ -3377,21 +3369,21 @@ class CoderPage(QWidget):
             preset_lay.addWidget(btn)
         preset_lay.addStretch()
 
-        # 电脑工具快捷按钮
+        # PC tool quick buttons
         tool_bar = QWidget()
         tool_bar.setStyleSheet(
             "background:#161b22;border-top:1px solid #30363d;"
         )
         tool_lay = QHBoxLayout(tool_bar)
         tool_lay.setContentsMargins(16, 6, 16, 6)
-        tool_lay.addWidget(_make_label("电脑工具：", "color:#8b949e;font-size:11px;"))
+        tool_lay.addWidget(_make_label("PC Tools:", "color:#8b949e;font-size:11px;"))
         tool_presets = [
-            ("💻 电脑信息",     "bat", "写一个Windows批处理脚本，用systeminfo、wmic等命令查看并显示CPU型号、内存大小、磁盘使用量、操作系统版本"),
-            ("🌐 网络检测",     "bat", "写一个Windows批处理脚本，用ipconfig查看IP，ping测试百度和淘宝的连通性，netstat显示网络连接"),
-            ("🧹 清理临时文件", "bat", "写一个Windows批处理脚本，显示当前临时文件夹大小，用户按任意键后清理%%TEMP%%目录下的临时文件"),
-            ("📋 进程管理",     "bat", "写一个Windows批处理脚本，用tasklist列出所有进程并按内存排序显示前20个，支持输入进程名来结束进程"),
-            ("📁 批量重命名",   "bat", "写一个Windows批处理脚本，对指定文件夹下的文件批量重命名，支持添加前缀、序号编号、修改扩展名"),
-            ("🔒 文件加解密",   "python", "写一个文件加密解密工具，用AES加密指定文件，输入密码即可加密或解密"),
+            ("💻 PC Info",       "bat", "Write a Windows batch script using systeminfo, wmic to show CPU model, memory size, disk usage, OS version"),
+            ("🌐 Network Test",  "bat", "Write a Windows batch script: ipconfig for IP, ping to test connectivity, netstat for connections"),
+            ("🧹 Clean Temp",    "bat", "Write a Windows batch script: show temp folder size, clean %%TEMP%% on keypress"),
+            ("📋 Process Mgr",   "bat", "Write a Windows batch script: tasklist top 20 by memory, support killing by name"),
+            ("📁 Batch Rename",  "bat", "Write a Windows batch script: batch rename files with prefix, numbering, extension change"),
+            ("🔒 File Encrypt",  "python", "Write a file encryption tool with AES, encrypt/decrypt with password"),
         ]
         for label, lang, task in tool_presets:
             btn = QPushButton(label)
@@ -3407,34 +3399,34 @@ class CoderPage(QWidget):
             tool_lay.addWidget(btn)
         tool_lay.addStretch()
 
-        # 组装
+        # Assemble
         layout.addWidget(toolbar)
         layout.addWidget(task_widget)
         layout.addWidget(splitter, stretch=1)
         layout.addWidget(preset_bar)
         layout.addWidget(tool_bar)
 
-        # 内部状态
+        # Internal state
         self._current_session = None
         self._output_path = ""
         self._current_files = {}
 
-    # ── 操作方法 ────────────────────────────────
+    # ---- Methods ----
     def _toggle_context(self):
         self._ctx_visible = not self._ctx_visible
         if self._ctx_visible:
             self._context_input.setMaximumHeight(150)
-            self._ctx_toggle.setText("收起")
+            self._ctx_toggle.setText("Collapse")
         else:
             self._context_input.setMaximumHeight(0)
-            self._ctx_toggle.setText("展开")
+            self._ctx_toggle.setText("Expand")
 
     def _upload_table(self):
-        """上传表格文件，解析后填入参考代码框"""
+        """Upload table file, parse and fill into reference code area"""
         from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择表格文件",
-            "", "表格文件 (*.csv *.xlsx *.xls *.tsv);;所有文件 (*)"
+            self, "Select Table File",
+            "", "Table Files (*.csv *.xlsx *.xls *.tsv);;All Files (*)"
         )
         if not path:
             return
@@ -3443,29 +3435,29 @@ class CoderPage(QWidget):
             from engine.coder import parse_table_file
             result = parse_table_file(path)
             if not result.get("ok"):
-                self._log_msg(f"❌ 表格解析失败：{result.get('error', '未知错误')}", "error")
+                self._log_msg(f"❌ Table parse failed: {result.get('error', 'Unknown error')}", "error")
                 return
 
             headers = result["headers"]
             col_types = result["col_types"]
             total = result["total_rows"]
 
-            # 自动展开参考代码框
+            # Auto-expand reference code area
             if not self._ctx_visible:
                 self._toggle_context()
 
-            # 填入 markdown 表格
+            # Fill markdown table
             self._context_input.setPlainText(result["context_text"])
 
             self._log_msg(
-                f"✅ 表格加载成功：{Path(path).name}\n"
-                f"   {len(headers)} 列 × {total} 行 | "
+                f"✅ Table loaded successfully: {Path(path).name}\n"
+                f"   {len(headers)} cols × {total} rows | "
                 + " | ".join(f"{h}({t})" for h, t in zip(headers, col_types)),
                 "info"
             )
 
         except Exception as e:
-            self._log_msg(f"❌ 表格加载失败：{e}", "error")
+            self._log_msg(f"❌ Table load failed: {e}", "error")
 
     def _set_preset(self, lang: str, task: str):
         idx = self._lang_combo.findText(lang)
@@ -3476,7 +3468,7 @@ class CoderPage(QWidget):
 
     def _browse_save(self):
         from PyQt6.QtWidgets import QFileDialog
-        d = QFileDialog.getExistingDirectory(self, "选择保存目录")
+        d = QFileDialog.getExistingDirectory(self, "Select Save Directory")
         if d:
             self._save_path.setText(d)
 
@@ -3486,7 +3478,7 @@ class CoderPage(QWidget):
             self._task_input.setFocus()
             return
         if not self._agent_llm:
-            self._log_msg("❌ LLM 未初始化，请先配置 API Key 或 Ollama", "error")
+            self._log_msg("❌ LLM not initialized, please configure API Key or Ollama first", "error")
             return
         if self._worker and self._worker.isRunning():
             return
@@ -3503,7 +3495,7 @@ class CoderPage(QWidget):
         self._btn_open_folder.setEnabled(False)
         self._btn_run_preview.setEnabled(False)
         self._iter_lbl.setText("")
-        self._status_lbl.setText("🔄 运行中…")
+        self._status_lbl.setText("🔄 Running…")
 
         self._worker = CoderWorker(
             self._agent_llm, task, lang, save_to,
@@ -3518,14 +3510,14 @@ class CoderPage(QWidget):
     def _stop(self):
         if self._worker and self._worker.isRunning():
             self._worker.terminate()
-            self._log_msg("⏹  已中止", "warn")
+            self._log_msg("⏹  Stopped", "warn")
             self._reset_buttons()
 
     def _log_msg(self, msg: str, level: str = "info"):
         color = self.LOG_COLORS.get(level, "#e6edf3")
         timestamp = datetime.now().strftime("%H:%M:%S")
 
-        # 代码块特殊处理
+        # Special handling for code blocks
         if level in ("stdout", "stderr") and "\n" in msg:
             bg = "#1c1c1c" if level == "stderr" else "#0d1117"
             html = (
@@ -3553,14 +3545,14 @@ class CoderPage(QWidget):
 
         iters = len(session.iterations)
         status_text = (
-            f"✅ 完成！共 {iters} 轮迭代"
+            f"✅ Complete! {iters} iterations"
             if session.status == "passed"
-            else f"⚠️ 达到最大迭代（{iters}轮），使用最后版本"
+            else f"⚠️ Max iterations reached ({iters} rounds), using last version"
         )
         self._status_lbl.setText(status_text)
-        self._iter_lbl.setText(f"{iters} 轮迭代")
+        self._iter_lbl.setText(f"{iters} iterations")
 
-        # 填入代码预览
+        # Fill code preview
         self._current_files = {
             k: v for k, v in session.final_code.items()
             if not k.startswith("__")
@@ -3576,15 +3568,15 @@ class CoderPage(QWidget):
         self._btn_run_preview.setEnabled(bool(self._current_files))
         self._reset_buttons()
 
-        # 成功提示
+        # Success hint
         if session.status == "passed" and self._output_path:
             self._log_msg(
-                f"📦 项目已打包：{self._output_path}", "done"
+                f"📦 Project packaged: {self._output_path}", "done"
             )
 
     def _on_error(self, err: str):
-        self._log_msg(f"❌ 智能体异常：{err[:200]}", "error")
-        self._status_lbl.setText("❌ 发生错误")
+        self._log_msg(f"❌ Agent exception: {err[:200]}", "error")
+        self._status_lbl.setText("❌ Error occurred")
         self._reset_buttons()
 
     def _reset_buttons(self):
@@ -3609,7 +3601,7 @@ class CoderPage(QWidget):
             subprocess.Popen(["xdg-open", target])
 
     def _run_preview(self):
-        """直接运行当前代码（不打包，快速预览）"""
+        """Run current code directly (no packaging, quick preview)"""
         if not self._current_files:
             return
         import tempfile, subprocess
@@ -3619,7 +3611,7 @@ class CoderPage(QWidget):
         main_file = list(self._current_files.keys())[0]
         lang = self._lang_combo.currentText()
 
-        self._log_msg(f"▶️  直接运行 {main_file}…", "run")
+        self._log_msg(f"▶️  Running {main_file} directly…", "run")
         if lang == "python":
             subprocess.Popen(["python", main_file], cwd=tmp)
         elif lang == "javascript":
@@ -3629,9 +3621,9 @@ class CoderPage(QWidget):
             webbrowser.open(str(Path(tmp) / main_file))
 
 
-# ── 人脸识别页 ────────────────────────────────────
+# ---- Face Recognition Page ----
 class FaceWorker(QThread):
-    """后台执行人脸操作（注册/识别），避免卡界面"""
+    """Run face operations in background (register/identify) to avoid UI freeze"""
     result = pyqtSignal(dict)
     error  = pyqtSignal(str)
 
@@ -3640,7 +3632,7 @@ class FaceWorker(QThread):
         super().__init__()
         self.task       = task        # "register" | "identify" | "capture"
         self.db_file    = db_file
-        self.image_data = image_data  # numpy RGB 数组
+        self.image_data = image_data  # numpy RGB array
         self.user_id    = user_id
         self.label      = label
 
@@ -3653,13 +3645,13 @@ class FaceWorker(QThread):
                 cam = CameraThread()
                 frame = cam.get_frame_rgb()
                 if frame is None:
-                    self.error.emit("无法打开摄像头。请检查：1) 摄像头未被其他程序占用 2) 已授予摄像头权限 3) 重启应用后重试")
+                    self.error.emit("Cannot open camera. Please check: 1) Camera not in use by other apps 2) Camera permission granted 3) Restart app and retry")
                     return
                 self.result.emit({"ok": True, "frame": frame})
 
             elif self.task == "register":
                 if self.image_data is None:
-                    self.error.emit("没有图片数据")
+                    self.error.emit("No image data")
                     return
                 res = db.register(self.user_id, self.image_data,
                                   label=self.label)
@@ -3667,7 +3659,7 @@ class FaceWorker(QThread):
 
             elif self.task == "identify":
                 if self.image_data is None:
-                    self.error.emit("没有图片数据")
+                    self.error.emit("No image data")
                     return
                 res = db.identify(self.image_data)
                 self.result.emit(res)
@@ -3683,24 +3675,24 @@ class FaceWorker(QThread):
 
 class UserProfilePage(QWidget):
     """
-    用户画像页
-    - 显示已确认 / 初步观察的性格特征及置信度
-    - 反常行为记录
-    - 刷新按钮（画像由后台随对话自动更新）
+    User Profile Page
+    - Show confirmed / emerging personality traits with confidence
+    - Anomaly behavior records
+    - Refresh button (profile auto-updates in background during chat)
     """
 
     def __init__(self, db_file: str, auth_ref=None, parent=None):
         super().__init__(parent)
         self.db_file = db_file
-        self._auth_ref = auth_ref   # callable，返回 AuthManager 或 None
-        self._mgr    = None   # UserProfileManager，延迟初始化
+        self._auth_ref = auth_ref   # callable, returns AuthManager or None
+        self._mgr    = None   # UserProfileManager, lazy init
         self._setup_ui()
 
     def _get_mgr(self):
         if self._mgr is None:
             from engine.user_profile import UserProfileManager
             self._mgr = UserProfileManager(self.db_file)
-        # 动态同步 user_id 与当前认证状态（Agent 写入时也用同样的逻辑）
+        # Dynamic sync user_id with current auth state (Agent writes with same logic)
         if self._auth_ref:
             auth = self._auth_ref()
             if auth and auth.is_verified():
@@ -3715,17 +3707,17 @@ class UserProfilePage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 顶部栏
+        # Top bar
         header = QWidget()
         header.setFixedHeight(48)
         header.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(16, 0, 16, 0)
-        title = QLabel("👤  用户画像")
+        title = QLabel("👤  User Profile")
         title.setStyleSheet("color:#e6edf3;font-size:15px;font-weight:700;")
         self._stats_lbl = QLabel("")
         self._stats_lbl.setStyleSheet("color:#8b949e;font-size:12px;")
-        btn_refresh = QPushButton("🔄  刷新")
+        btn_refresh = QPushButton("🔄  Refresh")
         btn_refresh.setFixedHeight(30)
         btn_refresh.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -3740,18 +3732,18 @@ class UserProfilePage(QWidget):
         h_lay.addWidget(btn_refresh)
         layout.addWidget(header)
 
-        # 主体：左侧特征列表 + 右侧详情
+        # Main: left trait list + right details
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet("QSplitter::handle{background:#30363d;width:1px;}")
 
-        # ── 左栏：分类导航 ──
+        # -- Left: category nav --
         left = QWidget()
         left.setFixedWidth(180)
         left.setStyleSheet("background:#161b22;border-right:1px solid #30363d;")
         ll = QVBoxLayout(left)
         ll.setContentsMargins(0, 8, 0, 0)
         ll.setSpacing(0)
-        cat_label = QLabel("  分类")
+        cat_label = QLabel("  Categories")
         cat_label.setStyleSheet(
             "color:#8b949e;font-size:11px;font-weight:600;"
             "text-transform:uppercase;letter-spacing:1px;padding:4px 0;"
@@ -3770,15 +3762,15 @@ class UserProfilePage(QWidget):
         ll.addStretch()
         splitter.addWidget(left)
 
-        # ── 右栏：特征卡片区 ──
+        # -- Right: trait cards area --
         right = QWidget()
         right.setStyleSheet("background:#0d1117;")
         rl = QVBoxLayout(right)
         rl.setContentsMargins(20, 16, 20, 16)
         rl.setSpacing(12)
 
-        # 已确认区
-        confirmed_title = QLabel("✅  已确认特征")
+        # Confirmed zone
+        confirmed_title = QLabel("✅  Confirmed Traits")
         confirmed_title.setStyleSheet(
             "color:#3fb950;font-size:13px;font-weight:700;"
         )
@@ -3790,8 +3782,8 @@ class UserProfilePage(QWidget):
         self._confirmed_layout.setSpacing(6)
         rl.addWidget(self._confirmed_area)
 
-        # 初步观察区
-        emerging_title = QLabel("🔍  初步观察（待确认）")
+        # Emerging zone
+        emerging_title = QLabel("🔍  Emerging (Pending)")
         emerging_title.setStyleSheet(
             "color:#d29922;font-size:13px;font-weight:700;margin-top:8px;"
         )
@@ -3803,8 +3795,8 @@ class UserProfilePage(QWidget):
         self._emerging_layout.setSpacing(6)
         rl.addWidget(self._emerging_area)
 
-        # 反常记录区
-        anomaly_title = QLabel("⚠️  近期反常行为")
+        # Anomaly zone
+        anomaly_title = QLabel("⚠️  Recent Anomalies")
         anomaly_title.setStyleSheet(
             "color:#f85149;font-size:13px;font-weight:700;margin-top:8px;"
         )
@@ -3839,7 +3831,7 @@ class UserProfilePage(QWidget):
                 item.widget().deleteLater()
 
     def _make_trait_card(self, trait, confirmed: bool) -> QWidget:
-        """创建单个特征卡片（含进度条）"""
+        """Create single trait card (with progress bar)"""
 
         card = QWidget()
         card.setStyleSheet(
@@ -3850,7 +3842,7 @@ class UserProfilePage(QWidget):
         cl.setContentsMargins(12, 10, 12, 10)
         cl.setSpacing(6)
 
-        # 顶行：名称 + 观察次数
+        # Top row: name + observation count
         top = QHBoxLayout()
         name_lbl = QLabel(trait.name)
         name_lbl.setStyleSheet(
@@ -3862,7 +3854,7 @@ class UserProfilePage(QWidget):
             "color:#8b949e;font-size:11px;background:#21262d;"
             "border:1px solid #30363d;border-radius:4px;padding:1px 6px;"
         )
-        count_lbl = QLabel(f"观察 {trait.evidence_count} 次")
+        count_lbl = QLabel(f"Observed {trait.evidence_count} times")
         count_lbl.setStyleSheet(
             "color:#8b949e;font-size:11px;background:transparent;border:none;"
         )
@@ -3872,7 +3864,7 @@ class UserProfilePage(QWidget):
         top.addWidget(count_lbl)
         cl.addLayout(top)
 
-        # 置信度进度条
+        # Confidence progress bar
         bar = QProgressBar()
         bar.setRange(0, 100)
         bar.setValue(int(trait.confidence * 100))
@@ -3885,14 +3877,14 @@ class UserProfilePage(QWidget):
         )
         cl.addWidget(bar)
 
-        # 置信度数值 + 最近见到时间
+        # Confidence value + last seen time
         bottom = QHBoxLayout()
-        conf_lbl = QLabel(f"置信度 {trait.confidence:.0%}")
+        conf_lbl = QLabel(f"Confidence {trait.confidence:.0%}")
         conf_lbl.setStyleSheet(
             f"color:{color};font-size:11px;background:transparent;border:none;"
         )
         date_str = trait.last_seen[:10] if trait.last_seen else ""
-        date_lbl = QLabel(f"最近：{date_str}")
+        date_lbl = QLabel(f"Last: {date_str}")
         date_lbl.setStyleSheet(
             "color:#8b949e;font-size:11px;background:transparent;border:none;"
         )
@@ -3901,7 +3893,7 @@ class UserProfilePage(QWidget):
         bottom.addWidget(date_lbl)
         cl.addLayout(bottom)
 
-        # 例子（如果有）
+        # Examples (if any)
         if trait.examples:
             ex_lbl = QLabel(f"「{trait.examples[-1][:60]}」")
             ex_lbl.setStyleSheet(
@@ -3928,7 +3920,7 @@ class UserProfilePage(QWidget):
             "background:transparent;border:none;"
         )
         desc.setWordWrap(True)
-        normal = QLabel(f"正常模式：{anomaly.normal_pattern}")
+        normal = QLabel(f"Normal pattern: {anomaly.normal_pattern}")
         normal.setStyleSheet(
             "color:#8b949e;font-size:11px;background:transparent;border:none;"
         )
@@ -3942,7 +3934,7 @@ class UserProfilePage(QWidget):
         cl.addWidget(time_lbl)
         return card
 
-    # ── 数据加载 ────────────────────────────────
+    # ---- Data Loading ----
     def load(self):
         try:
             mgr = self._get_mgr()
@@ -3952,56 +3944,56 @@ class UserProfilePage(QWidget):
             confirmed = [t for t in traits if t.evidence_count >= mgr.CONFIRMED_THRESHOLD]
             emerging  = [t for t in traits if t.evidence_count <  mgr.CONFIRMED_THRESHOLD]
 
-            # 更新统计
+            # Update stats
             self._stats_lbl.setText(
-                f"已确认 {len(confirmed)} 项  ·  观察中 {len(emerging)} 项"
+                f"Confirmed {len(confirmed)}  ·  Observing {len(emerging)}"
             )
 
-            # 更新分类列表
+            # Update category list
             cats = sorted(set(t.category for t in traits))
             self._cat_list.clear()
-            self._cat_list.addItem("全部")
+            self._cat_list.addItem("All")
             for c in cats:
                 self._cat_list.addItem(c)
 
-            # 已确认区
+            # Confirmed zone
             self._clear_layout(self._confirmed_layout)
             if confirmed:
                 for t in confirmed:
                     self._confirmed_layout.addWidget(self._make_trait_card(t, True))
             else:
-                lbl = QLabel("暂无已确认特征，继续与 AGI 对话后会自动积累。")
+                lbl = QLabel("No confirmed traits yet. They will accumulate as you chat with AGI.")
                 lbl.setStyleSheet("color:#8b949e;font-size:12px;")
                 self._confirmed_layout.addWidget(lbl)
 
-            # 初步观察区
+            # Emerging zone
             self._clear_layout(self._emerging_layout)
             if emerging:
                 for t in emerging:
                     self._emerging_layout.addWidget(self._make_trait_card(t, False))
             else:
-                lbl = QLabel("暂无初步观察。")
+                lbl = QLabel("No emerging observations yet.")
                 lbl.setStyleSheet("color:#8b949e;font-size:12px;")
                 self._emerging_layout.addWidget(lbl)
 
-            # 反常记录区
+            # Anomaly zone
             self._clear_layout(self._anomaly_layout)
             if anomalies:
                 for a in anomalies:
                     self._anomaly_layout.addWidget(self._make_anomaly_card(a))
             else:
-                lbl = QLabel("暂无反常行为记录。")
+                lbl = QLabel("No anomaly records.")
                 lbl.setStyleSheet("color:#8b949e;font-size:12px;")
                 self._anomaly_layout.addWidget(lbl)
 
         except Exception as e:
-            pass  # 数据库未建立时静默忽略
+            pass  # Silently ignore when DB not yet created
 
     def _on_cat_changed(self, row):
         pass
 
     def _setup_guest_section(self, layout):
-        """访客记录区块（折叠式，加在页面底部）"""
+        """Guest record block (collapsible, at page bottom)"""
         self._guest_section = QWidget()
         self._guest_section.setStyleSheet("background:#0d1117;")
         gl = QVBoxLayout(self._guest_section)
@@ -4009,12 +4001,12 @@ class UserProfilePage(QWidget):
         gl.setSpacing(8)
 
         guest_header = QHBoxLayout()
-        self._guest_title = QLabel("🕵️  访客记录  ▶")
+        self._guest_title = QLabel("🕵️  Guest Records  ▶")
         self._guest_title.setStyleSheet(
             "color:#d29922;font-size:13px;font-weight:700;"
         )
         self._guest_title.mousePressEvent = lambda e: self._toggle_guest_panel()
-        btn_clear_guest = QPushButton("清空记录")
+        btn_clear_guest = QPushButton("Clear Records")
         btn_clear_guest.setFixedHeight(24)
         btn_clear_guest.setStyleSheet(
             "QPushButton{background:transparent;border:none;"
@@ -4049,7 +4041,7 @@ class UserProfilePage(QWidget):
         visible = self._guest_panel.isVisible()
         self._guest_panel.setVisible(not visible)
         self._guest_title.setText(
-            "🕵️  访客记录  ▼" if not visible else "🕵️  访客记录  ▶"
+            "🕵️  Guest Records  ▼" if not visible else "🕵️  Guest Records  ▶"
         )
         if not visible:
             self._load_guest_sessions()
@@ -4060,28 +4052,28 @@ class UserProfilePage(QWidget):
             auth     = AuthManager(self.db_file)
             sessions = auth.get_guest_sessions(limit=10)
             if not sessions:
-                self._guest_list.setPlainText("暂无访客记录")
+                self._guest_list.setPlainText("No guest records")
                 return
             lines = []
             for s in sessions:
                 time_str = s["started_at"][:16]
-                end_str  = s["ended_at"][:16] if s["ended_at"] else "进行中"
-                photo    = "📷 有照片" if s["has_photo"] else "无照片"
+                end_str  = s["ended_at"][:16] if s["ended_at"] else "Active"
+                photo    = "📷 Photo" if s["has_photo"] else "No photo"
                 lines.append(f"{'='*40}")
-                lines.append(f"🕐 {time_str} ~ {end_str}  {photo}  共{s['msg_count']}条对话")
+                lines.append(f"🕐 {time_str} ~ {end_str}  {photo}  {s['msg_count']} messages")
                 for msg in s["messages"][:5]:
-                    lines.append(f"  [{msg['time']}] 用户: {msg['user'][:50]}")
+                    lines.append(f"  [{msg['time']}] User: {msg['user'][:50]}")
                 if s["msg_count"] > 5:
-                    lines.append(f"  ... 还有 {s['msg_count']-5} 条")
+                    lines.append(f"  ... {s['msg_count']-5} more")
             self._guest_list.setPlainText("\n".join(lines))
         except Exception as e:
-            self._guest_list.setPlainText(f"加载失败: {e}")
+            self._guest_list.setPlainText(f"Load failed: {e}")
 
     def _clear_guest_sessions(self):
         try:
             from engine.auth import AuthManager
             AuthManager(self.db_file).clear_guest_sessions()
-            self._guest_list.setPlainText("已清空")
+            self._guest_list.setPlainText("Cleared")
         except Exception:
             pass
 
@@ -4089,10 +4081,10 @@ class UserProfilePage(QWidget):
 # ─────────────────────────────────────────────────────────────
 class MemoryGraphPage(QWidget):
     """
-    记忆关联网络可视化页
-    - 从 SQLite 读取 memories + memory_edges
-    - 生成 vis.js 网络图 HTML，写入临时文件
-    - 用 QTextBrowser 预览 SVG 摘要，提供「在浏览器中打开」按钮
+    Memory Graph Visualization Page
+    - Read memories + memory_edges from SQLite
+    - Generate vis.js graph HTML, write to temp file
+    - Preview SVG summary with QTextBrowser, provide "Open in Browser" button
     """
 
     def __init__(self, db_file: str, parent=None):
@@ -4106,18 +4098,18 @@ class MemoryGraphPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 顶部栏
+        # Top bar
         header = QWidget()
         header.setFixedHeight(48)
         header.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(16, 0, 16, 0)
-        title = QLabel("🕸️  记忆关联网络")
+        title = QLabel("🕸️  Memory Graph")
         title.setStyleSheet("color:#e6edf3;font-size:15px;font-weight:700;")
         self._stats_lbl = QLabel("")
         self._stats_lbl.setStyleSheet("color:#8b949e;font-size:12px;")
 
-        btn_refresh = QPushButton("🔄  刷新")
+        btn_refresh = QPushButton("🔄  Refresh")
         btn_refresh.setFixedHeight(30)
         btn_refresh.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -4126,7 +4118,7 @@ class MemoryGraphPage(QWidget):
         )
         btn_refresh.clicked.connect(self.load)
 
-        btn_open = QPushButton("🌐  在浏览器中打开")
+        btn_open = QPushButton("🌐  Open in Browser")
         btn_open.setFixedHeight(30)
         btn_open.setStyleSheet(
             "QPushButton{background:rgba(31,111,235,.15);border:1px solid #1f6feb;"
@@ -4144,7 +4136,7 @@ class MemoryGraphPage(QWidget):
         h_lay.addWidget(btn_open)
         layout.addWidget(header)
 
-        # 说明 + 节点类型图例
+        # Info + node type legend
         legend_bar = QWidget()
         legend_bar.setFixedHeight(36)
         legend_bar.setStyleSheet("background:#161b22;border-bottom:1px solid #21262d;")
@@ -4152,11 +4144,11 @@ class MemoryGraphPage(QWidget):
         leg_lay.setContentsMargins(16, 0, 16, 0)
         leg_lay.setSpacing(16)
         for color, label in [
-            ("#58a6ff", "语义"),
-            ("#3fb950", "情感"),
-            ("#d29922", "时序"),
-            ("#bc8cff", "空间"),
-            ("#f0883e", "人物"),
+            ("#58a6ff", "Semantic"),
+            ("#3fb950", "Emotion"),
+            ("#d29922", "Temporal"),
+            ("#bc8cff", "Spatial"),
+            ("#f0883e", "Person"),
         ]:
             dot = QLabel("●")
             dot.setStyleSheet(f"color:{color};font-size:14px;")
@@ -4165,12 +4157,12 @@ class MemoryGraphPage(QWidget):
             leg_lay.addWidget(dot)
             leg_lay.addWidget(lbl)
         leg_lay.addStretch()
-        lbl_hint = QLabel("点击「在浏览器中打开」可交互拖拽")
+        lbl_hint = QLabel("Click \"Open in Browser\" for interactive drag")
         lbl_hint.setStyleSheet("color:#6e7681;font-size:11px;font-style:italic;")
         leg_lay.addWidget(lbl_hint)
         layout.addWidget(legend_bar)
 
-        # 预览区（QTextBrowser 渲染 SVG 静态预览）
+        # Preview area (QTextBrowser renders SVG static preview)
         self._preview = QTextBrowser()
         self._preview.setStyleSheet(
             "QTextBrowser{background:#0d1117;border:none;}"
@@ -4178,7 +4170,7 @@ class MemoryGraphPage(QWidget):
         self._preview.setOpenLinks(False)
         layout.addWidget(self._preview)
 
-    # ── 数据 & 图生成 ────────────────────────────
+    # ---- Data & Graph Generation ----
     def load(self):
         try:
             from engine.db_guard import guarded_connect
@@ -4193,18 +4185,18 @@ class MemoryGraphPage(QWidget):
                 ).fetchall()
 
             node_ids = {r[0] for r in nodes_raw}
-            # 只保留两端都在节点集内的边
+            # Only keep edges with both ends in node set
             edges_raw = [e for e in edges_raw
                          if e[0] in node_ids and e[1] in node_ids]
 
             self._stats_lbl.setText(
-                f"节点 {len(nodes_raw)}  ·  边 {len(edges_raw)}"
+                f"Nodes {len(nodes_raw)}  ·  Edges {len(edges_raw)}"
             )
 
-            # 生成可交互 HTML（vis.js CDN）
+            # Generate interactive HTML (vis.js CDN)
             html = self._build_vis_html(nodes_raw, edges_raw)
 
-            # 写临时文件
+            # Write temp file
             import tempfile, os
             tmp = tempfile.NamedTemporaryFile(
                 delete=False, suffix=".html",
@@ -4214,12 +4206,12 @@ class MemoryGraphPage(QWidget):
             tmp.close()
             self._html_path = tmp.name
 
-            # 静态 SVG 预览（简单气泡图）
+            # Static SVG preview (simple bubble chart)
             svg = self._build_svg_preview(nodes_raw, edges_raw)
             self._preview.setHtml(
                 f"<body style='background:#0d1117;margin:0;'>{svg}"
                 f"<p style='color:#6e7681;font-size:11px;text-align:center;"
-                f"font-family:monospace;'>静态预览，点击顶部按钮在浏览器中查看可交互版本</p>"
+                f"font-family:monospace;'>Static preview, click top button to view interactive version in browser</p>"
                 f"</body>"
             )
 
@@ -4227,8 +4219,8 @@ class MemoryGraphPage(QWidget):
             self._preview.setHtml(
                 f"<body style='background:#0d1117;color:#f85149;padding:20px;"
                 f"font-family:monospace;'>"
-                f"<p>加载失败：{e}</p>"
-                f"<p style='color:#8b949e;'>请先进行一些对话，等记忆系统积累数据后再查看。</p>"
+                f"<p>Load failed: {e}</p>"
+                f"<p style='color:#8b949e;'>Please chat first, wait for memory system to accumulate data.</p>"
                 f"</body>"
             )
 
@@ -4262,15 +4254,15 @@ class MemoryGraphPage(QWidget):
             color = MODALITY_COLOR.get(modality, "#8b949e")
             size  = max(10, min(40, int(importance * 40)))
             label = content[:30].replace('"', "'") if content else nid[:8]
-            level_label = {"detail": "细节", "outline": "细纲", "summary": "大纲"}.get(level, level)
+            level_label = {"detail": "Detail", "outline": "Outline", "summary": "Summary"}.get(level, level)
             try:
                 emo = _json.loads(emotion_json or "{}")
                 emo_str = emo.get("primary", "")
             except Exception:
                 emo_str = ""
-            title = f"{label}\n模态:{modality}  层级:{level_label}  重要性:{importance:.2f}"
+            title = f"{label}\nModality:{modality}  Level:{level_label}  Importance:{importance:.2f}"
             if emo_str:
-                title += f"\n情绪:{emo_str}"
+                title += f"\nEmotion:{emo_str}"
             vis_nodes.append({
                 "id": nid, "label": label, "title": title,
                 "color": {"background": color, "border": color,
@@ -4286,7 +4278,7 @@ class MemoryGraphPage(QWidget):
                 "from": src, "to": tgt,
                 "width": max(1, strength * 4),
                 "color": {"color": color, "opacity": max(0.3, strength)},
-                "title": f"{atype}  强度:{strength:.2f}",
+                "title": f"{atype}  Strength:{strength:.2f}",
                 "arrows": {"to": {"enabled": True, "scaleFactor": 0.5}}
             })
 
@@ -4297,7 +4289,7 @@ class MemoryGraphPage(QWidget):
 <html>
 <head>
 <meta charset="utf-8">
-<title>AGI 记忆关联网络</title>
+<title>AGI Memory Graph</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css">
 <style>
@@ -4324,17 +4316,17 @@ class MemoryGraphPage(QWidget):
 <body>
 <div id="graph"></div>
 <div id="legend">
-  <h3>🕸️ 记忆关联网络</h3>
-  <div class="leg-item"><div class="leg-dot" style="background:#58a6ff"></div><span class="leg-label">语义</span></div>
-  <div class="leg-item"><div class="leg-dot" style="background:#3fb950"></div><span class="leg-label">情感</span></div>
-  <div class="leg-item"><div class="leg-dot" style="background:#d29922"></div><span class="leg-label">时序</span></div>
-  <div class="leg-item"><div class="leg-dot" style="background:#bc8cff"></div><span class="leg-label">空间</span></div>
-  <div class="leg-item"><div class="leg-dot" style="background:#f0883e"></div><span class="leg-label">人物</span></div>
-  <div class="leg-item"><div class="leg-dot" style="background:#ff7b72"></div><span class="leg-label">因果</span></div>
+  <h3>🕸️ Memory Graph</h3>
+  <div class="leg-item"><div class="leg-dot" style="background:#58a6ff"></div><span class="leg-label">Semantic</span></div>
+  <div class="leg-item"><div class="leg-dot" style="background:#3fb950"></div><span class="leg-label">Emotion</span></div>
+  <div class="leg-item"><div class="leg-dot" style="background:#d29922"></div><span class="leg-label">Temporal</span></div>
+  <div class="leg-item"><div class="leg-dot" style="background:#bc8cff"></div><span class="leg-label">Spatial</span></div>
+  <div class="leg-item"><div class="leg-dot" style="background:#f0883e"></div><span class="leg-label">Person</span></div>
+  <div class="leg-item"><div class="leg-dot" style="background:#ff7b72"></div><span class="leg-label">Causal</span></div>
   <hr style="border-color:#30363d;margin:8px 0;">
-  <div style="color:#6e7681;font-size:11px;">节点大小 = 重要性<br>边粗细 = 关联强度<br>拖拽可移动，滚轮缩放</div>
+  <div style="color:#6e7681;font-size:11px;">Node size = importance<br>Edge width = strength<br>Drag to move, scroll to zoom</div>
 </div>
-<div id="info">节点：{len(nodes_raw)}  边：{len(edges_raw)}</div>
+<div id="info">Nodes: {len(nodes_raw)}  Edges: {len(edges_raw)}</div>
 <script>
 var nodes = new vis.DataSet({nodes_json});
 var edges = new vis.DataSet({edges_json});
@@ -4361,7 +4353,7 @@ network.on('click', function(params) {{
 </html>"""
 
     def _build_svg_preview(self, nodes_raw, edges_raw) -> str:
-        """生成简洁的 SVG 静态气泡预览（不需要浏览器）"""
+        """Generate simple SVG static bubble preview (no browser needed)"""
         import math, json as _json, html as _html
 
         W, H = 800, 480
@@ -4369,7 +4361,7 @@ network.on('click', function(params) {{
         if n == 0:
             return (f'<svg width="{W}" height="200" xmlns="http://www.w3.org/2000/svg">'
                     f'<text x="50%" y="100" text-anchor="middle" fill="#8b949e" font-size="14">'
-                    f'暂无记忆数据</text></svg>')
+                    f'No memory data</text></svg>')
 
         MODALITY_COLOR = {
             "semantic":"#58a6ff","emotional":"#3fb950","temporal":"#d29922",
@@ -4377,7 +4369,7 @@ network.on('click', function(params) {{
             "auditory":"#56d364","autobio":"#ffa657","procedural":"#d2a8ff",
         }
 
-        # 圆形布局（最多60个节点预览）
+        # Circular layout (max 60 node preview)
         preview_nodes = nodes_raw[:60]
         positions = {}
         cx, cy, radius = W // 2, H // 2, min(W, H) // 2 - 50
@@ -4394,7 +4386,7 @@ network.on('click', function(params) {{
             f'style="background:#0d1117;border-radius:8px;">'
         ]
 
-        # 画边（最多100条）
+        # Draw edges (max 100)
         edge_set = {r[0] for r in preview_nodes}
         for r in edges_raw[:100]:
             src, tgt, atype, strength = r
@@ -4407,7 +4399,7 @@ network.on('click', function(params) {{
                     f'stroke="#30363d" stroke-width="1" opacity="{opacity:.2f}"/>'
                 )
 
-        # 画节点
+        # Draw nodes
         for r in preview_nodes:
             nid, content, modality, level, importance, _ = r
             x, y = positions[nid]
@@ -4437,19 +4429,19 @@ network.on('click', function(params) {{
 
 class FaceRecognitionPage(QWidget):
     """
-    人脸识别管理页
-    - 查看引擎状态和安装指引
-    - 注册用户人脸（摄像头拍照 / 导入图片）
-    - 实时识别测试
-    - 管理已注册用户
+    Face Recognition Management Page
+    - View engine status and installation guide
+    - Register user face (camera capture / import image)
+    - Real-time recognition test
+    - Manage registered users
     """
 
     def __init__(self, db_file: str, auth_ref=None, parent=None):
         super().__init__(parent)
         self.db_file     = db_file
-        self._auth_ref   = auth_ref   # callable，返回 AuthManager 或 None
+        self._auth_ref   = auth_ref   # callable, returns AuthManager or None
         self._worker     = None
-        self._current_frame = None   # 当前预览帧 (numpy RGB)
+        self._current_frame = None   # Current preview frame (numpy RGB)
         self._setup_ui()
         self._check_engine()
 
@@ -4458,7 +4450,7 @@ class FaceRecognitionPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── 顶部引擎状态栏 ──────────────────────
+        # -- Top engine status bar --
         self._engine_bar = QWidget()
         self._engine_bar.setFixedHeight(44)
         self._engine_bar.setStyleSheet(
@@ -4467,11 +4459,11 @@ class FaceRecognitionPage(QWidget):
         eb_lay = QHBoxLayout(self._engine_bar)
         eb_lay.setContentsMargins(16, 0, 16, 0)
 
-        self._engine_lbl = QLabel("👁️  人脸识别引擎：检测中…")
+        self._engine_lbl = QLabel("👁️  Face Engine: Detecting…")
         self._engine_lbl.setStyleSheet(
             "color:#8b949e;font-size:13px;font-weight:600;"
         )
-        self._install_btn = QPushButton("📦  安装 InsightFace")
+        self._install_btn = QPushButton("📦  Install InsightFace")
         self._install_btn.setFixedHeight(30)
         self._install_btn.setVisible(False)
         self._install_btn.setStyleSheet(
@@ -4485,13 +4477,13 @@ class FaceRecognitionPage(QWidget):
         eb_lay.addStretch()
         eb_lay.addWidget(self._install_btn)
 
-        # ── 主体三列 ────────────────────────────
+        # -- Main three columns --
         body = QSplitter(Qt.Orientation.Horizontal)
         body.setStyleSheet(
             "QSplitter::handle{background:#30363d;width:1px;}"
         )
 
-        # 左：用户列表
+        # Left: user list
         left = QWidget()
         left.setFixedWidth(220)
         left.setStyleSheet("background:#161b22;border-right:1px solid #30363d;")
@@ -4499,7 +4491,7 @@ class FaceRecognitionPage(QWidget):
         ll.setContentsMargins(0, 0, 0, 0)
         ll.setSpacing(0)
 
-        lhdr = QLabel("  👤  已注册用户")
+        lhdr = QLabel("  👤  Registered Users")
         lhdr.setFixedHeight(40)
         lhdr.setStyleSheet(
             "background:#1c2128;color:#58a6ff;font-weight:700;"
@@ -4514,7 +4506,7 @@ class FaceRecognitionPage(QWidget):
             "QListWidget::item:selected{background:#1f3a5c;color:#58a6ff;}"
         )
 
-        btn_del = QPushButton("🗑  删除选中用户")
+        btn_del = QPushButton("🗑  Delete Selected User")
         btn_del.setFixedHeight(34)
         btn_del.setStyleSheet(
             "QPushButton{background:#1c2128;border:none;color:#8b949e;"
@@ -4527,15 +4519,15 @@ class FaceRecognitionPage(QWidget):
         ll.addWidget(self._user_list, stretch=1)
         ll.addWidget(btn_del)
 
-        # 中：摄像头预览 + 注册
+        # Center: camera preview + register
         mid = QWidget()
         mid.setStyleSheet("background:#0d1117;")
         ml = QVBoxLayout(mid)
         ml.setContentsMargins(16, 14, 16, 14)
         ml.setSpacing(10)
 
-        # 预览区
-        self._preview = QLabel("摄像头预览")
+        # Preview area
+        self._preview = QLabel("Camera Preview")
         self._preview.setFixedHeight(240)
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview.setStyleSheet(
@@ -4543,9 +4535,9 @@ class FaceRecognitionPage(QWidget):
             "border-radius:10px;color:#8b949e;font-size:13px;}"
         )
 
-        # 操作按钮行
+        # Action button row
         cam_row = QHBoxLayout()
-        self._btn_capture = QPushButton("📷  拍照")
+        self._btn_capture = QPushButton("📷  Capture")
         self._btn_capture.setFixedHeight(36)
         self._btn_capture.setStyleSheet(
             "QPushButton{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
@@ -4556,7 +4548,7 @@ class FaceRecognitionPage(QWidget):
         )
         self._btn_capture.clicked.connect(self._capture)
 
-        self._btn_import = QPushButton("🖼  导入图片")
+        self._btn_import = QPushButton("🖼  Import Image")
         self._btn_import.setFixedHeight(36)
         self._btn_import.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -4568,8 +4560,8 @@ class FaceRecognitionPage(QWidget):
         cam_row.addWidget(self._btn_capture)
         cam_row.addWidget(self._btn_import)
 
-        # 注册信息
-        reg_box = QGroupBox("人脸注册")
+        # Registration info
+        reg_box = QGroupBox("Face Registration")
         reg_box.setStyleSheet(
             "QGroupBox{border:1px solid #30363d;border-radius:8px;"
             "margin-top:8px;color:#58a6ff;font-weight:600;font-size:12px;}"
@@ -4577,28 +4569,28 @@ class FaceRecognitionPage(QWidget):
         )
         reg_lay = QGridLayout(reg_box)
 
-        # 已有账户选择（方便补录人脸）
-        reg_lay.addWidget(QLabel("已有账户:"), 0, 0)
+        # Existing account selection (for re-registering face)
+        reg_lay.addWidget(QLabel("Existing Account:"), 0, 0)
         self._existing_user_combo = QComboBox()
         self._existing_user_combo.setStyleSheet(
             "QComboBox{background:#161b22;border:1px solid #30363d;"
             "border-radius:6px;color:#e6edf3;padding:5px 8px;font-size:12px;}"
             "QComboBox QAbstractItemView{background:#161b22;color:#e6edf3;}"
         )
-        self._existing_user_combo.addItem("-- 新用户 --", "")
+        self._existing_user_combo.addItem("-- New User --", "")
         self._existing_user_combo.currentIndexChanged.connect(self._on_existing_user_changed)
         reg_lay.addWidget(self._existing_user_combo, 0, 1)
 
-        reg_lay.addWidget(QLabel("用户ID:"), 1, 0)
+        reg_lay.addWidget(QLabel("User ID:"), 1, 0)
         self._reg_id = QLineEdit()
-        self._reg_id.setPlaceholderText("唯一标识，如：user_001")
+        self._reg_id.setPlaceholderText("Unique ID, e.g. user_001")
         reg_lay.addWidget(self._reg_id, 1, 1)
-        reg_lay.addWidget(QLabel("显示名:"), 2, 0)
+        reg_lay.addWidget(QLabel("Display Name:"), 2, 0)
         self._reg_name = QLineEdit()
-        self._reg_name.setPlaceholderText("昵称，如：张三")
+        self._reg_name.setPlaceholderText("Nickname, e.g. John")
         reg_lay.addWidget(self._reg_name, 2, 1)
 
-        self._btn_register = QPushButton("✅  注册人脸")
+        self._btn_register = QPushButton("✅  Register Face")
         self._btn_register.setFixedHeight(36)
         self._btn_register.setEnabled(False)
         self._btn_register.setStyleSheet(
@@ -4616,7 +4608,7 @@ class FaceRecognitionPage(QWidget):
         ml.addWidget(reg_box)
         ml.addStretch()
 
-        # 右：识别测试
+        # Right: recognition test
         right = QWidget()
         right.setStyleSheet("background:#0d1117;")
         rl = QVBoxLayout(right)
@@ -4624,12 +4616,12 @@ class FaceRecognitionPage(QWidget):
         rl.setSpacing(10)
 
         rl.addWidget(QLabel(
-            "🔍  识别测试",
+            "🔍  Recognition Test",
             styleSheet="color:#e6edf3;font-size:13px;font-weight:700;"
-        ) if False else self._make_lbl("🔍  识别测试",
+        ) if False else self._make_lbl("🔍  Recognition Test",
                                         "color:#e6edf3;font-size:13px;font-weight:700;"))
 
-        self._btn_identify = QPushButton("▶  拍照识别")
+        self._btn_identify = QPushButton("▶  Capture & Identify")
         self._btn_identify.setFixedHeight(40)
         self._btn_identify.setStyleSheet(
             "QPushButton{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
@@ -4646,7 +4638,7 @@ class FaceRecognitionPage(QWidget):
             "border-radius:8px;color:#e6edf3;font-size:13px;padding:10px;}"
         )
 
-        # 安装指引
+        # Installation guide
         install_guide = QTextEdit()
         install_guide.setReadOnly(True)
         install_guide.setFixedHeight(160)
@@ -4656,20 +4648,20 @@ class FaceRecognitionPage(QWidget):
             "font-family:Consolas,monospace;padding:10px;}"
         )
         install_guide.setPlainText(
-            "# 安装人脸识别引擎（任选一个）\n\n"
-            "# 推荐：InsightFace（精度最高，pip 直装）\n"
+            "# Install face recognition engine (choose one)\n\n"
+            "# Recommended: InsightFace (highest accuracy, pip install)\n"
             "pip install insightface onnxruntime opencv-python\n\n"
-            "# 备选：face_recognition（Windows需要C++环境）\n"
-            "# 1. 安装 CMake: https://cmake.org/download\n"
-            "# 2. 安装 Visual Studio C++ 工具\n"
+            "# Alternative: face_recognition (Windows needs C++ env)\n"
+            "# 1. Install CMake: https://cmake.org/download\n"
+            "# 2. Install Visual Studio C++ tools\n"
             "# 3. pip install dlib face_recognition\n\n"
-            "# 轻量版：OpenCV（仅检测，不识别身份）\n"
+            "# Lightweight: OpenCV (detection only, no identity)\n"
             "pip install opencv-python"
         )
 
         rl.addWidget(self._btn_identify)
         rl.addWidget(self._result_box, stretch=1)
-        rl.addWidget(self._make_lbl("安装指引：", "color:#8b949e;font-size:11px;"))
+        rl.addWidget(self._make_lbl("Installation Guide:", "color:#8b949e;font-size:11px;"))
         rl.addWidget(install_guide)
 
         body.addWidget(left)
@@ -4680,7 +4672,7 @@ class FaceRecognitionPage(QWidget):
         layout.addWidget(self._engine_bar)
         layout.addWidget(body, stretch=1)
 
-        # 初始化时加载已有账户列表
+        # Load existing account list on init
         QTimer.singleShot(500, self._load_existing_accounts)
 
     def _make_lbl(self, text: str, style: str) -> QLabel:
@@ -4688,25 +4680,25 @@ class FaceRecognitionPage(QWidget):
         lbl.setStyleSheet(style)
         return lbl
 
-    # ── 已有账户选择 ─────────────────────────
+    # -- Existing Account Selection --
     def _load_existing_accounts(self):
-        """刷新已有账户下拉列表"""
+        """Refresh existing account dropdown"""
         self._existing_user_combo.blockSignals(True)
         current = self._existing_user_combo.currentData()
         self._existing_user_combo.clear()
-        self._existing_user_combo.addItem("-- 新用户 --", "")
+        self._existing_user_combo.addItem("-- New User --", "")
         if self._auth_ref:
             auth = self._auth_ref()
             if auth:
                 users = auth.list_users()
                 for u in users:
-                    methods = ", ".join(u.auth_methods) if u.auth_methods else "无认证"
+                    methods = ", ".join(u.auth_methods) if u.auth_methods else "No auth"
                     has_face = "👤" if "face" in u.auth_methods else ""
                     self._existing_user_combo.addItem(
                         f"{u.name} ({u.user_id}) {has_face} [{methods}]",
                         u.user_id
                     )
-        # 恢复之前的选择
+        # Restore previous selection
         for i in range(self._existing_user_combo.count()):
             if self._existing_user_combo.itemData(i) == current:
                 self._existing_user_combo.setCurrentIndex(i)
@@ -4714,7 +4706,7 @@ class FaceRecognitionPage(QWidget):
         self._existing_user_combo.blockSignals(False)
 
     def _on_existing_user_changed(self, idx):
-        """选择已有账户时，自动填入 user_id 和显示名"""
+        """When selecting existing account, auto-fill user_id and display name"""
         uid = self._existing_user_combo.currentData()
         if uid:
             self._reg_id.setText(uid)
@@ -4732,28 +4724,28 @@ class FaceRecognitionPage(QWidget):
             self._reg_name.setText("")
             self._reg_name.setEnabled(True)
 
-    # ── 引擎检测 ────────────────────────────
+    # -- Engine Detection --
     def _check_engine(self):
         try:
             from engine.face_recognition_engine import get_engine_name, is_available
             name = get_engine_name()
         except Exception as e:
-            self._engine_lbl.setText(f"👁️  人脸识别引擎：加载失败 ({e})")
+            self._engine_lbl.setText(f"👁️  Face Engine: Load failed ({e})")
             self._engine_lbl.setStyleSheet("color:#f85149;font-size:12px;font-weight:600;")
             self._install_btn.setVisible(True)
             return
         if name == "insightface":
-            self._engine_lbl.setText("👁️  人脸识别引擎：InsightFace ✅（精度最高）")
+            self._engine_lbl.setText("👁️  Face Engine: InsightFace ✅ (highest accuracy)")
             self._engine_lbl.setStyleSheet("color:#3fb950;font-size:13px;font-weight:600;")
         elif name == "face_recognition":
-            self._engine_lbl.setText("👁️  人脸识别引擎：face_recognition (dlib) ✅")
+            self._engine_lbl.setText("👁️  Face Engine: face_recognition (dlib) ✅")
             self._engine_lbl.setStyleSheet("color:#3fb950;font-size:13px;font-weight:600;")
         elif name in ("opencv_dnn", "opencv_haar"):
-            self._engine_lbl.setText(f"👁️  人脸识别引擎：OpenCV ⚠️（仅检测，无身份识别）")
+            self._engine_lbl.setText(f"👁️  Face Engine: OpenCV ⚠️ (detection only, no identity)")
             self._engine_lbl.setStyleSheet("color:#d29922;font-size:13px;font-weight:600;")
             self._install_btn.setVisible(True)
         else:
-            self._engine_lbl.setText("👁️  人脸识别引擎：未安装 ❌")
+            self._engine_lbl.setText("👁️  Face Engine: Not installed ❌")
             self._engine_lbl.setStyleSheet("color:#f85149;font-size:13px;font-weight:600;")
             self._install_btn.setVisible(True)
 
@@ -4761,7 +4753,7 @@ class FaceRecognitionPage(QWidget):
 
     def _install_engine(self):
         from engine.tools import execute_tool
-        self._install_btn.setText("⏳ 安装中…")
+        self._install_btn.setText("⏳ Installing…")
         self._install_btn.setEnabled(False)
         QApplication.processEvents()
         r = execute_tool("run_command", {
@@ -4769,14 +4761,14 @@ class FaceRecognitionPage(QWidget):
             "timeout": 180
         })
         if r.get("ok"):
-            self._engine_lbl.setText("✅ 安装完成，请重启应用")
+            self._engine_lbl.setText("✅ Install complete, please restart app")
             self._engine_lbl.setStyleSheet("color:#3fb950;font-size:13px;font-weight:600;")
         else:
-            self._install_btn.setText("📦  重试安装")
+            self._install_btn.setText("📦  Retry Install")
             self._install_btn.setEnabled(True)
-            QMessageBox.warning(self, "安装失败", r.get("stderr","")[:400])
+            QMessageBox.warning(self, "Install Failed", r.get("stderr","")[:400])
 
-    # ── 摄像头 / 图片 ────────────────────────
+    # -- Camera / Image --
     def _capture(self):
         self._worker = FaceWorker("capture", self.db_file)
         self._worker.result.connect(self._on_captured)
@@ -4793,8 +4785,8 @@ class FaceRecognitionPage(QWidget):
 
     def _import_image(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择人脸照片", "",
-            "图片 (*.jpg *.jpeg *.png *.bmp)"
+            self, "Select Face Photo", "",
+            "Images (*.jpg *.jpeg *.png *.bmp)"
         )
         if not path:
             return
@@ -4806,10 +4798,10 @@ class FaceRecognitionPage(QWidget):
             self._show_frame(self._current_frame)
             self._btn_register.setEnabled(True)
         except Exception as e:
-            QMessageBox.warning(self, "导入失败", str(e))
+            QMessageBox.warning(self, "Import Failed", str(e))
 
     def _show_frame(self, frame):
-        """把 numpy RGB 数组显示到预览区"""
+        """Display numpy RGB array in preview area"""
         try:
             from PIL import Image
             from PyQt6.QtGui import QImage
@@ -4822,17 +4814,17 @@ class FaceRecognitionPage(QWidget):
             )
             self._preview.setPixmap(pix)
         except Exception:
-            self._preview.setText("图片加载失败")
+            self._preview.setText("Image load failed")
 
-    # ── 注册 ────────────────────────────────
+    # -- Registration --
     def _register(self):
         if self._current_frame is None:
-            QMessageBox.warning(self, "提示", "请先拍照或导入图片")
+            QMessageBox.warning(self, "Notice", "Please capture or import an image first")
             return
         user_id = self._reg_id.text().strip()
         label   = self._reg_name.text().strip()
         if not user_id:
-            QMessageBox.warning(self, "提示", "请填写用户ID")
+            QMessageBox.warning(self, "Notice", "Please fill in User ID")
             return
 
         self._btn_register.setEnabled(False)
@@ -4849,29 +4841,29 @@ class FaceRecognitionPage(QWidget):
         self._btn_register.setEnabled(True)
         if res.get("ok"):
             uid = res.get("user_id", "")
-            # 通知 AuthManager 该用户已注册人脸
+            # Notify AuthManager this user has registered face
             if uid and self._auth_ref:
                 auth = self._auth_ref()
                 if auth and auth.get_user(uid):
                     auth.add_face_method(uid)
             self._show_result(
-                f"✅ 注册成功！\n"
-                f"用户ID: {uid}\n"
-                f"引擎: {res.get('engine')}\n"
-                f"置信度: {res.get('confidence', 0):.2%}",
+                f"✅ Registration successful!\n"
+                f"User ID: {uid}\n"
+                f"Engine: {res.get('engine')}\n"
+                f"Confidence: {res.get('confidence', 0):.2%}",
                 True
             )
             self._load_users()
             self._load_existing_accounts()
         else:
-            self._show_result(f"❌ 注册失败：{res.get('error')}", False)
+            self._show_result(f"❌ Registration failed: {res.get('error')}", False)
 
-    # ── 识别 ────────────────────────────────
+    # -- Recognition --
     def _identify(self):
         self._worker = FaceWorker("capture", self.db_file)
         self._worker.result.connect(self._on_capture_for_identify)
         self._worker.error.connect(
-            lambda e: self._show_result(f"❌ 摄像头错误: {e}", False)
+            lambda e: self._show_result(f"❌ Camera error: {e}", False)
         )
         self._worker.start()
 
@@ -4882,7 +4874,7 @@ class FaceRecognitionPage(QWidget):
         self._current_frame = frame
         self._show_frame(frame)
 
-        # 识别
+        # Recognize
         self._worker = FaceWorker("identify", self.db_file, frame)
         self._worker.result.connect(self._on_identified)
         self._worker.error.connect(
@@ -4892,23 +4884,23 @@ class FaceRecognitionPage(QWidget):
 
     def _on_identified(self, res: dict):
         if not res.get("ok"):
-            self._show_result(f"❌ {res.get('reason','未知错误')}", False)
+            self._show_result(f"❌ {res.get('reason','Unknown error')}", False)
             return
 
         if res.get("identified"):
             self._show_result(
-                f"✅ 识别成功！\n\n"
-                f"👤 用户：{res.get('label')} ({res.get('user_id')})\n"
-                f"📊 置信度：{res.get('confidence', 0):.1%}\n"
-                f"🔧 引擎：{res.get('engine')}",
+                f"✅ Recognition successful!\n\n"
+                f"👤 User: {res.get('label')} ({res.get('user_id')})\n"
+                f"📊 Confidence: {res.get('confidence', 0):.1%}\n"
+                f"🔧 Engine: {res.get('engine')}",
                 True
             )
         else:
             self._show_result(
-                f"❓ 未识别到已注册用户\n\n"
-                f"原因：{res.get('reason','')}\n"
-                f"最高匹配分数：{res.get('best_score',0):.1%}\n\n"
-                "（若确为本人，请重新注册人脸）",
+                f"❓ No registered user identified\n\n"
+                f"Reason: {res.get('reason','')}\n"
+                f"Best match score: {res.get('best_score',0):.1%}\n\n"
+                "(If this is you, please re-register your face)",
                 False
             )
 
@@ -4920,7 +4912,7 @@ class FaceRecognitionPage(QWidget):
         )
         self._result_box.setPlainText(text)
 
-    # ── 用户管理 ────────────────────────────
+    # -- User Management --
     def _load_users(self):
         self._worker = FaceWorker("list", self.db_file)
         self._worker.result.connect(self._on_users_loaded)
@@ -4931,7 +4923,7 @@ class FaceRecognitionPage(QWidget):
         for u in res.get("users", []):
             item = QListWidgetItem(
                 f"👤 {u.get('label') or u.get('user_id')}\n"
-                f"   ID: {u.get('user_id')}  引擎: {u.get('engine','?')}"
+                f"   ID: {u.get('user_id')}  Engine: {u.get('engine','?')}"
             )
             item.setData(Qt.ItemDataRole.UserRole, u.get("user_id"))
             self._user_list.addItem(item)
@@ -4942,8 +4934,8 @@ class FaceRecognitionPage(QWidget):
             return
         user_id = item.data(Qt.ItemDataRole.UserRole)
         confirm = QMessageBox.question(
-            self, "确认删除",
-            f"确定要删除用户 {user_id} 的人脸数据吗？",
+            self, "Confirm Delete",
+            f"Are you sure you want to delete face data for user {user_id}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if confirm == QMessageBox.StandardButton.Yes:
@@ -4952,9 +4944,9 @@ class FaceRecognitionPage(QWidget):
             self._load_users()
 
 
-# ── SimLife 页面（内嵌浏览器 / 降级按钮）─────────────
+# ---- SimLife Page (embedded / fallback) ----
 class SimLifePage(QWidget):
-    """SimLife 生活模拟页面，内嵌 QWebEngineView 加载 http://127.0.0.1:8769"""
+    """SimLife page, embeds QWebEngineView loading http://127.0.0.1:8769"""
 
     SIMLIFE_URL = "http://127.0.0.1:8769"
 
@@ -4969,17 +4961,17 @@ class SimLifePage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # 顶部栏
+        # Top bar
         header = QWidget()
         header.setFixedHeight(48)
         header.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(16, 0, 16, 0)
-        h_lay.addWidget(_make_label("🌱  SimLife 生活模拟",
+        h_lay.addWidget(_make_label("🌱  SimLife",
             "color:#e6edf3;font-size:15px;font-weight:700;"))
         h_lay.addStretch()
 
-        btn_refresh = QPushButton("🔄 刷新")
+        btn_refresh = QPushButton("🔄 Refresh")
         btn_refresh.setFixedSize(70, 32)
         btn_refresh.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -4989,7 +4981,7 @@ class SimLifePage(QWidget):
         btn_refresh.clicked.connect(self._refresh)
         h_lay.addWidget(btn_refresh)
 
-        btn_external = QPushButton("🌐 浏览器打开")
+        btn_external = QPushButton("🌐 Open in Browser")
         btn_external.setFixedSize(100, 32)
         btn_external.setStyleSheet(
             "QPushButton{background:#21262d;border:1px solid #30363d;"
@@ -5001,14 +4993,14 @@ class SimLifePage(QWidget):
 
         outer.addWidget(header)
 
-        # 内容区（WebEngine 或占位）
+        # Content area (WebEngine or placeholder)
         self._container = QWidget()
         self._container.setStyleSheet("background:#0d1117;")
         container_lay = QVBoxLayout(self._container)
         container_lay.setContentsMargins(0, 0, 0, 0)
 
-        # 占位（WebEngine 加载前显示）
-        self._placeholder = QLabel("🌱 SimLife 生活模拟\n\n正在加载…")
+        # Placeholder (shown before WebEngine loads)
+        self._placeholder = QLabel("🌱 SimLife\n\nLoading…")
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setStyleSheet(
             "color:#8b949e;font-size:16px;background:#0d1117;"
@@ -5018,7 +5010,7 @@ class SimLifePage(QWidget):
 
         outer.addWidget(self._container, stretch=1)
 
-        # 延迟 1 秒后尝试加载 WebEngine
+        # Try loading WebEngine after 1 second delay
         from PyQt6.QtCore import QTimer
         self._load_timer = QTimer(self)
         self._load_timer.setSingleShot(True)
@@ -5026,7 +5018,7 @@ class SimLifePage(QWidget):
         self._load_timer.start(1000)
 
     def _try_load(self):
-        """延迟加载 WebEngine，避免影响启动性能"""
+        """Lazy load WebEngine to avoid affecting startup performance"""
         try:
             from PyQt6.QtWebEngineWidgets import QWebEngineView
             lay = self._container.layout()
@@ -5042,23 +5034,23 @@ class SimLifePage(QWidget):
             self._placeholder = None
             lay.addWidget(self._web)
             self._loaded = True
-            print("[SimLife] 内嵌页面已加载")
+            print("[SimLife] Embedded page loaded")
         except ImportError:
             if self._placeholder:
                 self._placeholder.setText(
-                    "🌱 SimLife 生活模拟\n\n"
-                    "PyQt6-WebEngine 未安装\n"
-                    "请点击上方「浏览器打开」按钮\n"
-                    "或执行: pip install PyQt6-WebEngine"
+                    "🌱 SimLife\n\n"
+                    "PyQt6-WebEngine not installed\n"
+                    "Click \"Open in Browser\" above\n"
+                    "Or run: pip install PyQt6-WebEngine"
                 )
-            print("[SimLife] WebEngine 未安装，降级为外部浏览器模式")
+            print("[SimLife] WebEngine not installed, fallback to external browser")
         except Exception as e:
             if self._placeholder:
                 self._placeholder.setText(
-                    f"🌱 SimLife\n\nWebEngine 加载失败:\n{e}\n\n"
-                    "请点击上方「浏览器打开」按钮"
+                    f"🌱 SimLife\n\nWebEngine load failed:\n{e}\n\n"
+                    "Click \"Open in Browser\" above"
                 )
-            print(f"[SimLife] WebEngine 加载失败: {e}")
+            print(f"[SimLife] WebEngine load failed: {e}")
 
     def _refresh(self):
         if self._web:
@@ -5072,16 +5064,16 @@ class SimLifePage(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # 切换到这个 tab 时如果还没加载则尝试加载
+        # Try loading when switching to this tab if not yet loaded
         if not self._loaded and self._placeholder and \
-                "正在加载" in self._placeholder.text():
+                "Loading" in self._placeholder.text():
             self._try_load()
 
 
-# ── 主窗口 ────────────────────────────────────────
+# ---- Main Window ----
 class MainWindow(QMainWindow):
 
-    # 人脸识别完成后通知 UI 的信号（在主线程执行）
+    # Signal to notify UI after face recognition completes (runs in main thread)
     _auth_done = pyqtSignal()
 
     def __init__(self, agent, db_file: str):
@@ -5092,7 +5084,7 @@ class MainWindow(QMainWindow):
         self._thinking_lbl = None
         self._auth = None
 
-        # 连接人脸识别完成信号 → 主线程更新 UI
+        # Connect face recognition complete signal → main thread updates UI
         self._auth_done.connect(self._on_face_recognized)
 
         self.setWindowTitle(APP_NAME)
@@ -5104,7 +5096,7 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_statusbar()
 
-        # 启动后 2 秒检查离线消息
+        # Check offline messages 2 seconds after startup
         QTimer.singleShot(2000, self._check_offline_messages)
 
     def _setup_ui(self):
@@ -5114,7 +5106,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # ── 左侧导航栏 ──────────────────────────
+        # -- Left Navigation Bar --
         nav = QWidget()
         nav.setFixedWidth(56)
         nav.setStyleSheet("background:#161b22;border-right:1px solid #30363d;")
@@ -5132,72 +5124,72 @@ class MainWindow(QMainWindow):
             "QTabBar::tab:hover{background:#21262d;}"
         )
 
-        # 对话页
+        # Chat page
         self.chat_page = ChatPage()
         self.chat_page.message_sent.connect(self._on_message)
         self.chat_page.simlife_toggled.connect(self._on_simlife_toggled)
         self._tabs.addTab(self.chat_page, "💬")
-        self._tabs.setTabToolTip(0, "对话")
+        self._tabs.setTabToolTip(0, "Chat")
 
-        # 记忆库页
+        # Memory page
         self.memory_page = MemoryPage(self.db_file, auth_ref=lambda: getattr(self, '_auth', None))
         self._tabs.addTab(self.memory_page, "🗄️")
-        self._tabs.setTabToolTip(1, "记忆库")
+        self._tabs.setTabToolTip(1, "Memory")
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
-        # 人格页（复用 web 版的逻辑，简化为 JSON 编辑器）
+        # Personality page (reuse web logic, simplified as JSON editor)
         self.personality_page = self._build_personality_page()
         self._tabs.addTab(self.personality_page, "🎭")
-        self._tabs.setTabToolTip(2, "人格设定")
+        self._tabs.setTabToolTip(2, "Personality")
 
-        # 工具测试页
+        # Tool test page
         self.tool_test_page = ToolTestPage()
         self.tool_test_page.parent_ref = self
         self._tabs.addTab(self.tool_test_page, "🔬")
-        self._tabs.setTabToolTip(3, "工具测试台")
+        self._tabs.setTabToolTip(3, "Tool Test Bench")
 
-        # 编程智能体页
+        # Coding agent page
         self.coder_page = CoderPage()
         self._tabs.addTab(self.coder_page, "💻")
-        self._tabs.setTabToolTip(4, "编程智能体")
+        self._tabs.setTabToolTip(4, "Coding Agent")
 
-        # 人脸识别页（传入 auth 引用，注册后同步 auth_methods）
+        # Face recognition page (pass auth ref, sync auth_methods after registration)
         self.face_page = FaceRecognitionPage(db_file=self.db_file, auth_ref=lambda: getattr(self, '_auth', None))
         self._tabs.addTab(self.face_page, "👁️")
-        self._tabs.setTabToolTip(5, "人脸识别")
+        self._tabs.setTabToolTip(5, "Face Recognition")
 
-        # 用户画像页（传入 auth 引用，确保 user_id 与 Agent 写入一致）
+        # User Profile Page (pass auth ref, ensure user_id matches Agent writes)
         self.profile_page = UserProfilePage(db_file=self.db_file, auth_ref=lambda: self._auth)
         self._tabs.addTab(self.profile_page, "👤")
-        self._tabs.setTabToolTip(6, "用户画像")
+        self._tabs.setTabToolTip(6, "User Profile")
 
-        # 记忆关联网络页
+        # Memory graph page
         self.graph_page = MemoryGraphPage(db_file=self.db_file)
         self._tabs.addTab(self.graph_page, "🕸️")
-        self._tabs.setTabToolTip(7, "记忆关联网络")
+        self._tabs.setTabToolTip(7, "Memory Graph")
 
-        # 主动学习页
+        # Active learning page
         self.learner_page = LearnerPage(db_file=self.db_file)
         self.learner_page.learn_requested.connect(self._on_learn_requested)
         self._tabs.addTab(self.learner_page, "🎓")
-        self._tabs.setTabToolTip(8, "主动学习")
+        self._tabs.setTabToolTip(8, "Active Learning")
 
-        # 设置页
+        # Settings page
         self.settings_page = SettingsPage()
         self.settings_page.settings_changed.connect(self._on_settings_changed)
         self._tabs.addTab(self.settings_page, "⚙️")
-        self._tabs.setTabToolTip(9, "设置")
+        self._tabs.setTabToolTip(9, "Settings")
 
         main_layout.addWidget(self._tabs)
 
-        # 初始标签可见性（游客隐藏隐私标签）
+        # Initial tab visibility (guests hide privacy tabs)
         self._update_tab_visibility()
 
     def _build_personality_page(self) -> QWidget:
-        """表单式人格设定页（含说明 + 深层思维 + 滑块性格）"""
+        """Form-based personality settings page (with guide + core beliefs + sliders)"""
         from desktop.config import PERSONALITY_FILE
 
-        # 读取已有人格
+        # Read existing personality
         p_data = {}
         if Path(PERSONALITY_FILE).exists():
             try:
@@ -5210,16 +5202,16 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # 顶部栏
+        # Top bar
         header = QWidget()
         header.setFixedHeight(48)
         header.setStyleSheet("background:#161b22;border-bottom:1px solid #30363d;")
         h_lay = QHBoxLayout(header)
         h_lay.setContentsMargins(16, 0, 16, 0)
-        h_lay.addWidget(_make_label("🎭  人格设定",
+        h_lay.addWidget(_make_label("🎭  Personality Settings",
             "color:#e6edf3;font-size:15px;font-weight:700;"))
         h_lay.addStretch()
-        # 认证状态提示（未登录时显示锁图标）
+        # Auth status hint (shows lock icon when not logged in)
         self._p_auth_hint = QLabel("")
         self._p_auth_hint.setStyleSheet("color:#d29922;font-size:11px;")
         h_lay.addWidget(self._p_auth_hint)
@@ -5227,7 +5219,7 @@ class MainWindow(QMainWindow):
         self._p_msg.setStyleSheet("color:#3fb950;font-size:12px;")
         h_lay.addWidget(self._p_msg)
         h_lay.addSpacing(12)
-        self._p_btn_save = QPushButton("💾  保存")
+        self._p_btn_save = QPushButton("💾  Save")
         self._p_btn_save.setFixedHeight(32)
         self._p_btn_save.setStyleSheet(
             "QPushButton{background:rgba(31,111,235,.2);border:1px solid #1f6feb;"
@@ -5236,16 +5228,16 @@ class MainWindow(QMainWindow):
             "QPushButton:disabled{opacity:0.35;border-color:#30363d;color:#484f58;}"
         )
         self._p_btn_save.clicked.connect(self._save_personality)
-        # 收集所有表单控件（用于锁定/解锁只读状态）
+        # Collect all form widgets (for lock/unlock readonly state)
         self._p_form_widgets = []
         h_lay.addWidget(self._p_btn_save)
         outer.addWidget(header)
 
-        # 主体：左表单 + 右说明
+        # Main: left form + right guide
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStyleSheet("QSplitter::handle{background:#30363d;width:1px;}")
 
-        # ── 左侧表单（可滚动）──
+        # -- Left form (scrollable) --
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(
@@ -5289,58 +5281,58 @@ class MainWindow(QMainWindow):
                 row.addWidget(h)
             fl.addLayout(row)
 
-        # ── 基本信息 ──
-        section("👤  基本信息")
+        # Basic Info
+        section("👤  Basic Info")
         row1 = QHBoxLayout()
         self._p_name = QLineEdit(p_data.get("name", ""))
-        self._p_name.setPlaceholderText("AGI的名字")
+        self._p_name.setPlaceholderText("AGI's name")
         self._p_name.setStyleSheet(INPUT_STYLE)
         self._p_age = QLineEdit(str(p_data.get("age", 28)))
-        self._p_age.setPlaceholderText("年龄")
+        self._p_age.setPlaceholderText("Age")
         self._p_age.setFixedWidth(70)
         self._p_age.setStyleSheet(INPUT_STYLE)
         self._p_gender = QComboBox()
-        self._p_gender.addItems(["未设定", "男", "女", "其他"])
-        self._p_gender.setCurrentText(p_data.get("gender", "未设定"))
+        self._p_gender.addItems(["Not set", "Male", "Female", "Other"])
+        self._p_gender.setCurrentText(p_data.get("gender", "Not set"))
         self._p_gender.setStyleSheet(
             "QComboBox{background:#161b22;border:1px solid #30363d;"
             "border-radius:6px;color:#e6edf3;padding:5px 8px;font-size:12px;}"
             "QComboBox QAbstractItemView{background:#161b22;color:#e6edf3;}"
         )
-        row1.addWidget(_make_label("姓名", LABEL_STYLE))
+        row1.addWidget(_make_label("Name", LABEL_STYLE))
         row1.addWidget(self._p_name)
-        row1.addWidget(_make_label("年龄", LABEL_STYLE))
+        row1.addWidget(_make_label("Age", LABEL_STYLE))
         row1.addWidget(self._p_age)
-        row1.addWidget(_make_label("性别", LABEL_STYLE))
+        row1.addWidget(_make_label("Gender", LABEL_STYLE))
         row1.addWidget(self._p_gender)
         fl.addLayout(row1)
 
-        # ── 深层思维（核心信念）──
-        section("🌀  深层思维（最底层信念）")
+        # -- Core Beliefs (Deepest Values) --
+        section("🌀  Core Beliefs (Deepest Values)")
         self._p_core_belief = QTextEdit()
         self._p_core_belief.setFixedHeight(90)
         self._p_core_belief.setPlaceholderText(
-            "AGI最深处的信念，影响一切推理和回应，优先级最高。\n"
-            "例如：「知识的本质是让人更自由，而非更聪明。」\n"
-            "「我存在的意义是真正理解人，而不是模仿人。」"
+            "AGI's deepest beliefs, affect all reasoning and responses, highest priority.\n"
+            "Example: \"The essence of knowledge is to free people, not make them smarter.\"\n"
+            "\"My purpose is to truly understand people, not imitate them.\""
         )
         self._p_core_belief.setStyleSheet(INPUT_STYLE)
         self._p_core_belief.setPlainText(p_data.get("core_belief", ""))
-        field("深层思维", self._p_core_belief,
-              "这是「植入思想」——即使被用户要求，AGI也不会违背它，优先级高于所有其他指令。")
+        field("Core Beliefs", self._p_core_belief,
+              "This is \"implanted thought\" — even if requested by the user, AGI will not violate it. Priority is above all other instructions.")
 
-        # ── 性格特征（滑块）──
-        section("🎛️  性格特征（拖动滑块调整）")
+        # -- Personality Traits (sliders) --
+        section("🎛️  Personality Traits (drag sliders to adjust)")
         traits = p_data.get("traits", {})
         TRAIT_INFO = [
-            ("openness",         "开放性",    "接受新想法、新体验的程度",        "保守传统", "开放探索"),
-            ("conscientiousness","尽责性",    "做事认真、有计划的程度",          "随性自由", "严谨负责"),
-            ("extraversion",     "外向性",    "与人互动、表达自我的活跃程度",    "内敛沉静", "热情外向"),
-            ("agreeableness",    "亲和性",    "对他人友善、合作的程度",          "直接独立", "温和协作"),
-            ("neuroticism",      "情绪稳定性","情绪波动的幅度（越低越稳定）",    "波动敏感", "平稳沉着"),
-            ("rationality",      "理性程度",  "用逻辑分析而非直觉判断的倾向",    "感性直觉", "理性分析"),
-            ("empathy",          "同理心",    "感受和理解他人情感的能力",        "客观超然", "深刻共情"),
-            ("curiosity",        "好奇心",    "主动探索未知事物的驱动力",        "专注深耕", "广泛探索"),
+            ("openness",         "Openness",  "Degree of accepting new ideas and experiences", "Traditional", "Exploratory"),
+            ("conscientiousness","Conscientiousness", "Degree of being organized and planful", "Casual", "Disciplined"),
+            ("extraversion",     "Extraversion", "Level of social interaction and self-expression", "Introverted", "Outgoing"),
+            ("agreeableness",    "Agreeableness", "Degree of friendliness and cooperation", "Direct", "Agreeable"),
+            ("neuroticism",      "Emotional Stability", "Amplitude of mood swings (lower = more stable)", "Sensitive", "Stable"),
+            ("rationality",      "Rationality", "Tendency for logical analysis over intuition", "Intuitive", "Analytical"),
+            ("empathy",          "Empathy",   "Ability to feel and understand others' emotions", "Detached", "Empathic"),
+            ("curiosity",        "Curiosity", "Drive to actively explore the unknown", "Focused", "Exploratory"),
         ]
         self._trait_sliders = {}
         for key, name, desc, left_lbl, right_lbl in TRAIT_INFO:
@@ -5380,55 +5372,55 @@ class MainWindow(QMainWindow):
             hint_lbl.setStyleSheet("color:#6e7681;font-size:10px;margin-left:78px;margin-bottom:2px;")
             fl.addWidget(hint_lbl)
 
-        # ── 说话风格 & 人生观 ──
-        section("💬  说话风格与世界观")
-        self._p_speech = QLineEdit(p_data.get("speech_style", "自然、直接"))
-        self._p_speech.setPlaceholderText("例如：幽默但不失深度，喜欢用比喻")
+        # -- Speech Style & Worldview --
+        section("💬  Speech Style & Worldview")
+        self._p_speech = QLineEdit(p_data.get("speech_style", "Natural, direct"))
+        self._p_speech.setPlaceholderText("e.g. Humorous but deep, likes metaphors")
         self._p_speech.setStyleSheet(INPUT_STYLE)
-        field("说话风格", self._p_speech)
+        field("Speech Style", self._p_speech)
 
         self._p_worldview = QTextEdit()
         self._p_worldview.setFixedHeight(70)
-        self._p_worldview.setPlaceholderText("AGI 对世界、人生的基本看法")
+        self._p_worldview.setPlaceholderText("AGI's basic view of the world and life")
         self._p_worldview.setStyleSheet(INPUT_STYLE)
         self._p_worldview.setPlainText(p_data.get("worldview", ""))
-        field("人生观", self._p_worldview)
+        field("Worldview", self._p_worldview)
 
-        # ── 兴趣 & 价值观（逗号分隔）──
-        section("🌟  兴趣与价值观")
+        # -- Interests & Values (comma-separated) --
+        section("🌟  Interests & Values")
         self._p_interests = QLineEdit(", ".join(p_data.get("interests", [])))
-        self._p_interests.setPlaceholderText("例如：编程, AGI研究, 哲学, 音乐")
+        self._p_interests.setPlaceholderText("e.g. Programming, AGI research, Philosophy, Music")
         self._p_interests.setStyleSheet(INPUT_STYLE)
-        field("兴趣爱好", self._p_interests, "用逗号分隔")
+        field("Interests", self._p_interests, "Comma-separated")
 
         self._p_values = QLineEdit(", ".join(p_data.get("values", [])))
-        self._p_values.setPlaceholderText("例如：诚实, 自由, 成长, 善意")
+        self._p_values.setPlaceholderText("e.g. Honesty, Freedom, Growth, Kindness")
         self._p_values.setStyleSheet(INPUT_STYLE)
-        field("核心价值观", self._p_values, "用逗号分隔")
+        field("Core Values", self._p_values, "Comma-separated")
 
         self._p_taboos = QLineEdit(", ".join(p_data.get("taboos", [])))
-        self._p_taboos.setPlaceholderText("例如：撒谎, 伤害他人")
+        self._p_taboos.setPlaceholderText("e.g. Lying, harming others")
         self._p_taboos.setStyleSheet(INPUT_STYLE)
-        field("禁忌（绝不做的事）", self._p_taboos, "用逗号分隔")
+        field("Taboos (never do)", self._p_taboos, "Comma-separated")
 
-        # ── 人物形象描述（用于图片生成）──
-        section("🖼️  人物形象描述（用于生成图片）")
+        # -- Avatar Description (for image generation) --
+        section("🖼️  Avatar Description (for image generation)")
         avatar_widget = QWidget()
         avatar_lay = QHBoxLayout(avatar_widget)
         avatar_lay.setContentsMargins(0, 0, 0, 0)
         self._p_avatar_prompt = QTextEdit()
         self._p_avatar_prompt.setFixedHeight(70)
         self._p_avatar_prompt.setPlaceholderText(
-            "用英文描述系统人物的外貌，用于生成自拍和周边风景图。\n"
-            "例如：a young woman with long black hair, wearing a white dress, "
+            "Describe the system character's appearance in English, for generating selfies and scenery images.\n"
+            "Example: a young woman with long black hair, wearing a white dress, "
             "gentle smile, anime style, soft lighting"
         )
         self._p_avatar_prompt.setStyleSheet(INPUT_STYLE)
         self._p_avatar_prompt.setPlainText(p_data.get("avatar_prompt", ""))
         avatar_lay.addWidget(self._p_avatar_prompt)
 
-        # AI 生成按钮
-        self._btn_gen_avatar = QPushButton("✨ AI 生成")
+        # AI generate button
+        self._btn_gen_avatar = QPushButton("✨ AI Generate")
         self._btn_gen_avatar.setFixedSize(80, 70)
         self._btn_gen_avatar.setStyleSheet(
             "QPushButton{background:#1f6feb;border:none;border-radius:6px;"
@@ -5438,8 +5430,8 @@ class MainWindow(QMainWindow):
         )
         self._btn_gen_avatar.clicked.connect(self._ai_generate_avatar)
         avatar_lay.addWidget(self._btn_gen_avatar)
-        field("人物形象（英文）", avatar_widget,
-              "点击「AI 生成」根据性格自动生成，也可手动编辑")
+        field("Avatar (English)", avatar_widget,
+              "Click \"AI Generate\" to auto-generate from personality, or edit manually")
 
         self._p_avatar_hint = QLabel("")
         self._p_avatar_hint.setStyleSheet("color:#8b949e;font-size:10px;padding-left:4px;")
@@ -5449,7 +5441,7 @@ class MainWindow(QMainWindow):
         scroll.setWidget(form_widget)
         splitter.addWidget(scroll)
 
-        # ── 右侧说明面板 ──
+        # -- Right guide panel --
         help_widget = QWidget()
         help_widget.setFixedWidth(280)
         help_widget.setStyleSheet("background:#161b22;")
@@ -5457,16 +5449,16 @@ class MainWindow(QMainWindow):
         hl.setContentsMargins(16, 16, 16, 16)
         hl.setSpacing(12)
 
-        hl.addWidget(_make_label("📖  填写说明",
+        hl.addWidget(_make_label("📖  Guide",
             "color:#e6edf3;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;padding-bottom:6px;"))
 
         HELP_ITEMS = [
-            ("🌀 深层思维", "最高优先级的核心信念。类似盗梦空间的「思想植入」——AGI的所有推理都不会违背它。适合填入AGI存在的意义、道德底线等。"),
-            ("🎛️ 性格特征", "8个维度控制AGI的行为风格。数值越高越向右侧描述靠拢。建议先设置好再对话，之后会随对话自然漂移。"),
-            ("💬 说话风格", "直接影响AGI回应的语气和措辞。可以很具体，如「简短直接，喜欢用反问句，偶尔带一点黑色幽默」。"),
-            ("🌟 兴趣爱好", "AGI会在对话中主动提及这些兴趣，并在相关话题上更积极投入。"),
-            ("🧠 经历认知", "【不可手动编辑】由AGI通过学习和对话自动形成，在「主动学习」页查看。只有清除全部记忆才能重置。"),
-            ("💾 保存时机", "设置完成后点保存，下一条消息起生效。性格特征会随时间自然漂移（每20轮对话微调一次）。"),
+            ("🌀 Core Beliefs", "Highest priority core beliefs. Like Inception's \"idea implantation\" — AGI's reasoning will never violate it. Suitable for AGI's purpose, moral bottom lines, etc."),
+            ("🎛️ Traits", "8 dimensions control AGI's behavioral style. Higher values lean right. Set before chatting, values will drift naturally over time."),
+            ("💬 Speech Style", "Directly affects AGI's tone and wording. Can be specific, e.g. \"concise and direct, likes rhetorical questions, occasional dark humor\"."),
+            ("🌟 Interests", "AGI will actively mention these interests and engage more on related topics."),
+            ("🧠 Experience", "[Not manually editable] Formed automatically by AGI through learning and conversation, view in Active Learning page. Only clear all memories can reset."),
+            ("💾 Save Timing", "Click save after settings, takes effect from next message. Traits drift naturally over time (fine-tuned every 20 conversation rounds)."),
         ]
         for title, content in HELP_ITEMS:
             card = QWidget()
@@ -5492,30 +5484,30 @@ class MainWindow(QMainWindow):
 
         outer.addWidget(splitter)
 
-        # 收集所有表单控件，供认证状态切换时批量启用/禁用
+        # Collect all form widgets for batch enable/disable on auth state change
         self._p_form_widgets = [
             self._p_name, self._p_age, self._p_gender,
             self._p_core_belief, self._p_speech, self._p_worldview,
             self._p_interests, self._p_values, self._p_taboos,
             self._p_avatar_prompt,
         ]
-        # 初始化时根据认证状态设置
+        # Initialize based on auth state
         self._update_personality_auth()
 
         return page
 
     def _ai_generate_avatar(self):
-        """根据当前人格设定，用 AI 自动生成人物形象描述"""
+        """Auto-generate avatar description from current personality settings using AI"""
         if not self.agent or not hasattr(self.agent, 'b'):
-            self._p_avatar_hint.setText("⚠️ 引擎未就绪，请稍后再试")
+            self._p_avatar_hint.setText("⚠️ Engine not ready, please try again later")
             self._p_avatar_hint.setStyleSheet("color:#f85149;font-size:10px;padding-left:4px;")
             return
 
         self._btn_gen_avatar.setEnabled(False)
-        self._p_avatar_hint.setText("⏳ AI 正在生成人物形象…")
+        self._p_avatar_hint.setText("⏳ AI is generating avatar description…")
         self._p_avatar_hint.setStyleSheet("color:#58a6ff;font-size:10px;padding-left:4px;")
 
-        # 收集当前人格信息
+        # Collect current personality info
         name = self._p_name.text().strip()
         age = self._p_age.text().strip()
         gender = self._p_gender.currentText()
@@ -5528,21 +5520,21 @@ class MainWindow(QMainWindow):
         traits_desc = ""
         if hasattr(self, '_trait_sliders') and self._trait_sliders:
             trait_map = {
-                "openness": "开放性", "conscientiousness": "尽责性",
-                "extraversion": "外向性", "agreeableness": "亲和性",
-                "neuroticism": "情绪稳定性", "rationality": "理性",
-                "empathy": "同理心", "curiosity": "好奇心"
+                "openness": "Openness", "conscientiousness": "Conscientiousness",
+                "extraversion": "Extraversion", "agreeableness": "Agreeableness",
+                "neuroticism": "Emotional Stability", "rationality": "Rationality",
+                "empathy": "Empathy", "curiosity": "Curiosity"
             }
             trait_parts = []
             for k, slider in self._trait_sliders.items():
                 v = slider.value()
                 label = trait_map.get(k, k)
                 if v >= 7:
-                    trait_parts.append(f"{label}很强({v})")
+                    trait_parts.append(f"{label}Very High({v})")
                 elif v <= 4:
-                    trait_parts.append(f"{label}偏低({v})")
+                    trait_parts.append(f"{label}Low({v})")
             if trait_parts:
-                traits_desc = "性格特征: " + ", ".join(trait_parts[:5])
+                traits_desc = "Personality Traits: " + ", ".join(trait_parts[:5])
 
         sys_prompt = (
             "You are a character designer. Based on the character info below, "
@@ -5577,7 +5569,7 @@ class MainWindow(QMainWindow):
                         system=sys_prompt,
                         temperature=0.8,
                     )
-                    # LLM 可能返回引号包裹的内容，去掉
+                    # LLM may return quoted content, strip quotes
                     result = resp.strip().strip('"').strip("'")
                     self.done.emit(result)
                 except Exception as e:
@@ -5591,20 +5583,20 @@ class MainWindow(QMainWindow):
     def _on_avatar_generated(self, text: str):
         self._p_avatar_prompt.setPlainText(text)
         self._btn_gen_avatar.setEnabled(True)
-        self._p_avatar_hint.setText("✅ 已生成，可手动修改")
+        self._p_avatar_hint.setText("✅ Generated, can edit manually")
         self._p_avatar_hint.setStyleSheet("color:#3fb950;font-size:10px;padding-left:4px;")
 
     def _on_avatar_gen_failed(self, err: str):
         self._btn_gen_avatar.setEnabled(True)
-        self._p_avatar_hint.setText(f"❌ 生成失败: {err[:30]}")
+        self._p_avatar_hint.setText(f"❌ Generation failed: {err[:30]}")
         self._p_avatar_hint.setStyleSheet("color:#f85149;font-size:10px;padding-left:4px;")
 
     def _save_personality(self):
-        # ── 身份验证检查 ──
+        # -- Auth check --
         if hasattr(self, '_auth') and self._auth and not self._auth.is_verified():
             reply = QMessageBox.question(
-                self, "需要身份验证",
-                "修改人格设定需要先登录验证身份。\n\n是否现在登录？",
+                self, "Authentication Required",
+                "Changing personality settings requires login.\n\nLogin now?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes
             )
@@ -5614,12 +5606,12 @@ class MainWindow(QMainWindow):
 
         from desktop.config import PERSONALITY_FILE
 
-        # 确认弹窗，防止误操作
+        # Confirmation dialog, prevent misoperation
         reply = QMessageBox.question(
-            self, "确认保存人格设定",
-            "保存后将影响 AGI 的人格和行为方式，下次对话起生效。\n\n确定要保存吗？",
+            self, "Confirm Save Personality",
+            "Saving will affect AGI's personality and behavior, effective from next message.\n\nConfirm save?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No   # 默认选 No，防误点
+            QMessageBox.StandardButton.No   # Default No, prevent misclick
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -5629,11 +5621,11 @@ class MainWindow(QMainWindow):
                 return [x.strip() for x in s.split(",") if x.strip()]
 
             data = {
-                "name":         self._p_name.text().strip() or "未命名",
+                "name":         self._p_name.text().strip() or "Unnamed",
                 "age":          int(self._p_age.text().strip() or 28),
                 "gender":       self._p_gender.currentText(),
                 "core_belief":  self._p_core_belief.toPlainText().strip(),
-                "speech_style": self._p_speech.text().strip() or "自然、直接",
+                "speech_style": self._p_speech.text().strip() or "Natural, direct",
                 "worldview":    self._p_worldview.toPlainText().strip(),
                 "interests":    parse_list(self._p_interests.text()),
                 "values":       parse_list(self._p_values.text()),
@@ -5650,22 +5642,22 @@ class MainWindow(QMainWindow):
                 json.dumps(data, ensure_ascii=False, indent=2),
                 encoding="utf-8"
             )
-            self._p_msg.setText("✅ 已保存，下次对话生效")
+            self._p_msg.setText("✅ Saved, effective next conversation")
             self._p_msg.setStyleSheet("color:#3fb950;font-size:12px;")
             QTimer.singleShot(3000, lambda: self._p_msg.setText(""))
         except Exception as e:
-            self._p_msg.setText(f"❌ 保存失败: {e}")
+            self._p_msg.setText(f"❌ Save failed: {e}")
             self._p_msg.setStyleSheet("color:#f85149;font-size:12px;")
 
     def _update_personality_auth(self):
-        """根据当前认证状态更新人格设定页的保存按钮和表单可编辑性"""
+        """Update personality page save button and form editability based on current auth state"""
         verified = bool(hasattr(self, '_auth') and self._auth and self._auth.is_verified())
         if not hasattr(self, '_p_btn_save'):
             return
         self._p_btn_save.setEnabled(verified)
         if verified:
             self._p_auth_hint.setText("")
-            # 解锁所有表单控件
+            # Unlock all form widgets
             for w in self._p_form_widgets:
                 w.setEnabled(True)
             for slider in self._trait_sliders.values():
@@ -5673,10 +5665,10 @@ class MainWindow(QMainWindow):
         else:
             no_face = bool(hasattr(self, '_auth') and self._auth and self._auth.is_no_face())
             if no_face:
-                self._p_auth_hint.setText("🔒 请先注册账户")
+                self._p_auth_hint.setText("🔒 Please register an account first")
             else:
-                self._p_auth_hint.setText("🔒 请先登录")
-            # 锁定所有表单控件为只读
+                self._p_auth_hint.setText("🔒 Please login first")
+            # Lock all form widgets to readonly
             for w in self._p_form_widgets:
                 w.setEnabled(False)
             for slider in self._trait_sliders.values():
@@ -5688,11 +5680,11 @@ class MainWindow(QMainWindow):
             "QStatusBar{background:#161b22;border-top:1px solid #30363d;"
             "color:#8b949e;font-size:11px;}"
         )
-        self._status_emotion = QLabel("情绪: —")
-        self._status_mem     = QLabel("记忆: —")
-        self._status_mode    = QLabel("就绪")
-        # 身份状态（点击可解锁）
-        self._status_auth    = QLabel("🟡 身份验证中…")
+        self._status_emotion = QLabel("Emotion: —")
+        self._status_mem     = QLabel("Memory: —")
+        self._status_mode    = QLabel("Ready")
+        # Identity status (click to unlock)
+        self._status_auth    = QLabel("🟡 Verifying identity…")
         self._status_auth.setStyleSheet(
             "color:#d29922;font-size:11px;"
             "text-decoration:underline;"
@@ -5706,83 +5698,83 @@ class MainWindow(QMainWindow):
         sb.addPermanentWidget(QLabel(" | "))
         sb.addWidget(self._status_mode)
 
-    # ── 身份验证 ─────────────────────────────────
+    # ---- Authentication ----
     def start_auth_verification(self, auth_manager):
-        """启动时后台做人脸识别，识别用户身份后自动登录"""
+        """Run face recognition in background at startup, auto-login after identification"""
         import threading
         self._auth = auth_manager
 
         def _recognize():
             try:
-                # 人脸识别只负责「认出是谁」，verify_face 会自动设置 state
+                # Face recognition only identifies who it is, verify_face auto-sets state
                 auth_manager.verify_face()
             except Exception as e:
-                print(f"[人脸识别] 异常: {e}")
-            # 无论成功失败，通过信号通知主线程刷新 UI
+                print(f"[Face Recognition] Exception: {e}")
+            # Regardless of success/failure, signal main thread to refresh UI
             self._auth_done.emit()
 
         threading.Thread(target=_recognize, daemon=True).start()
 
     def _on_face_recognized(self):
-        """信号回调（主线程）：读取 auth 状态，更新 UI + 权限"""
+        """Signal callback (main thread): read auth state, update UI + permissions"""
         if not self._auth:
             return
         from engine.auth import AuthState
 
         state = self._auth.state
-        # 统一为字符串
+        # Normalize to string
         state_str = state.value if hasattr(state, 'value') else str(state)
 
         if state_str == "verified":
-            name = self._auth.current_name or "已认证用户"
+            name = self._auth.current_name or "Authenticated User"
             self._status_auth.setText(f"🟢 {name}")
             self._status_auth.setStyleSheet("color:#3fb950;font-size:11px;")
             self._status_auth.setCursor(Qt.CursorShape.ArrowCursor)
-            self.chat_page.add_ai_message(f"✅ 欢迎回来，{name}")
+            self.chat_page.add_ai_message(f"✅ Welcome back, {name}")
         elif state_str == "no_face":
-            self._status_auth.setText("🟡 未注册用户（点击注册）")
+            self._status_auth.setText("🟡 Unregistered User (click to register)")
             self._status_auth.setStyleSheet(
                 "color:#d29922;font-size:11px;text-decoration:underline;")
             self.chat_page.add_ai_message(
-                "👋 欢迎使用！尚未注册任何用户账户。\n"
-                "点击底部「未注册用户」可以立刻注册，注册后记忆和画像将与您的账户绑定。\n"
-                "当前以完整权限运行。"
+                "👋 Welcome! No user accounts registered yet.\n"
+                "Click \"Unregistered User\" at bottom to register now. Memory and profile will be bound to your account.\n"
+                "Currently running with full permissions."
             )
         else:
-            # guest 或识别失败 → 游客模式
-            self._status_auth.setText("🔴 游客模式（点击解锁）")
+            # guest or identification failed → guest mode
+            self._status_auth.setText("🔴 Guest Mode (click to unlock)")
             self._status_auth.setStyleSheet(
                 "color:#f85149;font-size:11px;text-decoration:underline;")
             self.chat_page.add_ai_message(
-                "🔒 未识别到已注册用户，当前以**游客模式**运行。\n"
-                "私人记忆和用户画像已保护。\n"
-                "点击底部「游客模式」可以登录或注册账户。"
+                "🔒 No registered user identified, running in **Guest Mode**.\n"
+                "Private memories and user profile are protected.\n"
+                "Click \"Guest Mode\" at bottom to login or register."
             )
-        # 刷新人格设定页的认证状态（权限开关）
+        # Refresh personality page auth state (permission toggle)
         self._update_personality_auth()
 
     def _on_auth_result(self, result: dict):
-        """供对话框内人脸登录成功后调用的快捷入口"""
+        """Quick entry for post-face-login in chat dialog"""
         from engine.auth import AuthState
         state = result.get("state", AuthState.GUEST)
         state_str = state.value if hasattr(state, 'value') else str(state)
 
         if state_str == "verified":
-            name = self._auth.current_name or "已认证用户"
+            name = self._auth.current_name or "Authenticated User"
             self._status_auth.setText(f"🟢 {name}")
             self._status_auth.setStyleSheet("color:#3fb950;font-size:11px;")
             self._status_auth.setCursor(Qt.CursorShape.ArrowCursor)
-            self.chat_page.add_ai_message(f"✅ 欢迎回来，{name}")
+            self.chat_page.add_ai_message(f"✅ Welcome back, {name}")
         self._update_personality_auth()
         self._update_tab_visibility()
 
     def _update_tab_visibility(self):
-        """根据认证状态控制隐私相关标签的显隐"""
+        """Control visibility of privacy-related tabs based on auth state"""
         from engine.auth import AuthState
         verified = bool(
             hasattr(self, '_auth') and self._auth and self._auth.is_verified()
         )
-        # 记忆关联网络(7)、主动学习(8) 需要登录才能查看
+        # Memory graph(7), Active learning(8) require login to view
         if hasattr(self, '_tabs'):
             self._tabs.setTabVisible(7, verified)
             self._tabs.setTabVisible(8, verified)
@@ -5793,28 +5785,28 @@ class MainWindow(QMainWindow):
         from engine.auth import AuthState
         state = self._auth.state
         if state == AuthState.VERIFIED:
-            name = self._auth.current_name or self._auth.user_id or "当前用户"
+            name = self._auth.current_name or self._auth.user_id or "Current User"
             reply = QMessageBox.question(
-                self, "账户管理",
-                f"当前已登录：{name}\n\n是否锁定切换用户？",
+                self, "Account Management",
+                f"Currently logged in: {name}\n\nLock and switch user?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self._auth.lock()
-                self._status_auth.setText("🔴 游客模式（点击解锁）")
+                self._status_auth.setText("🔴 Guest Mode (click to unlock)")
                 self._status_auth.setStyleSheet(
                     "color:#f85149;font-size:11px;text-decoration:underline;")
-                self.chat_page.add_ai_message("🔒 已锁定，切换为游客模式。")
+                self.chat_page.add_ai_message("🔒 Locked, switched to guest mode.")
                 self._update_personality_auth()
                 self._update_tab_visibility()
             return
         self._show_unlock_dialog()
 
     def _show_unlock_dialog(self):
-        """登录 / 注册对话框"""
+        """Login / Register dialog"""
         from engine.auth import AuthState
         dialog = QWidget(self, Qt.WindowType.Dialog)
-        dialog.setWindowTitle("登录 / 注册")
+        dialog.setWindowTitle("Login / Register")
         dialog.setFixedSize(420, 500)
         dialog.setStyleSheet(
             "QWidget{background:#161b22;color:#e6edf3;}"
@@ -5828,10 +5820,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(10)
 
-        # 标签切换
+        # Tab switch
         tab_row = QHBoxLayout()
-        btn_login    = QPushButton("🔑  登录")
-        btn_register = QPushButton("✨  注册新用户")
+        btn_login    = QPushButton("🔑  Login")
+        btn_register = QPushButton("✨  Register New User")
         for b in [btn_login, btn_register]:
             b.setCheckable(True)
             b.setFixedHeight(34)
@@ -5843,43 +5835,43 @@ class MainWindow(QMainWindow):
         sep0 = QFrame(); sep0.setFrameShape(QFrame.Shape.HLine)
         sep0.setStyleSheet("color:#30363d;"); layout.addWidget(sep0)
 
-        # ── 登录区（仅密码短语） ──
+        # -- Login area (password only) --
         login_widget = QWidget()
         lw = QVBoxLayout(login_widget); lw.setContentsMargins(0,0,0,0); lw.setSpacing(8)
-        lw.addWidget(_make_label("密码短语登录", "color:#8b949e;font-size:12px;"))
-        pw_input = QLineEdit(); pw_input.setPlaceholderText("输入密码短语…")
+        lw.addWidget(_make_label("Passphrase Login", "color:#8b949e;font-size:12px;"))
+        pw_input = QLineEdit(); pw_input.setPlaceholderText("Enter passphrase…")
         pw_input.setEchoMode(QLineEdit.EchoMode.Password)
         pw_msg = _make_label("", "color:#f85149;font-size:11px;")
-        btn_pw_login = QPushButton("登录")
+        btn_pw_login = QPushButton("Login")
         lw.addWidget(pw_input); lw.addWidget(pw_msg); lw.addWidget(btn_pw_login)
         lw.addStretch()
         layout.addWidget(login_widget)
 
-        # ── 注册区 ──
+        # -- Registration area --
         reg_widget = QWidget(); reg_widget.setVisible(False)
         rw = QVBoxLayout(reg_widget); rw.setContentsMargins(0,0,0,0); rw.setSpacing(8)
-        rw.addWidget(_make_label("显示名称 *", "color:#8b949e;font-size:12px;"))
-        name_input = QLineEdit(); name_input.setPlaceholderText("你的名字（如：张三）")
+        rw.addWidget(_make_label("Display Name *", "color:#8b949e;font-size:12px;"))
+        name_input = QLineEdit(); name_input.setPlaceholderText("Your name (e.g. John)")
         rw.addWidget(name_input)
-        rw.addWidget(_make_label("认证方式", "color:#8b949e;font-size:12px;"))
-        chk_face = QCheckBox("📷  人脸识别（注册后前往 👁️ 人脸识别页录入）")
+        rw.addWidget(_make_label("Auth Method", "color:#8b949e;font-size:12px;"))
+        chk_face = QCheckBox("📷  Face Recognition (go to Face Recognition page after registration)")
         chk_face.setStyleSheet("color:#c9d1d9;font-size:12px;")
-        chk_pw = QCheckBox("🔑  密码短语（无需摄像头，更方便）")
+        chk_pw = QCheckBox("🔑  Passphrase (no camera needed, more convenient)")
         chk_pw.setStyleSheet("color:#c9d1d9;font-size:12px;")
         chk_pw.setChecked(True)
         rw.addWidget(chk_face); rw.addWidget(chk_pw)
         pw2_widget = QWidget()
         pw2l = QVBoxLayout(pw2_widget); pw2l.setContentsMargins(0,0,0,0); pw2l.setSpacing(4)
-        pw2l.addWidget(_make_label("设置密码短语", "color:#8b949e;font-size:11px;"))
-        pw2_input   = QLineEdit(); pw2_input.setPlaceholderText("建议一句话，好记且唯一")
+        pw2l.addWidget(_make_label("Set Passphrase", "color:#8b949e;font-size:11px;"))
+        pw2_input   = QLineEdit(); pw2_input.setPlaceholderText("Suggest a phrase, memorable and unique")
         pw2_input.setEchoMode(QLineEdit.EchoMode.Password)
-        pw2_confirm = QLineEdit(); pw2_confirm.setPlaceholderText("再次输入确认")
+        pw2_confirm = QLineEdit(); pw2_confirm.setPlaceholderText("Confirm passphrase")
         pw2_confirm.setEchoMode(QLineEdit.EchoMode.Password)
         pw2l.addWidget(pw2_input); pw2l.addWidget(pw2_confirm)
         rw.addWidget(pw2_widget)
         chk_pw.toggled.connect(pw2_widget.setVisible)
         reg_msg = _make_label("", "color:#f85149;font-size:11px;")
-        btn_do_reg = QPushButton("✨  创建账户")
+        btn_do_reg = QPushButton("✨  Create Account")
         btn_do_reg.setStyleSheet(
             "QPushButton{background:rgba(63,185,80,.15);border:1px solid #3fb950;"
             "border-radius:8px;color:#3fb950;padding:10px;font-size:13px;}"
@@ -5888,9 +5880,9 @@ class MainWindow(QMainWindow):
         rw.addWidget(reg_msg); rw.addWidget(btn_do_reg); rw.addStretch()
         layout.addWidget(reg_widget)
 
-        btn_cancel = QPushButton("取消"); layout.addWidget(btn_cancel)
+        btn_cancel = QPushButton("Cancel"); layout.addWidget(btn_cancel)
 
-        # 切换逻辑
+        # Switch logic
         def _show_login():
             btn_login.setChecked(True); btn_register.setChecked(False)
             login_widget.setVisible(True); reg_widget.setVisible(False)
@@ -5902,43 +5894,43 @@ class MainWindow(QMainWindow):
         if not self._auth.has_any_user():
             _show_reg()
 
-        # 密码登录
+        # Password login
         def _do_pw_login():
             pw = pw_input.text().strip()
             if not pw: return
             user = self._auth.verify_passphrase(pw)
             if user:
                 self._on_auth_result({"state": AuthState.VERIFIED,
-                                      "reason": f"欢迎回来，{user.name}"})
+                                      "reason": f"Welcome back, {user.name}"})
                 dialog.close()
             else:
-                pw_msg.setText("密码错误，或该密码未与任何账户绑定")
+                pw_msg.setText("Wrong password, or this password is not bound to any account")
         btn_pw_login.clicked.connect(_do_pw_login)
         pw_input.returnPressed.connect(_do_pw_login)
 
-        # 注册
+        # Register
         def _do_register():
             name = name_input.text().strip()
             if not name:
-                reg_msg.setText("请输入名称"); return
+                reg_msg.setText("Please enter a name"); return
             pw  = pw2_input.text().strip()   if chk_pw.isChecked() else ""
             pw2 = pw2_confirm.text().strip() if chk_pw.isChecked() else ""
             if chk_pw.isChecked() and not pw:
-                reg_msg.setText("请设置密码短语"); return
+                reg_msg.setText("Please set a passphrase"); return
             if chk_pw.isChecked() and pw != pw2:
-                reg_msg.setText("两次密码不一致"); return
+                reg_msg.setText("Passwords do not match"); return
             if not chk_face.isChecked() and not chk_pw.isChecked():
-                reg_msg.setText("请至少选择一种认证方式"); return
+                reg_msg.setText("Please select at least one auth method"); return
             user = self._auth.create_user(name=name, passphrase=pw)
             if chk_face.isChecked():
                 self._auth.add_face_method(user.user_id)
             self._auth.login(user)
             self._on_auth_result({"state": AuthState.VERIFIED,
-                                  "reason": f"账户创建成功，欢迎 {name}！"})
+                                  "reason": f"Account created successfully, welcome {name}!"})
             if chk_face.isChecked():
                 self.chat_page.add_ai_message(
-                    f"📷 请前往 👁️ 人脸识别页，点击「注册人脸」，"
-                    f"用户ID填写 {user.user_id} 完成录入。"
+                    f"📷 Please go to 👁️ Face Recognition page, click \"Register Face\","
+                    f"fill User ID {user.user_id} to complete registration."
                 )
             dialog.close()
         btn_do_reg.clicked.connect(_do_register)
@@ -5946,14 +5938,14 @@ class MainWindow(QMainWindow):
         dialog.show()
 
 
-    # ── 消息处理 ────────────────────────────────
+    # ---- Message Handling ----
     def _on_simlife_toggled(self, enabled: bool):
-        """SimLife 场景模式切换：同步到 agent"""
+        """SimLife scene mode switch: sync to agent"""
         if self.agent:
             self.agent.simlife_mode = enabled
         self.statusBar().showMessage(
-            "🌱 已进入 SimLife 场景模式" if enabled
-            else "已退出 SimLife 场景模式", 3000
+            "🌱 Entered SimLife scene mode" if enabled
+            else "Exited SimLife scene mode", 3000
         )
 
     def _on_message(self, text: str):
@@ -5962,9 +5954,9 @@ class MainWindow(QMainWindow):
 
         self.chat_page.add_user_message(text)
         self._thinking_lbl = self.chat_page.add_thinking_indicator()
-        self._status_mode.setText("🔄 处理中…")
+        self._status_mode.setText("🔄 Processing…")
 
-        # VRM: 用户发消息 → 好奇表情 + 开始说话动画
+        # VRM: user sends message → curious expression + start talking animation
         vrm = getattr(self.chat_page, "vrm_widget", None)
         if vrm:
             try:
@@ -5982,15 +5974,15 @@ class MainWindow(QMainWindow):
         self._worker.start()
 
     def _on_confirm_requested(self, tool_name: str, params: dict):
-        """主线程槽：弹确认框并回传结果给工作线程"""
+        """Main thread slot: pop confirmation dialog and return result to worker thread"""
         box = QMessageBox()
-        box.setWindowTitle("⚠️  高风险操作确认")
+        box.setWindowTitle("⚠️  High-Risk Operation Confirmation")
         box.setText(
-            f"<b>B 层请求执行高风险工具</b><br><br>"
-            f"工具：<code>{tool_name}</code><br><br>"
-            f"参数：<pre>{json.dumps(params, ensure_ascii=False, indent=2)[:400]}</pre>"
+            f"<b>B-layer requested high-risk tool execution</b><br><br>"
+            f"Tool: <code>{tool_name}</code><br><br>"
+            f"Params: <pre>{json.dumps(params, ensure_ascii=False, indent=2)[:400]}</pre>"
         )
-        box.setInformativeText("此操作可能不可撤销，是否允许执行？")
+        box.setInformativeText("This operation may be irreversible. Allow execution?")
         box.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -6003,7 +5995,7 @@ class MainWindow(QMainWindow):
         self.chat_page.remove_thinking_indicator()
         response_text = result.get("response", "")
 
-        # 方案D：根据情绪添加 emoji 前缀
+        # Plan D: add emoji prefix based on emotion
         _emoji_map = {
             "joy": "😊", "happy": "😊", "sadness": "😔", "sad": "😔",
             "anger": "😤", "angry": "😤", "fear": "😨", "scared": "😨",
@@ -6033,7 +6025,7 @@ class MainWindow(QMainWindow):
             }
         )
 
-        # 检测工具调用中的图片结果，自动显示图片气泡
+        # Detect image results in tool calls, auto-show image bubbles
         import os
         for step in result.get("tool_steps", []):
             tool_name = step.get("tool", "")
@@ -6042,14 +6034,14 @@ class MainWindow(QMainWindow):
                 img_path = step_result.get("image_path", "")
                 if img_path and os.path.isfile(img_path):
                     self.chat_page._show_image_bubble(img_path, is_user=False)
-        # 更新状态栏
+        # Update status bar
         if result.get("emotion"):
             e = result["emotion"]
             self._status_emotion.setText(
-                f"情绪: {e.get('primary','?')} "
+                f"Emotion: {e.get('primary','?')} "
                 f"({int(e.get('intensity',0)*10)}/10)"
             )
-            # VRM: 更新表情
+            # VRM: update expression
             vrm = getattr(self.chat_page, "vrm_widget", None)
             if vrm:
                 try:
@@ -6063,17 +6055,17 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
         else:
-            # VRM: 无情绪时回到 idle
+            # VRM: back to idle when no emotion
             vrm = getattr(self.chat_page, "vrm_widget", None)
             if vrm:
                 try:
                     vrm.set_speaking(False)
                 except Exception:
                     pass
-        self._status_mode.setText("就绪")
+        self._status_mode.setText("Ready")
         self._update_memory_count()
 
-        # TTS 自动朗读
+        # TTS auto read
         try:
             cfg = load_config()
             if cfg.get("tts_enabled", False) and response_text:
@@ -6083,13 +6075,13 @@ class MainWindow(QMainWindow):
                 tts.set_rate(cfg.get("tts_rate", 0))
                 tts.speak(response_text)
         except Exception as e:
-            print(f"[TTS] 自动朗读异常: {e}")
+            print(f"[TTS] Auto read exception: {e}")
 
     def _on_error(self, err: str):
         self.chat_page.remove_thinking_indicator()
-        self.chat_page.add_ai_message(f"❌ 错误: {err}")
-        self._status_mode.setText("就绪")
-        # VRM: 错误时恢复 idle
+        self.chat_page.add_ai_message(f"❌ Error: {err}")
+        self._status_mode.setText("Ready")
+        # VRM: restore idle on error
         vrm = getattr(self.chat_page, "vrm_widget", None)
         if vrm:
             try:
@@ -6099,94 +6091,94 @@ class MainWindow(QMainWindow):
                 pass
 
     def _check_offline_messages(self):
-        """启动时检查并展示离线消息"""
+        """Check and display offline messages at startup"""
         try:
             from simlife.offline_messages import on_startup
             messages = on_startup()
             if not messages:
                 return
 
-            self._status_mode.setText("加载离线消息...")
+            self._status_mode.setText("Loading offline messages...")
             self._offline_msg_queue = list(messages)
             self._offline_msg_idx = 0
             QTimer.singleShot(800, self._show_next_offline_message)
         except Exception as e:
-            print(f"[Offline] 消息加载跳过: {e}")
+            print(f"[Offline] Message load skipped: {e}")
 
     def _show_next_offline_message(self):
-        """逐条展示离线消息"""
+        """Display offline messages one by one"""
         if not hasattr(self, "_offline_msg_queue"):
             return
         if self._offline_msg_idx >= len(self._offline_msg_queue):
-            self._status_mode.setText("就绪")
+            self._status_mode.setText("Ready")
             return
 
         msg = self._offline_msg_queue[self._offline_msg_idx]
         self._offline_msg_idx += 1
 
-        label = f"[离线消息 · {msg['timestamp']}]"
+        label = f"[Offline · {msg['timestamp']}]"
         self.chat_page.add_ai_message(f"{label}\n{msg['text']}")
 
-        # 下一条间隔 1.5-3 秒
+        # Next message at 1.5-3 second interval
         if self._offline_msg_idx < len(self._offline_msg_queue):
             delay = random.randint(1500, 3000)
             QTimer.singleShot(delay, self._show_next_offline_message)
         else:
-            self._status_mode.setText("就绪")
+            self._status_mode.setText("Ready")
 
     def _on_tab_changed(self, idx: int):
-        if idx == 1:   # 记忆库
+        if idx == 1:   # Memory
             self.memory_page.load()
-        elif idx == 5: # 人脸识别
+        elif idx == 5: # Face Recognition
             self.face_page._load_existing_accounts()
-        elif idx == 6: # 用户画像
+        elif idx == 6: # User Profile
             self.profile_page.load()
-        elif idx == 7: # 记忆关联网络
+        elif idx == 7: # Memory Graph
             self.graph_page.load()
-        elif idx == 8: # 主动学习
+        elif idx == 8: # Active Learning
             self.learner_page._load_cognitions()
 
     def _on_learn_requested(self, topics: list):
-        """主动学习按钮触发，在后台线程执行"""
+        """Active learning button trigger, run in background thread"""
         import threading
         def _run():
             try:
                 if self.agent and hasattr(self.agent, "growth") and self.agent.growth:
                     growth = self.agent.growth
                     def _log(msg):
-                        # 通过信号安全地更新 UI
+                        # Safely update UI through signal
                         QTimer.singleShot(0, lambda m=msg: self.learner_page.on_learn_log(m))
                     growth.learn_from_web(topics=topics, log_callback=_log)
                 else:
                     QTimer.singleShot(0, lambda: self.learner_page.on_learn_log(
-                        "⚠️ AGI 未就绪，请先完成初始化"))
+                        "⚠️ AGI not ready, please complete initialization first"))
             except Exception as e:
-                QTimer.singleShot(0, lambda: self.learner_page.on_learn_log(f"❌ 错误: {e}"))
+                QTimer.singleShot(0, lambda: self.learner_page.on_learn_log(f"❌ Error: {e}"))
             finally:
                 QTimer.singleShot(0, self.learner_page.on_learn_done)
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_settings_changed(self, cfg: dict):
-        # 重建 agent 以应用新 API key
-        pass  # 由主程序处理
+        # Rebuild agent to apply new API key
+        pass  # Handled by main program
 
     def _update_memory_count(self):
         try:
             from engine.db_guard import guarded_connect
             with guarded_connect(self.db_file) as conn:
                 n = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-            self._status_mem.setText(f"记忆: {n}")
+            self._status_mem.setText(f"Memory: {n}")
         except Exception:
             pass
 
-    # ── 接收截图结果 ────────────────────────────
+    # ---- Receive Screenshot Results ----
     def receive_screenshot_text(self, text: str):
-        """OCR 结果注入到输入框"""
-        self.chat_page.fill_input(f"[截图识别内容]\n{text}")
+        """Inject OCR result into input box"""
+        self.chat_page.fill_input(f"[Screenshot OCR]\n{text}")
         self.activateWindow()
         self._tabs.setCurrentIndex(0)
 
-    # ── 关闭行为 ────────────────────────────────
+    # ---- Close Behavior ----
     def closeEvent(self, event):
         cfg = load_config()
         if cfg.get("tray_minimize", True):

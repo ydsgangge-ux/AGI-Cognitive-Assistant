@@ -120,26 +120,26 @@ class TTSEngine:
 
         def _run():
             backend = self._detect_backend()
-            print(f"[TTS] 后端={backend}, 文本={text[:30]}...")
+            print(f"[TTS] backend={backend}, text={text[:30]}...")
             try:
                 if backend == "edge":
                     success = self._speak_edge(text)
                     if not success:
-                        print("[TTS] edge-tts 失败，降级到 pyttsx3")
+                        print("[TTS] edge-tts failed, falling back to pyttsx3")
                         if self._pyttsx3_engine is None:
                             self._try_init_pyttsx3()
                         if self._pyttsx3_engine:
                             self._speak_pyttsx3(text)
                         else:
-                            print("[TTS] 无可用后端")
+                            print("[TTS] No available backend")
                 elif backend == "pyttsx3":
                     self._speak_pyttsx3(text)
                 else:
-                    print("[TTS] 无可用后端，请安装: pip install edge-tts")
+                    print("[TTS] No available backend，please install: pip install edge-tts")
                 if on_done and not self._stop_flag:
                     on_done()
             except Exception as e:
-                print(f"[TTS] 播放失败: {e}")
+                print(f"[TTS] Playback failed: {e}")
                 if on_error:
                     on_error(str(e))
 
@@ -159,7 +159,7 @@ class TTSEngine:
             self._pyttsx3_engine = engine
             self._backend = "pyttsx3"
         except Exception as e:
-            print(f"[TTS] pyttsx3 初始化失败: {e}")
+            print(f"[TTS] pyttsx3 Init failed: {e}")
 
     def _speak_edge(self, text: str) -> bool:
         """Edge TTS 合成 + 播放"""
@@ -195,7 +195,7 @@ class TTSEngine:
                 loop.close()
 
             if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) < 100:
-                print("[TTS] edge-tts 生成的文件为空或过小")
+                print("[TTS] edge-tts Generated file is empty or too small")
                 return False
 
             if self._stop_flag:
@@ -244,12 +244,12 @@ class TTSEngine:
                 # 取错误信息
                 buf = ctypes.create_unicode_buffer(256)
                 mci.mciGetErrorStringW(ret, buf, 256)
-                print(f"[TTS] MCI open 失败: {buf.value}")
+                print(f"[TTS] MCI open failed: {buf.value}")
                 return False
             mci.mciSendStringW(f"play {alias} wait", None, 0, None)
             return True
         except Exception as e:
-            print(f"[TTS] MCI 播放失败: {e}")
+            print(f"[TTS] MCI Playback failed: {e}")
             return False
         finally:
             try:
@@ -269,7 +269,7 @@ class TTSEngine:
             subprocess.run(cmd + [file_path], check=True, capture_output=True)
             return True
         except Exception as e:
-            print(f"[TTS] 播放器失败: {e}")
+            print(f"[TTS] Player failed: {e}")
             return False
         finally:
             try:

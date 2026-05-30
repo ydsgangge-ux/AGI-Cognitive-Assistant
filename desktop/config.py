@@ -1,20 +1,20 @@
 """
-应用配置和常量
+Application configuration and constants
 """
 import os
 import sys
 import json
 from pathlib import Path
 
-# ── 路径 ──────────────────────────────────────────
-APP_NAME    = "AGI 认知助手"
+# ── Paths ──────────────────────────────────────────
+APP_NAME    = "AGI Cognitive Assistant"
 APP_VERSION = "1.0.0"
 
-# 数据目录（跨平台）
+# Data directory (cross-platform)
 if sys.platform == "win32":
-    DATA_ROOT = Path(os.environ.get("APPDATA", str(Path.home()))) / "AGI-Desktop"
+    DATA_ROOT = Path(os.environ.get("APPDATA", str(Path.home()))) / "AGI-Assistant"
 else:
-    DATA_ROOT = Path.home() / ".agi-desktop"
+    DATA_ROOT = Path.home() / ".agi-assistant"
 
 DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -23,7 +23,7 @@ PERSONALITY_FILE = DATA_ROOT / "personality.json"
 DB_FILE          = str(DATA_ROOT / "memory.db")
 LOG_FILE         = DATA_ROOT / "agi.log"
 
-# ── 默认配置 ──────────────────────────────────────
+# ── Default Configuration ──────────────────────────────────────
 DEFAULT_CONFIG = {
     "api_key":           "",
     "api_provider":      "deepseek",        # "deepseek" | "ollama"
@@ -38,34 +38,34 @@ DEFAULT_CONFIG = {
     "window_geometry":   None,
     "ocr_language":      "chi_sim+eng",
     "verbose":           True,
-    "newsapi_key":       "",     # NewsAPI.org API Key（可选，用于新闻工具）
-    # ── 多模态模型配置（Vision）──
-    "vision_provider":   "",     # 空则自动继承主 LLM，可设 "openai"/"claude"/"gemini"/"qwen"/"zhipu"/"ollama"
-    "vision_model":      "",     # 空则用 provider 默认 vision 模型
-    "vision_api_key":    "",     # 空则继承主 API Key
-    "vision_base_url":   "",     # 自定义 API 地址（一般不用填）
-    # ── VRM 虚拟形象模块 ──
-    "vrm_enabled":       True,   # 是否启用 VRM 虚拟形象面板
-    "vrm_width":         220,    # VRM 面板宽度 (px)
-    "vrm_height":        220,    # VRM 面板高度 (px)
-    # ── 语音识别（STT）──
+    "newsapi_key":       "",     # NewsAPI.org API Key (optional, for news tool)
+    # ── Multimodal Model Config (Vision) ──
+    "vision_provider":   "",     # Empty to auto-inherit main LLM, can set "openai"/"claude"/"gemini"/"qwen"/"zhipu"/"ollama"
+    "vision_model":      "",     # Empty to use provider default vision model
+    "vision_api_key":    "",     # Empty to inherit main API Key
+    "vision_base_url":   "",     # Custom API address (usually not needed)
+    # ── VRM Virtual Avatar Module ──
+    "vrm_enabled":       True,   # Enable VRM virtual avatar panel
+    "vrm_width":         220,    # VRM panel width (px)
+    "vrm_height":        220,    # VRM panel height (px)
+    # ── Speech Recognition (STT) ──
     "stt_provider":      "deepseek",  # "deepseek" | "xunfei" | "whisper_local"
-    "stt_language":      "zh",        # 识别语言
-    "xunfei_app_id":     "",          # 讯飞开放平台 APPID
-    "xunfei_api_key":    "",          # 讯飞 API Key
-    "xunfei_api_secret": "",          # 讯飞 API Secret
-    "whisper_model":     "base",      # 本地 Whisper 模型：tiny/base/small/medium/large
-    # ── 传感器模块（Sensor Agent）──
-    "sensor_enabled":    False,  # 是否启用传感器模块
-    "sensor_mock":       True,   # 模拟模式（无硬件时使用模拟数据）
+    "stt_language":      "zh",        # Recognition language
+    "xunfei_app_id":     "",          # Xunfei platform APPID
+    "xunfei_api_key":    "",          # Xunfei API Key
+    "xunfei_api_secret": "",          # Xunfei API Secret
+    "whisper_model":     "base",      # Local Whisper model: tiny/base/small/medium/large
+    # ── Sensor Agent Module ──
+    "sensor_enabled":    False,  # Enable sensor module
+    "sensor_mock":       True,   # Mock mode (use mock data when no hardware)
     "sensor_type":       "robot_dog",  # "robot_dog" | "robot_arm" | "custom"
     "sensor_mqtt_host":  "localhost",
     "sensor_mqtt_port":  1883,
-    "sensor_push_interval": 30,  # 推送间隔（秒）
-    # ── 思考模式（Thinking Mode）──
+    "sensor_push_interval": 30,  # Push interval (seconds)
+    # ── Thinking Mode ──
     "thinking_mode":      "auto",  # "auto" / "always_on" / "always_off"
-    "thinking_effort":    "high", # 思考深度：low/medium/high/max
-    "thinking_budget":    8000,   # 思考 token 预算（Claude/Gemini/通义/智谱）
+    "thinking_effort":    "high", # Thinking depth: low/medium/high/max
+    "thinking_budget":    8000,   # Thinking token budget (Claude/Gemini/Qwen/Zhipu)
 }
 
 
@@ -88,7 +88,7 @@ def save_config(cfg: dict):
     )
 
 
-# ── 样式表 ────────────────────────────────────────
+# ── Stylesheet ────────────────────────────────────────
 DARK_QSS = """
 QMainWindow, QDialog, QWidget {
     background-color: #0d1117;

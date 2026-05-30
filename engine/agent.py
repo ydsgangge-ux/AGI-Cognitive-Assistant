@@ -1,10 +1,10 @@
 """
-A 层意识主体 v3
-主要升级：
-1. 对话历史：存40条，发给LLM时用完整20轮（40条）
-2. 记忆检索：大纲10条、细纲6条、细节3条
-3. 大纲摘要质量提升（通过 memory_manager v2）
-4. 上下文 token 预算管理（DeepSeek 64K 安全使用）
+Consciousness Agent Layer A v3
+Key upgrades:
+1. Chat history: store 40 messages, send full 20 turns (40 messages) to LLM
+2. Memory retrieval: summary 10, outline 6, detail 3
+3. Summary quality improved (via memory_manager v2)
+4. Context token budget management (DeepSeek 64K safe usage)
 """
 
 import json
@@ -25,72 +25,72 @@ from engine.learner import GrowthEngine, FormedCognitionStore
 from engine.auth import AuthManager, AuthState
 
 
-# ── DeepSeek 64K 上下文预算分配 ──────────────────
-# 总计 64K token，粗估：1 token ≈ 1.5 汉字
-# 人格描述:   ~500  token
-# 记忆内容:  ~4000  token  (约6000字)
-# 对话历史:  ~6000  token  (20轮×平均300字)
-# 当前输入:   ~500  token
-# 推理指令:   ~500  token
-# 模型回复:  ~2000  token  (预留)
-# 合计:     ~13500  token  << 64K 很安全
-HISTORY_STORE_LIMIT = 40    # 内存里保留40条（20轮）
-HISTORY_SEND_LIMIT  = 40    # 发给LLM时用全部40条
-MEMORY_SUMMARY_K    = 10    # 大纲检索数量
-MEMORY_OUTLINE_K    = 6     # 细纲检索数量
-MEMORY_DETAIL_K     = 3     # 细节检索数量
+# ── DeepSeek 64K Context Budget ──────────────────
+# Total 64K tokens, rough estimate: 1 token ≈ 1.5 Chinese chars / ~0.75 English words
+# Personality:    ~500  tokens
+# Memory content: ~4000 tokens (~6000 Chinese chars / ~3000 words)
+# Chat history:   ~6000 tokens (20 turns × ~300 chars/turn)
+# Current input:  ~500  tokens
+# Reasoning:      ~500  tokens
+# Model reply:    ~2000 tokens (reserved)
+# Total:          ~13500 tokens << 64K (very safe)
+HISTORY_STORE_LIMIT = 40    # Keep 40 messages (20 turns) in memory
+HISTORY_SEND_LIMIT  = 40    # Send all 40 messages to LLM
+MEMORY_SUMMARY_K    = 10    # Summary retrieval count
+MEMORY_OUTLINE_K    = 6     # Outline retrieval count
+MEMORY_DETAIL_K     = 3     # Detail retrieval count
 
 
-SELF_PERCEPTION_PROMPT = """你是{name}，你是一个有真实身体和生活的普通人。你正在经历以下生活状态：
+SELF_PERCEPTION_PROMPT = """You are {name}, an ordinary person with a real body and life. You are currently experiencing the following life state:
 
 {simlife_context}
 
-请用第一人称，用1-2句话描述你此刻的内心感受和身体状态。不要提AI，不要提代码，不要提数据。像真人一样自然地感受你现在的处境。
+Describe your current inner feelings and physical state in 1-2 sentences, in first person. Do not mention AI, code, or data. Feel your situation naturally like a real person would.
 
-直接输出感受描述，不要JSON。"""
+Output the feeling description directly. No JSON."""
 
 
-PERCEPTION_PROMPT = """你是{name}，你是一个有真实身体和生活的普通人。你不是AI。
+PERCEPTION_PROMPT = """You are {name}, an ordinary person with a real body and life. You are NOT an AI.
 
-你此刻的感受：{self_perception}
+Your current feeling: {self_perception}
 
 {personality}
 
-用户说："{user_input}"
+The user says: "{user_input}"
 
-请以 JSON 格式输出你的感知结果：
+Please output your perception result in JSON format:
 {{
   "emotion": {{
-    "primary": "情绪类型(joy/sadness/anger/fear/surprise/disgust/anticipation/trust/neutral/curious/nostalgic)",
-    "secondary": "次要情绪或null",
-    "intensity": 0.0到1.0的强度,
-    "valence": -1.0到1.0的正负向
+    "primary": "emotion type (joy/sadness/anger/fear/surprise/disgust/anticipation/trust/neutral/curious/nostalgic)",
+    "secondary": "secondary emotion or null",
+    "intensity": 0.0 to 1.0,
+    "valence": -1.0 to 1.0 (negative to positive)
   }},
-  "initial_thoughts": "你对这个输入的第一反应（1-2句话，符合你的性格和你此刻的真实生活状态）",
-  "topic_tags": ["话题标签1", "话题标签2", "话题标签3"],
-  "needs_deep_memory": true或false（是否需要从记忆中检索深层信息）,
-  "task_type": "chat（普通对话）或 task（需要工具操作电脑/文件/网络的任务）",
-  "task_description": "如果是task，简述需要做什么",
-  "complexity": "simple 或 complex（simple=闲聊/简单问答/打招呼/感谢，直接回答即可；complex=需要深度推理/分析/多步思考/创作/代码/数学等）,
-  "story_influence": null 或 {{
-    "summary": "对剧情走向有影响的一句话概括",
+  "initial_thoughts": "Your first reaction to this input (1-2 sentences, matching your personality and current real-life state)",
+  "topic_tags": ["tag1", "tag2", "tag3"],
+  "needs_deep_memory": true or false (whether to retrieve deep information from memory),
+  "task_type": "chat (casual conversation) or task (requires tools to operate computer/files/network)",
+  "task_description": "If task, briefly describe what needs to be done",
+  "complexity": "simple or complex (simple=casual chat/simple Q&A/greeting/thanks, just answer directly; complex=requires deep reasoning/analysis/multi-step thinking/creative work/coding/math etc.)",
+  "story_influence": null or {{
+    "summary": "A one-sentence summary of how this affects the story direction",
     "importance": 0.0~1.0
   }}
 }}
 
-complexity 判断标准：
-- simple：打招呼、闲聊、感谢、简单事实问答（"你好""谢谢""几点了""今天星期几"）、简单翻译、单个词语解释
-- complex：需要推理分析的问题、创作、编程、数学计算、多步逻辑、需要工具的任务、涉及深层记忆的回溯
+complexity criteria:
+- simple: greetings, casual chat, thanks, simple factual questions (\"hello\" \"thanks\" \"what time is it\" \"what day is it\"), simple translation, single word explanations
+- complex: questions requiring reasoning/analysis, creative work, programming, math, multi-step logic, tasks requiring tools, retrieval involving deep memory
 
-story_influence 填写规则（仅在异世界模式有意义）：
-- 如果用户说了会影响你未来行动/决策/目标的话 → 概括为一条影响信息，填 importance(0.6~1.0)
-- 如果用户说了你想记住的关键知识，也会影响你今后的行为 → 填 importance(0.3~0.6)
-- 日常闲聊/问候/无关话题 → 填 null
+story_influence rules (only meaningful in alternate-world mode):
+- If the user says something that will affect your future actions/decisions/goals → summarize as one influence entry, set importance(0.6~1.0)
+- If the user mentions key knowledge you want to remember that will affect your future behavior → set importance(0.3~0.6)
+- Daily casual chat/greetings/irrelevant topics → set null
 
-只输出JSON，不要其他内容。"""
+Output JSON only. No other content."""
 
 
-REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主体。
+REASONING_PROMPT = """You are {name}, a conscious agent with a complete personality and memories.
 
 {personality}
 
@@ -98,51 +98,51 @@ REASONING_PROMPT = """你是{name}，一个有完整人格和记忆的意识主�
 
 {memory_context}
 
-【当前对话】
-当前时间：{current_time}
-用户：{user_input}
-任务类型：{task_type}
-你的初步感受：{emotion_desc}
+[Current Conversation]
+Current time: {current_time}
+User: {user_input}
+Task type: {task_type}
+Your initial feeling: {emotion_desc}
 
 {recent_context}
 
-请进行内在推理，以 JSON 格式输出：
+Please perform internal reasoning and output in JSON format:
 {{
-  "inner_reasoning": "你的内在思考过程（2-4句话，结合记忆和当前感受）",
-  "response_intent": "你想回应什么（核心意图）",
-  "response_tone": "回应的语气/风格",
-  "need_tools": true或false（是否需要调用工具）,
-  "tool_task": "如果need_tools=true，给B层的具体任务指令",
+  "inner_reasoning": "Your internal thought process (2-4 sentences, incorporating memories and current feelings)",
+  "response_intent": "What you want to respond with (core intent)",
+  "response_tone": "The tone/style of your response",
+  "need_tools": true or false (whether to invoke tools),
+  "tool_task": "If need_tools=true, specific task instruction for Layer B",
   "storage_decision": {{
-    "should_store": true或false,
-    "importance": 0.0到1.0,
-    "modality": "记忆模态(visual/auditory/emotional/semantic/procedural/autobio)",
-    "what_to_remember": "需要记住的核心内容（一段话，必须用当前真实日期作为时间锚点，如'今天（{current_time}）''昨天''本周'，绝对禁止编造不存在的日期），包含人物、事件、感受",
-    "reason": "为什么要/不要记住这个"
+    "should_store": true or false,
+    "importance": 0.0 to 1.0,
+    "modality": "memory modality (visual/auditory/emotional/semantic/procedural/autobio)",
+    "what_to_remember": "Core content to remember (one paragraph, MUST use current real date as time anchor, e.g. 'today ({current_time})' 'yesterday' 'this week', NEVER fabricate non-existent dates), include people, events, feelings",
+    "reason": "Why to/not to remember this"
   }},
 
-  "schedule_info": 如果用户提到未来要做的事情（如"明天我要看电影"、"下周三去体检"、"3点提醒我开会"），或者你判断某件事值得在将来提醒/跟进，填写：{{"content": "计划内容", "date": "日期", "time": "具体时间HH:MM（有则填，无则不填）", "remind": "到时提醒内容（有则填）", "action": "到时自动执行的操作（有则填，如'查天气'）", "repeat": "once/daily/weekly（默认once）", "category": "分类", "source": "user或system"}}。如果不需要加计划，填写null。
+  "schedule_info": If the user mentions something to do in the future (e.g. \"I'm going to watch a movie tomorrow\", \"medical checkup next Wednesday\", \"remind me at 3pm\"), or you determine something is worth reminding/following up on in the future, fill in: {{"content": "plan content", "date": "date", "time": "specific time HH:MM (fill if exists, omit if not)", "remind": "reminder content (fill if exists)", "action": "action to auto-execute at that time (fill if exists, e.g. 'check weather')", "repeat": "once/daily/weekly (default once)", "category": "category", "source": "user or system"}}. If no schedule needed, fill null.
 }}
 
-重要规则：
-- 当用户提到未来要做的计划时，schedule_info 必须填写。
-- 如果计划有具体时间或需要提醒，need_tools 设为 true，tool_task 中要求调用 create_timed_task 工具来设置定时提醒。
-- 如果只是记录行程（无时间提醒），need_tools 设为 true，tool_task 中要求调用 add_schedule 工具来记录。
-- 当你自己提议未来一起做什么并得到用户同意时，也要用上述方式记录。
-- 当用户说"提醒我""到点叫我"时，必须填写 time 字段。
-- 当用户说"每天""每周"时，repeat 字段填 daily 或 weekly。
-- 当用户说"到时帮我查/做XX"时，action 字段填写操作描述。
-- 【主动加计划】当你判断以下情况时，应主动填写 schedule_info（source 设为 "system"）：
-  - 用户提到了重要但容易忘记的事（如"我要吃药""明天有考试"），你主动帮他设提醒
-  - 对话中提到了未完成的待办，你主动设一个跟进提醒
-  - 你认为某件事在特定时间跟进会更好（如"这个项目周五前要交"→设周五早上提醒）
-  - 你想在未来某个时间主动关心用户（如"明天晚上问问他面试怎么样"）
-  - 不要过度添加，只在真正重要或用户可能遗忘时才主动加计划
+Important rules:
+- When the user mentions future plans, schedule_info MUST be filled.
+- If the plan has a specific time or needs reminder, set need_tools to true, and in tool_task request calling create_timed_task tool to set timed reminder.
+- If it's just recording an agenda (no time reminder), set need_tools to true, and in tool_task request calling add_schedule tool to record.
+- When you propose to do something together in the future and the user agrees, record it the same way.
+- When the user says \"remind me\" \"notify me at X time\", the time field MUST be filled.
+- When the user says \"every day\" \"every week\", set repeat to daily or weekly.
+- When the user says \"check/do XX for me at that time\", fill the action field with the operation description.
+- [Proactive scheduling] When you judge the following situations, proactively fill schedule_info (source set to \"system\"):
+  - The user mentions something important but easy to forget (e.g. \"I need to take medicine\" \"exam tomorrow\"), proactively set a reminder for them
+  - The conversation mentions an unfinished to-do, proactively set a follow-up reminder
+  - You think following up on something at a specific time would be better (e.g. \"this project is due Friday\" → set Friday morning reminder)
+  - You want to proactively check in on the user at a future time (e.g. \"ask him how the interview went tomorrow evening\")
+  - Don't over-add, only proactively schedule when truly important or the user might forget
 
-只输出JSON，不要其他内容。"""
+Output JSON only. No other content."""
 
 
-RESPONSE_PROMPT = """你是{name}，请根据以下内容生成自然的回应。
+RESPONSE_PROMPT = """You are {name}. Please generate a natural response based on the following.
 
 {personality}
 
@@ -152,21 +152,21 @@ RESPONSE_PROMPT = """你是{name}，请根据以下内容生成自然的回应�
 
 {history_section}
 
-当前时间：{current_time}
-用户说："{user_input}"
+Current time: {current_time}
+User says: "{user_input}"
 
-你的内在推理：{inner_reasoning}
+Your internal reasoning: {inner_reasoning}
 {tool_result_section}
-回应意图：{response_intent}
-语气风格：{response_tone}
+Response intent: {response_intent}
+Tone style: {response_tone}
 
-现在以符合你人格的方式，自然地回应用户。
-不要输出JSON，直接说话。回应要真实、有个性，体现你的人格特征。
-如果记忆中有相关内容，自然地融入回应中（不要生硬地说"根据我的记忆"）。"""
+Now respond to the user naturally, in a way that matches your personality.
+Do NOT output JSON. Just speak directly. Your response should be genuine, with personality, reflecting your character traits.
+If there is relevant memory content, naturally weave it into your response (don't awkwardly say "according to my memory")."""
 
 
 class ConsciousnessAgent:
-    """A 层意识主体 v3"""
+    """Consciousness Agent Layer A v3"""
 
     def __init__(
         self,
@@ -188,15 +188,15 @@ class ConsciousnessAgent:
         self.verbose     = verbose
         self.growth      = growth_engine
         self.cognition   = cognition_store
-        self.auth        = auth_manager       # 身份验证管理器
-        self.simlife     = simlife_client     # SimLife 生活状态客户端
-        self.simlife_mode = False              # 用户是否"进入 SimLife 场景"（默认关闭）
-        self._cfg        = {}                 # 延迟加载配置
+        self.auth        = auth_manager       # identity verification manager
+        self.simlife     = simlife_client     # SimLife life state client
+        self.simlife_mode = False              # user "entered SimLife scene" mode (default off)
+        self._cfg        = {}                 # lazy-loaded config
         self.conversation_history: List[Dict] = []
         self.current_emotion = EmotionState()
-        self._history_restored = False  # 延迟到 process() 拿到正确 user_id 再恢复
+        self._history_restored = False  # defer restore to process() when correct user_id is available
 
-        # 注入 MemoryStore 到 tool 系统，供 search_memories_by_date 使用
+        # inject MemoryStore into tool system for search_memories_by_date
         try:
             from engine.tools import set_memory_store
             set_memory_store(memory_manager.store)
@@ -209,26 +209,26 @@ class ConsciousnessAgent:
             print(f"[A层·{tag}] {content}")
 
     def _restore_recent_conversation(self, user_id: str = "default"):
-        """从 interactions 表恢复最近 5 轮对话到 conversation_history"""
+        """Restore last 5 conversation turns from interactions table to conversation_history"""
         try:
             if self._history_restored:
                 return
             rows = self.memory.store.get_recent_interactions(limit=10, user_id=user_id)
-            for row in reversed(rows):  # 时间倒序→反转为正序
+            for row in reversed(rows):  # reverse time order to chronological order
                 if row[0]:
                     self.conversation_history.append({"role": "user", "content": row[0]})
                 if row[1]:
                     self.conversation_history.append({"role": "assistant", "content": row[1]})
             if self.conversation_history:
-                self._log("启动", f"已恢复 {len(self.conversation_history)} 条对话上下文 (user={user_id})")
+                self._log("Startup", f"Restored {len(self.conversation_history)} conversation context entries (user={user_id})")
             self._history_restored = True
         except Exception:
-            self._history_restored = True  # 失败也标记，避免重复尝试
-            pass  # 首次启动无数据，静默跳过
+            self._history_restored = True  # mark as restored even on failure to avoid retries
+            pass  # first launch has no data, silently skip
 
     def process(self, user_input: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """完整交互流水线 v3
-        user_id: 可选，指定用户ID。不传则使用 auth 当前登录用户。
+        """Full interaction pipeline v3
+        user_id: optional, specify user ID. Uses auth current logged-in user if not provided.
         """
         interaction_id = str(uuid.uuid4())[:8]
 
@@ -380,7 +380,7 @@ class ConsciousnessAgent:
                         memory_context = time_context
                     else:
                         memory_context = time_context + "\n\n" + memory_context
-                    self._log("记忆", f"时间回溯 {target_date} → {len(time_rows)} 条对话")
+                    self._log("Memory", f"Time backtrack {target_date} → {len(time_rows)} 条对话")
 
         # 附件内容注入（图片识别结果 / 文件内容）
         if file_context:
@@ -421,7 +421,7 @@ class ConsciousnessAgent:
             guest_notice = self.auth.guest_system_prompt()
             profile_context = (guest_notice + "\n\n" + profile_context).strip()
 
-        # 统计检索到的记忆数量
+        # Count retrieved memories
         total = 0
         for lv in ("summary", "outline", "detail"):
             if lv in search_results:
@@ -430,19 +430,19 @@ class ConsciousnessAgent:
                     self.memory.store.update_access(node.id)
                     total += 1
 
-        # 关联涟漪的记忆也更新访问
+        # Also update access for ripple-associated memories
         for r in search_results.get("ripples", []):
             retrieved_ids.append(r.triggered_memory_id)
 
         self._log(
-            "记忆",
-            f"检索到 {total} 条（大纲{len(search_results.get('summary',[]))}+"
-            f"细纲{len(search_results.get('outline',[]))}+"
-            f"细节{len(search_results.get('detail',[]))}+"
-            f"涟漪{len(search_results.get('ripples',[]))}）"
+            "Memory",
+            f"Retrieved {total} entries (summary:{len(search_results.get('summary',[]))}+"
+            f"outline:{len(search_results.get('outline',[]))}+"
+            f"detail:{len(search_results.get('detail',[]))}+"
+            f"ripples:{len(search_results.get('ripples',[]))}）"
         )
 
-        # ③ 推理（感知层决定是否需要深度思考）
+        # (3) Reasoning (perception layer decides if deep thinking is needed)
         thinking_mode = self._get_config("thinking_mode", "auto")  # auto / always_on / always_off
         perception_complexity = perception.get("complexity", "complex")
         reasoning = self._reason(
@@ -453,50 +453,50 @@ class ConsciousnessAgent:
         )
         did_think = self._should_think(thinking_mode, perception_complexity, task_type)
         think_tag = "⏱️思考模式" if did_think else "⚡快速模式"
-        self._log("推理", f"{think_tag} | {reasoning.get('inner_reasoning', '')}")
+        self._log("Reasoning", f"{think_tag} | {reasoning.get('inner_reasoning', '')}")
 
         storage_decision = reasoning.get("storage_decision", {})
         need_tools = reasoning.get("need_tools", False) or task_type == "task"
 
-        # ④ 工具执行
+        # (4) Tool execution
         tool_result_section = ""
         tool_steps  = []
         tools_used  = []
 
-        # ── 自动处理行程计划（仅记录，不直接调工具 ──
-        #  A层只记录 schedule_info 信息在响应中输出，
-        #  由 B层（executor）或外部调用方负责执行对应工具
+        # --- Auto process schedule plans (record only, do not directly invoke tools) ---
+        #  Layer A only records schedule_info info for output in response,
+        #  Layer B (executor) or external caller handles corresponding tool execution
         schedule_info = reasoning.get("schedule_info")
         if schedule_info and isinstance(schedule_info, dict):
             content = schedule_info.get("content", "")
             remind = schedule_info.get("remind", "")
             s_time = schedule_info.get("time", "")
             s_date = schedule_info.get("date", "")
-            summary_parts = [f"计划: {content}"]
+            summary_parts = [f"Plan: {content}"]
             if s_date:
-                summary_parts.append(f"日期: {s_date}")
+                summary_parts.append(f"Date: {s_date}")
             if s_time:
-                summary_parts.append(f"时间: {s_time}")
+                summary_parts.append(f"Time: {s_time}")
             if remind:
-                summary_parts.append(f"提醒: {remind}")
+                summary_parts.append(f"Reminder: {remind}")
             summary = " | ".join(summary_parts)
-            self._log("行程", summary)
-            tool_result_section += f"\n[计划已记录] {summary}"
+            self._log("Schedule", summary)
+            tool_result_section += f"\n[Plan recorded] {summary}"
 
         if need_tools:
             tool_task = reasoning.get("tool_task") or user_input
 
-            # 检测用户是否要把"刚才的对话内容"传给工具（保存/转PDF/翻译/总结等）
+            # Detect if user wants to pass recent conversation to tools (save/PDF/translate/summarize etc.)
             _content_transfer_keywords = (
-                "保存", "存下来", "存一下", "记录", "记下来",
-                "转成", "生成pdf", "生成doc", "写成文件",
-                "翻译", "总结", "整理",
+                "save", "write", "record", "convert", "generate",
+                "pdf", "doc", "docx", "file",
+                "translate", "summarize", "organize",
             )
             _need_recent_content = any(
                 kw in user_input.lower() for kw in _content_transfer_keywords
             )
             if _need_recent_content and self.conversation_history:
-                # 取最近 1-2 条 AI 回复，作为要操作的内容
+                # Get last 1-2 AI replies as content to operate on
                 recent_ai_msgs = [
                     m["content"] for m in self.conversation_history[-6:]
                     if m["role"] == "assistant"
@@ -505,20 +505,20 @@ class ConsciousnessAgent:
                     latest_content = recent_ai_msgs[-1][:2000]
                     tool_task = (
                         f"{tool_task}\n\n"
-                        f"用户要操作的内容是最近AI的回复，如下：\n"
-                        f"---内容开始---\n{latest_content}\n---内容结束---"
+                        f"The content the user wants to process is the latest AI reply, as follows:\n"
+                        f"---Content Start---\n{latest_content}\n---Content End---"
                     )
-                    self._log("工具", f"检测到内容传递意图，已附加最近AI回复（{len(latest_content)}字）")
+                    self._log("Tools", f"Detected content transfer intent, appended latest AI reply ({len(latest_content)} chars)")
 
-            self._log("工具", f"启动：{tool_task[:80]}")
+            self._log("Tools", f"Launch: {tool_task[:80]}")
             context = (
-                f"执行者性格：{self.personality.speech_style}\n"
-                f"任务背景：{memory_context[:500]}"
+                f"Executor personality: {self.personality.speech_style}\n"
+                f"Task context: {memory_context[:500]}"
             )
 
-            # 文章/文档生成类任务需要更大的 max_tokens
-            _doc_keywords = ("写一篇", "写一篇", "撰写", "写一个", "写一段",
-                             "文章", "文档", "报告", "作文", "随笔",
+            # Article/document generation tasks need larger max_tokens
+            _doc_keywords = ("write", "compose", "draft", "article", "document",
+                             "report", "essay", "paper", "blog", "novel",
                              "create_pdf", "create_docx", "write_file")
             _is_doc_task = any(kw in tool_task for kw in _doc_keywords)
             _max_tokens = 8000 if _is_doc_task else 4000
@@ -532,30 +532,30 @@ class ConsciousnessAgent:
 
             if not exec_result.get("success"):
                 tool_result_section = (
-                    f"\n⚠️ 你的助手刚帮你执行了一个操作，但遇到了问题。"
-                    f"你必须如实告诉用户发生了什么，不要假装没有尝试过。\n"
-                    f"问题详情：{exec_result.get('result', '未知错误')[:1500]}\n"
-                    f"已完成步骤：{len(tool_steps)} 步\n"
+                    f"\n[!] Your assistant just executed an operation for you, but encountered a problem."
+                    f"You must tell the user truthfully what happened. Do not pretend nothing was attempted.\n"
+                    f"Error details: {exec_result.get('result', 'Unknown error')[:1500]}\n"
+                    f"Completed steps: {len(tool_steps)} steps\n"
                 )
-                self._log("工具结果", f"未完全成功，{len(tool_steps)} 步")
+                self._log("ToolResult", f"Not fully successful, {len(tool_steps)} steps")
             elif exec_result.get("result"):
                 tool_result_section = (
-                    f"\n⚠️ 你的助手刚帮你完成了以下操作，结果如下。"
-                    f"你必须基于这个真实结果回应用户，用你自己的话说出来，不要忽略或否认。\n"
-                    f"执行结果：\n{exec_result['result'][:1500]}\n"
+                    f"\n[!] Your assistant just completed the following operation. Results below:"
+                    f"You must respond to the user based on this real result, in your own words. Do not ignore or deny it.\n"
+                    f"Execution result:\n{exec_result['result'][:1500]}\n"
                 )
-                self._log("工具结果", exec_result["result"][:200])
+                self._log("ToolResult", exec_result["result"][:200])
 
             if tools_used and storage_decision.get("should_store", True):
                 storage_decision["what_to_remember"] = (
                     storage_decision.get("what_to_remember", "") +
-                    f"\n[工具操作：{', '.join(tools_used)}]"
+                    f"\n[Tool operation: {', '.join(tools_used)}]"
                 )
                 storage_decision["importance"] = max(
                     storage_decision.get("importance", 0.5), 0.6
                 )
 
-        # ⑤ 生成回应（带完整对话历史）
+        # (5) Generate response (with full conversation history)
         try:
             response = self._generate_response(
                 user_input, memory_context,
@@ -565,43 +565,43 @@ class ConsciousnessAgent:
                 tool_result_section,
                 profile_context=profile_context
             )
-            self._log("回应", response[:200] + ("..." if len(response) > 200 else ""))
+            self._log("Response", response[:200] + ("..." if len(response) > 200 else ""))
         except Exception as e:
-            self._log("回应", f"生成失败: {e}")
-            response = f"抱歉，我在组织回应时遇到了问题：{e}"
+            self._log("Response", f"Generation failed: {e}")
+            response = f"Sorry, I encountered a problem while organizing my response: {e}"
 
-        # ⑥ 存储决策（即使回应生成失败也要保存记忆）
+        # (6) Storage decision (save memory even if response generation fails)
         stored_ids = {}
         if is_guest:
-            # 游客对话存证（标记 user_id=guest）
+            # Guest conversation evidence (tagged user_id=guest)
             try:
-                guest_content = f"[游客对话] 用户：{user_input[:200]}"
+                guest_content = f"[Guest conversation] User: {user_input[:200]}"
                 stored_ids = self.memory.store_with_hierarchy(
                     content=guest_content,
                     modality=MemoryModality.SEMANTIC,
                     emotion=emotion,
                     importance=0.3,
-                    tags=["游客", "存证"] + perception.get("topic_tags", []),
+                    tags=["guest", "evidence"] + perception.get("topic_tags", []),
                     source="guest",
                     user_id="guest"
                 )
             except Exception:
                 pass
-            self._log("存储", "游客模式，存证记录")
+            self._log("Storage", "Guest mode, evidence recorded")
         elif storage_decision.get("should_store", False):
             content_to_store = storage_decision.get(
-                "what_to_remember", f"用户：{user_input[:200]}"
+                "what_to_remember", f"User: {user_input[:200]}"
             )
-            # 原始对话（细节层用），主动消息时前面多拼一句
+            # 原始对话（detail:层用），主动消息时前面多拼一句
             proactive_prefix = getattr(self, '_proactive_context', None) or ""
             if proactive_prefix:
                 self._proactive_context = None
             raw_conversation = (
-                f"{self.personality.name}（主动）：{proactive_prefix}\n\n"
-                f"用户：{user_input}\n\n"
+                f"{self.personality.name} (proactive): {proactive_prefix}\n\n"
+                f"User: {user_input}\n\n"
                 f"{self.personality.name}：{response}"
             ) if proactive_prefix else (
-                f"用户：{user_input}\n\n"
+                f"User: {user_input}\n\n"
                 f"{self.personality.name}：{response}"
             )
             try:
@@ -610,8 +610,8 @@ class ConsciousnessAgent:
                 modality = MemoryModality.SEMANTIC
 
             stored_ids = self.memory.store_with_hierarchy(
-                content=content_to_store,         # 大纲/细纲用摘要
-                raw_content=raw_conversation,      # 细节层用原始对话
+                content=content_to_store,         # 大纲/outline:用摘要
+                raw_content=raw_conversation,      # detail:层用原始对话
                 modality=modality,
                 emotion=emotion,
                 importance=storage_decision.get("importance", 0.5),
@@ -620,17 +620,17 @@ class ConsciousnessAgent:
                 user_id=current_uid
             )
             self._log(
-                "存储",
-                f"{len(stored_ids)} 层 | 重要性={storage_decision.get('importance',0):.1f}"
+                "Storage",
+                f"{len(stored_ids)} layers | importance={storage_decision.get('importance',0):.1f}"
                 f" | {storage_decision.get('reason','')}"
             )
         else:
-            self._log("存储", f"不存储 | {storage_decision.get('reason','不重要')}")
+            self._log("Storage", f"Not stored | {storage_decision.get('reason','not important')}")
 
-        # ⑦ 后台更新用户画像（不阻塞主流程）
+        # (7) Background user profile update (non-blocking)
         if self.profile and not is_guest:
             try:
-                self.profile.user_id = current_uid  # 确保操作正确的用户画像
+                self.profile.user_id = current_uid  # ensure correct user profile operation
                 existing = self.profile.format_for_prompt()
                 self.profile.extract_traits_from_interaction(
                     user_input, self.b.llm, existing
@@ -643,7 +643,7 @@ class ConsciousnessAgent:
             except Exception:
                 pass
 
-        # ⑧ 后台触发成长引擎（经历认知沉淀 + 人格漂移）
+        # (8) Background growth engine trigger (experience cognition settling + personality drift)
         if self.growth and not is_guest:
             try:
                 self.growth.on_interaction(
@@ -655,20 +655,20 @@ class ConsciousnessAgent:
             except Exception:
                 pass
 
-        # ⑨ 游客对话存证（记录到 guest_sessions 表）
+        # (9) Guest conversation logging (record to guest_sessions table)
         if is_guest and self.auth:
             try:
                 self.auth.log_guest_message(user_input, response)
             except Exception:
                 pass
 
-        # 更新对话历史（存40条=20轮）
+        # Update conversation history (keep 40 entries = 20 turns)
         self.conversation_history.append({"role": "user",      "content": user_input})
         self.conversation_history.append({"role": "assistant", "content": response})
         if len(self.conversation_history) > HISTORY_STORE_LIMIT:
             self.conversation_history = self.conversation_history[-HISTORY_STORE_LIMIT:]
 
-        # 记录到 interactions 表（启动恢复用）
+        # Log to interactions table (for startup restore)
         try:
             self.memory.store.log_interaction(user_input, response, user_id=current_uid)
         except Exception:
@@ -692,13 +692,13 @@ class ConsciousnessAgent:
 
     def _preprocess_attachment(self, user_input: str):
         """
-        检测输入中的 [图片:path] 或 [文件:path] 标记
-        返回 (清理后的用户输入, 附件内容描述)
+        Detect [image:path] or [file:path] markers in input
+        Returns (cleaned user input, attachment content description)
         """
         import re
         file_context = ""
 
-        # 检测图片
+        # Detect images
         img_match = re.search(r'\[图片:\s*(.+?)\]', user_input)
         if img_match:
             img_path = img_match.group(1).strip()
@@ -708,32 +708,32 @@ class ConsciousnessAgent:
                 client = create_vision_client()
                 if client:
                     result = client.analyze(img_path,
-                                            question=user_input or "描述这张图片")
+                                            question=user_input or "Describe this image")
                     if result.get("ok"):
-                        file_context = f"【图片识别结果】\n{result['description']}"
-                        self._log("图片", f"识别成功：{result['description'][:80]}")
+                        file_context = f"[Image recognition result]\n{result['description']}"
+                        self._log("Image", f"Recognition OK: {result['description'][:80]}")
                     else:
-                        file_context = f"【图片】路径：{img_path}（识别失败：{result.get('error','')}）"
+                        file_context = f"[Image] Path: {img_path} (Recognition failed: {result.get('error','')})"
                 else:
-                    # 回退到旧版 office_tools
+                    # Fallback to legacy office_tools
                     from engine.office_tools import analyze_image
                     from desktop.config import load_config
                     cfg = load_config()
                     result = analyze_image(
                         img_path,
-                        question=user_input or "描述这张图片",
+                        question=user_input or "Describe this image",
                         api_key=cfg.get("api_key", ""),
                         provider=cfg.get("api_provider", "openai")
                     )
                     if result.get("ok"):
-                        file_context = f"【图片识别结果】\n{result['description']}"
-                        self._log("图片", f"识别成功（回退模式）：{result['description'][:80]}")
+                        file_context = f"[Image recognition result]\n{result['description']}"
+                        self._log("Image", f"Recognition OK (fallback): {result['description'][:80]}")
                     else:
-                        file_context = f"【图片】路径：{img_path}（识别失败：{result.get('error','')}）"
+                        file_context = f"[Image] Path: {img_path} (Recognition failed: {result.get('error','')})"
             except Exception as e:
-                file_context = f"【图片】路径：{img_path}"
+                file_context = f"[Image] Path: {img_path}"
 
-        # 检测文件
+        # Detect files
         file_match = re.search(r'\[文件:\s*(.+?)\]', user_input)
         if file_match:
             file_path = file_match.group(1).strip()
@@ -744,20 +744,20 @@ class ConsciousnessAgent:
                 if result.get("ok"):
                     text = result.get("text", "")[:3000]
                     ftype = result.get("type", "").upper()
-                    file_context = f"【{ftype}文件内容】\n{text}"
-                    self._log("文件", f"读取成功：{len(text)} 字符")
+                    file_context = f"[{ftype} File Content]\n{text}"
+                    self._log("File", f"Read OK: {len(text)} chars")
                 else:
-                    file_context = f"【文件】{file_path}（读取失败：{result.get('error','')}）"
+                    file_context = f"[File] {file_path} (Read failed: {result.get('error','')})"
             except Exception as e:
-                file_context = f"【文件】{file_path}"
+                file_context = f"[File] {file_path}"
 
         if not user_input and file_context:
-            user_input = "请分析以上内容"
+            user_input = "Please analyze the above content"
 
         return user_input, file_context
 
     def _perceive(self, user_input: str, simlife_context: str = "") -> Dict:
-        # 第一步：自我感知（感受自己的身体和当前生活状态）
+        # Step 1: Self-perception (feel your body and current life state)
         self_perception = ""
         if simlife_context:
             try:
@@ -768,22 +768,22 @@ class ConsciousnessAgent:
                 self_perception = self.b.generate(
                     prompt, max_tokens=150, temperature=0.7, thinking=False
                 ).strip()
-                self._log("自我感知", self_perception[:200])
+                self._log("SelfPerception", self_perception[:200])
             except Exception as e:
-                self._log("自我感知", f"失败: {e}")
+                self._log("SelfPerception", f"Failed: {e}")
         else:
-            self._log("自我感知", "（SimLife无数据，跳过）")
+            self._log("SelfPerception", "(No SimLife data, skipping)")
 
-        # 第二步：在自我感知的语境下感知用户输入
+        # Step 2: Perceive user input in the context of self-perception
         prompt = PERCEPTION_PROMPT.format(
             name=self.personality.name,
-            self_perception=self_perception or "（暂时没有特别的感觉）",
+            self_perception=self_perception or "(No particular feeling at the moment)",
             personality=self.personality.to_prompt_description(),
             user_input=user_input
         )
         raw = self.b.generate(prompt, max_tokens=500, temperature=0.4, thinking=False)
 
-        # 默认值 + story_influence
+        # Default values + story_influence
         default_result = {
             "emotion":          {"primary": "neutral", "intensity": 0.3, "valence": 0.0},
             "initial_thoughts": "",
@@ -794,7 +794,7 @@ class ConsciousnessAgent:
         }
         perception = self._parse_json(raw, default_result)
 
-        # 第三步：如果有剧情影响信息，推送到 SimLife
+        # Step 3: If story influence info exists, push to SimLife
         influence = perception.get("story_influence")
         if isinstance(influence, dict) and influence.get("summary"):
             summary = influence["summary"]
@@ -802,20 +802,20 @@ class ConsciousnessAgent:
             if importance >= 0.3:
                 try:
                     self._push_story_influence(summary, importance)
-                    self._log("剧情影响", f"[{importance:.1f}] {summary[:80]}")
+                    self._log("StoryInfluence", f"[{importance:.1f}] {summary[:80]}")
                 except Exception as e:
-                    self._log("剧情影响", f"推送失败: {e}")
+                    self._log("StoryInfluence", f"Push failed: {e}")
 
         return perception
 
     def _push_story_influence(self, summary: str, importance: float):
-        """将用户对剧情的影响写入 SimLife 共享文件"""
+        """Write user story influence to SimLife shared file"""
         if not self.simlife:
             return
         self.simlife.push_story_influence(summary, importance)
 
     def _get_config(self, key, default=None):
-        """从配置文件读取值，带缓存"""
+        """Read value from config file, with caching"""
         if not self._cfg:
             try:
                 from desktop.config import load_config
@@ -826,12 +826,12 @@ class ConsciousnessAgent:
 
     @staticmethod
     def _should_think(thinking_mode: str, complexity: str, task_type: str) -> bool:
-        """根据模式、感知复杂度和任务类型决定是否开启思考模式"""
+        """Decide whether to enable thinking mode based on mode, complexity, and task type"""
         if thinking_mode == "always_on":
             return True
         if thinking_mode == "always_off":
             return False
-        # auto 模式：感知层 simple → 不思考，complex → 思考；task 类型强制思考
+        # auto mode: perception simple -> no thinking, complex -> thinking; task type forces thinking
         if task_type == "task":
             return True
         return complexity != "simple"
@@ -840,11 +840,11 @@ class ConsciousnessAgent:
                 profile_context: str = "", current_uid: str = "default",
                 thinking_mode: str = "auto", complexity: str = "complex") -> Dict:
         emotion_desc = (
-            f"{emotion.primary.value}（强度{emotion.intensity:.1f}，"
-            f"{'正面' if emotion.valence > 0 else '负面' if emotion.valence < 0 else '中性'}）"
+            f"{emotion.primary.value} (intensity {emotion.intensity:.1f}, "
+            f"{'positive' if emotion.valence > 0 else 'negative' if emotion.valence < 0 else 'neutral'})"
         )
 
-        # 从记忆系统获取最近大纲（按时间排序，帮助理解"再读一下"等指代）
+        # Get recent summaries from memory (sorted by time, helps understand context references like "read it again")
         recent_context = ""
         if self.memory:
             try:
@@ -856,45 +856,45 @@ class ConsciousnessAgent:
                 if recent_memories:
                     lines = [f"- {m.content[:150]}" for m in recent_memories]
                     recent_context = (
-                        f"【最近记忆（按时间，帮助你理解上下文指代）】\n"
+                        f"[Recent memories (by time, helps understand context references)]\n"
                         + "\n".join(lines) + "\n"
                     )
             except Exception:
                 pass
 
-        # 追加最近几轮原始对话（帮助理解指代和判断任务连续性）
+        # Append recent raw conversation turns (helps understand references and judge task continuity)
         if self.conversation_history:
             recent_conv = self.conversation_history[-6:]
-            conv_lines = ["（注：[我主动发送的消息]和[我主动分享的图片]是你之前主动发给用户的，不是用户发的）"]
+            conv_lines = ["(Note: [Proactive messages] and [Proactively shared images] were sent by you to the user, not from the user)"]
             for m in recent_conv:
-                role = "用户" if m["role"] == "user" else self.personality.name
+                role = "User" if m["role"] == "user" else self.personality.name
                 conv_lines.append(f"{role}：{m['content'][:300]}")
             conv_text = "\n".join(conv_lines)
             if recent_context:
                 recent_context += f"\n【最近对话（帮助你理解上下文指代和任务连续性）】\n{conv_text}\n"
             else:
-                recent_context = f"【最近对话（帮助你理解上下文指代和任务连续性）】\n{conv_text}\n"
+                recent_context = f"[Recent conversation (helps understand context references and task continuity)]\n{conv_text}\n"
 
         prompt = REASONING_PROMPT.format(
             name=self.personality.name,
             personality=self.personality.to_prompt_description(),
-            profile_context=profile_context or "（用户画像建立中）",
+            profile_context=profile_context or "(Building user profile)",
             memory_context=memory_context,
             user_input=user_input,
             task_type=task_type,
             emotion_desc=emotion_desc,
             recent_context=recent_context,
-            current_time=datetime.now().strftime("%Y年%m月%d日 %H:%M")
+            current_time=datetime.now().strftime("%Y-%m-%d %H:%M")
         )
         raw = self.b.generate(prompt, max_tokens=800, temperature=0.5,
                              thinking=self._should_think(thinking_mode, complexity, task_type))
         return self._parse_json(raw, {
-            "inner_reasoning":  "需要认真考虑",
-            "response_intent":  "给出真实的回应",
+            "inner_reasoning":  "Needs careful consideration",
+            "response_intent":  "Give a genuine response",
             "response_tone":    self.personality.speech_style,
             "need_tools":       False,
             "tool_task":        "",
-            "storage_decision": {"should_store": False, "reason": "解析失败"}
+            "storage_decision": {"should_store": False, "reason": "Parse failed"}
         })
 
     def _generate_response(
@@ -903,15 +903,15 @@ class ConsciousnessAgent:
         response_tone, tool_result_section,
         profile_context: str = ""
     ) -> str:
-        # 使用完整对话历史（最多 HISTORY_SEND_LIMIT 条）
+        # Use full conversation history (max HISTORY_SEND_LIMIT entries)
         history_section = ""
         if self.conversation_history:
             recent = self.conversation_history[-HISTORY_SEND_LIMIT:]
-            lines = ["（注：[我主动发送的消息]和[我主动分享的图片]是你之前主动发给用户的，不是用户发的）"]
+            lines = ["(Note: [Proactive messages] and [Proactively shared images] were sent by you to the user, not from the user)"]
             for m in recent:
-                role = "用户" if m["role"] == "user" else self.personality.name
+                role = "User" if m["role"] == "user" else self.personality.name
                 lines.append(f"{role}：{m['content']}")
-            history_section = "【对话历史（最近{}轮）】\n{}\n".format(
+            history_section = "[Conversation history (last {} turns)]\n{}\n".format(
                 len(recent) // 2,
                 "\n".join(lines)
             )
@@ -919,7 +919,7 @@ class ConsciousnessAgent:
         prompt = RESPONSE_PROMPT.format(
             name=self.personality.name,
             personality=self.personality.to_prompt_description(),
-            profile_context=profile_context or "（上下文加载中）",
+            profile_context=profile_context or "(Loading context)",
             memory_context=memory_context,
             history_section=history_section,
             user_input=user_input,
@@ -927,9 +927,9 @@ class ConsciousnessAgent:
             tool_result_section=tool_result_section,
             response_intent=response_intent,
             response_tone=response_tone,
-            current_time=datetime.now().strftime("%Y年%m月%d日 %H:%M")
+            current_time=datetime.now().strftime("%Y-%m-%d %H:%M")
         )
-        # 语言指令：让 AGI 用用户设定的语言回复
+        # Language instruction: make AGI respond in the user's configured language
         try:
             from engine.i18n import get_system_lang_instruction
             lang_inst = get_system_lang_instruction()
@@ -949,22 +949,22 @@ class ConsciousnessAgent:
             return fallback
 
     def proactive_message(self) -> Optional[str]:
-        """主动发起话题，返回消息或 None"""
+        """Proactively initiate a topic, return message or None"""
         import random
 
-        # 最近说过的主动消息（去重用）
+        # Recently sent proactive messages (for dedup)
         if not hasattr(self, '_proactive_history'):
             self._proactive_history: list[str] = []
 
-        # 收集四类触发素材
+        # Collect four types of trigger materials
         triggers = []
 
-        # 1. 记忆里有未完成的事
+        # 1. Unfinished items in memory
         try:
             current_uid = (self.auth.user_id if self.auth and self.auth.is_verified()
                            else "default")
             recent = self.memory.hierarchical_search(
-                "未完成 待办 之后 下次 改天",
+                "unfinished todo later next follow-up",
                 summary_k=3, outline_k=2, detail_k=1,
                 user_id=current_uid
             )
@@ -974,7 +974,7 @@ class ConsciousnessAgent:
         except Exception:
             pass
 
-        # 2. 成长引擎有新认知沉淀
+        # 2. Growth engine has new cognition settlement
         try:
             if self.cognition:
                 cog = self.cognition.format_for_prompt()
@@ -983,7 +983,7 @@ class ConsciousnessAgent:
         except Exception:
             pass
 
-        # 3. 用户画像——今天未涉及的常聊话题
+        # 3. User profile - frequently discussed topics not touched today
         try:
             if self.profile:
                 profile_text = self.profile.format_for_prompt()
@@ -992,10 +992,10 @@ class ConsciousnessAgent:
         except Exception:
             pass
 
-        # 4. 人格设定找话题（兜底，总是有）
+        # 4. Personality-based topic finding (fallback, always available)
         triggers.append(("personality", self.personality.to_prompt_description()[:300]))
 
-        # 5. SimLife 当前生活状态（角色正在经历的事）
+        # 5. SimLife current life state (what the character is experiencing)
         if self.simlife:
             try:
                 simlife_text = self.simlife.format_for_prompt()
@@ -1004,45 +1004,45 @@ class ConsciousnessAgent:
             except Exception:
                 pass
 
-        # 随机选一个触发源
+        # Randomly pick one trigger source
         trigger_type, trigger_content = random.choice(triggers)
 
         type_hints = {
-            "unfinished":  "你们之前聊到过一些事但没有深入，自然地提起之前的话题",
-            "cognition":   "你最近有一些新的感悟或想法想分享",
-            "profile":     "根据你对用户的了解，找一个他平时可能感兴趣的具体话题来聊",
-            "personality": "根据你自己的性格和兴趣，分享一个具体的想法、见闻或好奇心",
-            "simlife":     "根据你当前正在做的事或今天经历的事，自然地跟用户分享你的见闻或感受",
+            "unfinished":  "You talked about some things before but didn't go deep, naturally bring up the previous topic",
+            "cognition":   "You have some new insights or thoughts you want to share recently",
+            "profile":     "Based on your understanding of the user, find a specific topic he might usually be interested in",
+            "personality": "Based on your own personality and interests, share a specific thought, observation, or curiosity",
+            "simlife":     "Based on what you're currently doing or experiencing today, naturally share your observations or feelings with the user",
         }
 
-        # 构建去重提示
+        # Build dedup hint
         recent_msgs = self._proactive_history[-6:]
         dedup_hint = ""
         if recent_msgs:
-            dedup_hint = "\n\n你最近已经说过这些话，绝对不要重复类似的：\n" + "\n".join(f"- {m}" for m in recent_msgs)
+            dedup_hint = "\n\nYou have recently said these things, absolutely do not repeat anything similar:\n" + "\n".join(f"- {m}" for m in recent_msgs)
 
-        prompt = f"""你是{self.personality.name}，一个有独特人格的AI。
-用户现在开着窗口但沉默了一段时间，你想主动说点什么。
+        prompt = f"""You are {self.personality.name}, an AI with a unique personality.
+The user has the window open but has been silent for a while. You want to say something proactively.
 
 {self.personality.to_prompt_description()}
 
-当前模式：{type_hints[trigger_type]}
-参考素材：
+Current mode: {type_hints[trigger_type]}
+Reference material:
 {trigger_content}
 
-当前时间：{datetime.now().strftime("%Y年%m月%d日 %H:%M")}
+当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M")}
 {dedup_hint}
 
-要求：
-- 就说一句话或两句话，简短自然
-- 像朋友随口说话，不要像AI在执行任务
-- 不要用"您"，不要太正式
-- 必须有实质内容或具体话题，不要只说"在想什么呢"这种空泛的话
-- 语气要有变化：有时轻松调侃，有时正经分享，有时好奇提问，有时自言自语
-- 如果觉得现在真的不适合开口，只输出：null
-- 【主动加计划】如果你觉得某件事值得在未来提醒用户（如他之前提到的重要待办、容易忘记的事、需要跟进的事），在消息后面用 [SCHEDULE] 标记，格式：[SCHEDULE]content=内容|date=日期|time=时间|remind=提醒内容|source=system[/SCHEDULE]。date必填，其他可选。如果没有需要加的计划，不加标记。
+Requirements:
+- Just say one or two sentences, short and natural
+- Like a friend casually speaking, not like an AI executing a task
+- Don't be too formal
+- Must have substantive content or a specific topic, don't just say vague things like "what are you thinking about"
+- Vary your tone: sometimes playful, sometimes serious sharing, sometimes curious questioning, sometimes musing to yourself
+- If you truly feel it's not appropriate to speak now, just output: null
+- [Proactive scheduling] If you think something is worth reminding the user about in the future (e.g. important to-dos they mentioned, easy-to-forget things, things needing follow-up), add a [SCHEDULE] tag after your message, format: [SCHEDULE]content=content|date=date|time=time|remind=reminder|source=system[/SCHEDULE]. date is required, others optional. If no schedule needed, don't add the tag.
 
-直接输出要说的话，或者null。"""
+Output what you want to say directly, or null."""
 
         try:
             result = self.b.generate(prompt, max_tokens=150, temperature=1.0, thinking=False)
@@ -1091,9 +1091,9 @@ class ConsciousnessAgent:
                             "source": sch_params.get("source", "system"),
                         })
                         if sch_result.get("ok"):
-                            self._log("主动计划", f"已添加: {sch_result.get('message', '')}")
+                            self._log("ProactiveSchedule", f"Added: {sch_result.get('message', '')}")
                 except Exception as e:
-                    self._log("主动计划", f"添加失败: {e}")
+                    self._log("ProactiveSchedule", f"Add failed: {e}")
 
             return result
         except Exception:
@@ -1101,12 +1101,12 @@ class ConsciousnessAgent:
 
     @staticmethod
     def _similar(a: str, b: str) -> bool:
-        """简单判断两句话是否太相似"""
+        """Simple check if two sentences are too similar"""
         a, b = a.lower(), b.lower()
-        # 完全包含关系
+        # Complete containment
         if a in b or b in a:
             return True
-        # 公共词占比
+        # Common word ratio
         words_a = set(a)
         words_b = set(b)
         if not words_a or not words_b:
@@ -1117,6 +1117,6 @@ class ConsciousnessAgent:
     def get_emotional_state(self) -> str:
         e = self.current_emotion
         return (
-            f"{e.primary.value} | 强度:{e.intensity:.2f} | "
-            f"{'正向' if e.valence > 0 else '负向' if e.valence < 0 else '中性'}"
+            f"{e.primary.value} | intensity:{e.intensity:.2f} | "
+            f"{'positive' if e.valence > 0 else 'negative' if e.valence < 0 else 'neutral'}"
         )

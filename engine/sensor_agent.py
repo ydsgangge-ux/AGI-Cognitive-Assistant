@@ -102,14 +102,14 @@ class SensorAgent:
         self._stop_flag = False
         self._push_thread = threading.Thread(target=self._push_loop, daemon=True)
         self._push_thread.start()
-        print(f"[Sensor] 定时推送已启动，间隔 {self.push_interval} 秒")
+        print(f"[Sensor] Periodic push started，interval {self.push_interval}s")
 
     def stop_push_loop(self):
         """停止定时推送"""
         self._stop_flag = True
         if self._push_thread and self._push_thread.is_alive():
             self._push_thread.join(timeout=5)
-        print("[Sensor] 定时推送已停止")
+        print("[Sensor] Periodic push stopped")
 
     def _push_loop(self):
         """后台推送循环"""
@@ -129,7 +129,7 @@ class SensorAgent:
                 self._last_push_time = time.time()
 
             except Exception as e:
-                print(f"[Sensor] 推送循环异常: {e}")
+                print(f"[Sensor] Push loop error: {e}")
 
             # 等待下一个推送周期
             for _ in range(self.push_interval):
@@ -362,7 +362,7 @@ class SensorAgent:
             return result
 
         # 如果都失败了，回退到模拟数据
-        print("[Sensor] 真实传感器读取失败，使用模拟数据")
+        print("[Sensor] Real sensor read failed, using simulated data")
         return self._generate_mock_data()
 
     def _try_mqtt_read(self, result: Dict) -> bool:
@@ -404,7 +404,7 @@ class SensorAgent:
         except ImportError:
             return False
         except Exception as e:
-            print(f"[Sensor] MQTT 读取失败: {e}")
+            print(f"[Sensor] MQTT read failed: {e}")
             return False
 
     def _try_serial_read(self, result: Dict) -> bool:
@@ -436,7 +436,7 @@ class SensorAgent:
         except ImportError:
             return False
         except Exception as e:
-            print(f"[Sensor] 串口读取失败: {e}")
+            print(f"[Sensor] Serial read failed: {e}")
             return False
 
     # ── 控制指令（发给机器人的命令）─────────────────────
@@ -447,11 +447,11 @@ class SensorAgent:
         command: "walk" / "sit" / "stand" / "stop" / "turn_left" / "turn_right" / "custom"
         """
         if self.mock_mode:
-            print(f"[Sensor] 模拟模式：发送指令 {command} {params or ''}")
+            print(f"[Sensor] Simulated mode:send command {command} {params or ''}")
             return {
                 "ok": True,
                 "command": command,
-                "message": f"模拟模式：已发送指令 '{command}'",
+                "message": f"模拟模式：已send command '{command}'",
                 "mode": "mock"
             }
 
@@ -508,6 +508,6 @@ def init_sensor_agent(config: dict = None):
     global _sensor_instance
     _sensor_instance = SensorAgent(config)
     if _sensor_instance.is_available():
-        print(f"[Sensor] 传感器代理已初始化（{_sensor_instance.sensor_type}，"
+        print(f"[Sensor] Agent initialized（{_sensor_instance.sensor_type}，"
               f"{'模拟' if _sensor_instance.mock_mode else '真实'}模式）")
     return _sensor_instance

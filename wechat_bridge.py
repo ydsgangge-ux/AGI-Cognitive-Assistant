@@ -1,12 +1,12 @@
 """
-企业微信机器人桥接模块 v1
-与 server.py 共享同一个 agent 实例
-用户ID映射规则：wx_{企业微信UserId}
+WeChat Work Bot Bridge Module v1
+Shares the same agent instance with server.py
+User ID mapping: wx_{WeChatUserId}
 
-使用方式：
-  1. 企业微信后台 → 应用管理 → 创建应用 → 配置接收消息
-  2. URL 填写：http://你的公网地址/wechat （需 frp / ngrok 映射到 18765 端口）
-  3. Token 填写任意字符串，与下方 WECHAT_TOKEN 保持一致
+Usage:
+  1. WeChat Work admin -> App Management -> Create App -> Configure message receiving
+  2. URL: http://your-public-address/wechat (requires frp/ngrok mapping to port 18765)
+  3. Token: any string, keep consistent with WECHAT_TOKEN below
 """
 
 import hashlib
@@ -16,10 +16,10 @@ import logging
 
 logger = logging.getLogger("wechat")
 
-# 共享的 agent 实例（由 server.py start_server 注入）
+# Shared agent instance (injected by server.py start_server)
 _agent = None
 
-# 企业微信 Token（用户自行修改此值，与企业微信后台保持一致）
+# WeChat Work Token (modify to match WeChat Work admin panel)
 WECHAT_TOKEN = "myAGI123"
 
 
@@ -34,7 +34,7 @@ def set_token(token: str):
 
 
 def verify_url(msg_signature: str, timestamp: str, nonce: str, echostr: str) -> str:
-    """企业微信 URL 验证（GET 请求）"""
+    """WeChat Work URL verification (GET request)"""
     token = WECHAT_TOKEN
     if not token:
         return echostr

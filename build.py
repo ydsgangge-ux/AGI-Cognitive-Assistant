@@ -1,5 +1,5 @@
 """
-打包脚本 - 合并版
+Build script - unified version
 python build.py windows   → dist/AGI-Desktop.exe
 python build.py linux     → dist/AGI-Desktop
 """

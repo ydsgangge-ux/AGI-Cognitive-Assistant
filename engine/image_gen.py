@@ -279,13 +279,13 @@ def download_image(url: str, save_path: str = None) -> Optional[str]:
                     continue
                 with open(save_path, "wb") as f:
                     f.write(data)
-                print(f"[图片生成] 已保存: {save_path} ({len(data)//1024}KB)")
+                print(f"[ImageGen] Saved: {save_path} ({len(data)//1024}KB)")
                 return save_path
         except Exception as e:
-            print(f"[图片生成] 域名 {base} 失败: {e}")
+            print(f"[ImageGen] Domain {base} failed: {e}")
             continue
 
-    print("[图片生成] 所有域名均失败")
+    print("[ImageGen] All domains failed")
     return None
 
 
@@ -297,7 +297,7 @@ def generate_and_download(personality: dict, simlife_context: str = None) -> Opt
     """
     prompt, image_type = build_image_prompt(personality, simlife_context=simlife_context)
     url = generate_image_url(prompt)
-    print(f"[图片生成] {image_type}: {prompt[:80]}...")
+    print(f"[ImageGen] {image_type}: {prompt[:80]}...")
     image_path = download_image(url)
     if image_path:
         return (prompt, image_path, image_type)

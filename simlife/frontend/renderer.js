@@ -1,6 +1,6 @@
 /**
- * SimLife Canvas 渲染器 v2
- * 640x360 画布，精细卡通风格
+ * SimLife Canvas Renderer v2
+ * 640x360 canvas, detailed cartoon style
  */
 
 const TILE = 16;
@@ -43,7 +43,7 @@ class Renderer {
     this.ctx.fill();
   }
 
-  // ── 角色绘制（精细卡通风）────────────────────
+  // --- Character Drawing (Detailed Cartoon Style) ---
 
   drawChar(x, y, config) {
     /**
@@ -75,47 +75,47 @@ class Renderer {
     const legOff = config.action === 'walk' ? Math.sin(this.time * 0.3) * 3 : 0;
     const breathe = Math.sin(this.time * 0.04) * 0.8;
 
-    // 阴影
+    // shadow
     c.fillStyle = 'rgba(0,0,0,0.15)';
     c.beginPath();
     c.ellipse(px + 16, py + 50, 14, 4, 0, 0, Math.PI * 2);
     c.fill();
 
-    // 腿
+    // legs
     c.fillStyle = '#3a3a5a';
     this._roundRect(c, px + 8, py + 38 + bob + legOff, 6, 12, 2);
     this._roundRect(c, px + 18, py + 38 + bob - legOff, 6, 12, 2);
-    // 鞋子
+    // shoes
     c.fillStyle = '#555';
     this._roundRect(c, px + 6, py + 48 + bob + legOff, 8, 4, 2);
     this._roundRect(c, px + 18, py + 48 + bob - legOff, 8, 4, 2);
 
-    // 身体
+    // body
     c.fillStyle = outfit;
     this._roundRect(c, px + 4, py + 20 + bob + breathe, 24, 20, 4);
-    // 领口
+    // collar
     c.fillStyle = skin;
     this._roundRect(c, px + 12, py + 19 + bob + breathe, 8, 5, 2);
 
-    // 手臂
+    // arms
     c.fillStyle = skin;
     if (config.action === 'phone') {
-      // 举手看手机
+      // raise hand to look at phone
       c.save();
       c.translate(px + 30, py + 22 + bob);
       c.rotate(-0.3);
       this._roundRect(c, 0, 0, 6, 16, 3);
-      // 手机
+      // phone
       c.fillStyle = '#333';
       this._roundRect(c, -1, -8, 10, 14, 2);
       c.fillStyle = '#4a8af5';
       this._roundRect(c, 0, -7, 8, 11, 1);
       c.restore();
-      // 另一只手
+      // other hand
       c.fillStyle = skin;
       this._roundRect(c, px - 2, py + 22 + bob, 6, 14, 3);
     } else if (config.action === 'work') {
-      // 手放桌上位置
+      // hand on desk position
       this._roundRect(c, px + 1, py + 28 + bob, 6, 10, 3);
       this._roundRect(c, px + 25, py + 28 + bob, 6, 10, 3);
     } else {
@@ -124,38 +124,38 @@ class Renderer {
       this._roundRect(c, px + 27, py + 22 + bob - armSwing, 6, 14, 3);
     }
 
-    // 头
+    // head
     c.fillStyle = skin;
     c.beginPath();
     c.arc(px + 16, py + 10 + bob, 12, 0, Math.PI * 2);
     c.fill();
 
-    // 头发
+    // hair
     c.fillStyle = hair;
     c.beginPath();
     c.arc(px + 16, py + 6 + bob, 13, Math.PI, Math.PI * 2);
     c.fill();
     c.fillRect(px + 3, py + 2 + bob, 26, 8);
-    // 刘海
+    // bangs
     c.beginPath();
     c.arc(px + 12, py + 8 + bob, 6, 0.2, Math.PI + 0.2);
     c.fill();
 
-    // 腮红
+    // blush
     c.fillStyle = 'rgba(255,150,150,0.25)';
     c.beginPath(); c.arc(px + 6, py + 13 + bob, 3, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(px + 26, py + 13 + bob, 3, 0, Math.PI * 2); c.fill();
 
-    // 眼睛
+    // eyes
     c.fillStyle = '#333';
     c.beginPath(); c.ellipse(px + 10, py + 10 + bob, 2.2, 2.8, 0, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.ellipse(px + 22, py + 10 + bob, 2.2, 2.8, 0, 0, Math.PI * 2); c.fill();
-    // 眼睛高光
+    // eye highlights
     c.fillStyle = '#fff';
     c.beginPath(); c.arc(px + 11, py + 9 + bob, 1, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(px + 23, py + 9 + bob, 1, 0, Math.PI * 2); c.fill();
 
-    // 嘴
+    // mouth
     c.strokeStyle = '#c47a6a';
     c.lineWidth = 1.5;
     c.lineCap = 'round';
@@ -168,24 +168,24 @@ class Renderer {
 
   _drawSleeping(px, py, skin, hair, outfit) {
     const c = this.ctx;
-    // 被子
+    // blanket
     c.fillStyle = '#c0b8d0';
     this._roundRect(c, px - 5, py + 16, 50, 22, 6);
     c.fillStyle = '#a8a0b8';
     this._roundRect(c, px - 3, py + 14, 46, 8, 4);
-    // 枕头
+    // pillow
     c.fillStyle = '#f0e8d8';
     this._roundRect(c, px + 26, py + 10, 20, 14, 6);
-    // 头
+    // head
     c.fillStyle = skin;
     c.beginPath(); c.arc(px + 36, py + 14, 9, 0, Math.PI * 2); c.fill();
-    // 头发
+    // hair
     c.fillStyle = hair;
     c.beginPath();
     c.arc(px + 36, py + 10, 10, Math.PI, Math.PI * 2);
     c.fill();
     c.fillRect(px + 27, py + 6, 18, 6);
-    // 闭眼
+    // closed eyes
     c.strokeStyle = '#333';
     c.lineWidth = 1.5;
     c.beginPath(); c.moveTo(px + 32, py + 14); c.lineTo(px + 36, py + 13); c.stroke();
@@ -205,11 +205,11 @@ class Renderer {
     const c = this.ctx;
     const breathe = Math.sin(this.time * 0.04) * 0.5;
 
-    // 阴影
+    // shadow
     c.fillStyle = 'rgba(0,0,0,0.12)';
     c.beginPath(); c.ellipse(px + 16, py + 50, 14, 4, 0, 0, Math.PI * 2); c.fill();
 
-    // 腿（弯曲）
+    // legs (bent)
     c.fillStyle = '#3a3a5a';
     this._roundRect(c, px + 6, py + 38, 8, 10, 2);
     this._roundRect(c, px + 18, py + 38, 8, 10, 2);
@@ -217,26 +217,26 @@ class Renderer {
     this._roundRect(c, px + 4, py + 46, 12, 4, 2);
     this._roundRect(c, px + 16, py + 46, 12, 4, 2);
 
-    // 身体
+    // body
     c.fillStyle = outfit;
     this._roundRect(c, px + 4, py + 20 + breathe, 24, 18, 4);
 
-    // 手臂
+    // arms
     c.fillStyle = skin;
     this._roundRect(c, px - 1, py + 22 + breathe, 6, 12, 3);
     this._roundRect(c, px + 27, py + 22 + breathe, 6, 12, 3);
 
-    // 头
+    // head
     c.fillStyle = skin;
     c.beginPath(); c.arc(px + 16, py + 10, 12, 0, Math.PI * 2); c.fill();
-    // 头发
+    // hair
     c.fillStyle = hair;
     c.beginPath();
     c.arc(px + 16, py + 6, 13, Math.PI, Math.PI * 2);
     c.fill();
     c.fillRect(px + 3, py + 2, 26, 8);
 
-    // 眼睛
+    // eyes
     c.fillStyle = '#333';
     c.beginPath(); c.ellipse(px + 10, py + 10, 2.2, 2.8, 0, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.ellipse(px + 22, py + 10, 2.2, 2.8, 0, 0, Math.PI * 2); c.fill();
@@ -244,12 +244,12 @@ class Renderer {
     c.beginPath(); c.arc(px + 11, py + 9, 1, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(px + 23, py + 9, 1, 0, Math.PI * 2); c.fill();
 
-    // 腮红
+    // blush
     c.fillStyle = 'rgba(255,150,150,0.25)';
     c.beginPath(); c.arc(px + 6, py + 13, 3, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(px + 26, py + 13, 3, 0, Math.PI * 2); c.fill();
 
-    // 微笑
+    // smile
     c.strokeStyle = '#c47a6a'; c.lineWidth = 1.5; c.lineCap = 'round';
     c.beginPath(); c.arc(px + 16, py + 14, 3, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
   }
@@ -277,7 +277,7 @@ class Renderer {
     });
   }
 
-  // ── 场景绘制 ────────────────────────────────
+  // --- Scene Drawing ---
 
   drawScene(scene, mainChar, activeNpcs, bgNpcCount) {
     this.scene = scene;
@@ -293,7 +293,7 @@ class Renderer {
       this._drawDefaultScene();
     }
 
-    // 活跃 NPC
+    // active NPCs
     if (activeNpcs && activeNpcs.length > 0) {
       const npcPositions = this._getNpcPositions(scene);
       activeNpcs.forEach((npc, i) => {
@@ -302,7 +302,7 @@ class Renderer {
       });
     }
 
-    // 主角（最后画，在最上层）
+    // main character (drawn last, on top)
     if (mainChar) {
       const pos = this._getMainCharPos(scene);
       const action = this._getMainCharAction(scene);
@@ -313,7 +313,7 @@ class Renderer {
       });
     }
 
-    // 背景 NPC
+    // background NPCs
     if (bgNpcCount > 0) {
       for (let i = 0; i < bgNpcCount; i++) {
         const bx = ((this.time * 0.3 + i * 160) % (W + 80)) - 40;
@@ -322,7 +322,7 @@ class Renderer {
       }
     }
 
-    // 淡入淡出
+    // fade in/out
     if (this.fading) {
       this.fadeAlpha += this.fadeDir * 0.04;
       if (this.fadeAlpha >= 1) { this.fadeAlpha = 1; if (this.onFadeComplete) this.onFadeComplete(); }
@@ -331,7 +331,7 @@ class Renderer {
       this.ctx.fillRect(0, 0, W, H);
     }
 
-    // 天气粒子
+    // weather particles
     this._drawWeather();
   }
 
@@ -371,7 +371,7 @@ class Renderer {
       'STREET_WANDERING': '#87CEEB',
       'FRIEND_HANGOUT': '#f0e8d8',
       'OVERTIME': '#0a0a20',
-      // 旅行场景
+      // travel scene
       'AIRPORT': '#e8e4e0',
       'TOURING': '#87CEEB',
       'HOTEL': '#2a2530',
@@ -404,7 +404,7 @@ class Renderer {
       'STREET_WANDERING': { x: 300, y: 210 },
       'FRIEND_HANGOUT': { x: 280, y: 190 },
       'OVERTIME': { x: 240, y: 170 },
-      // 旅行场景
+      // travel scene
       'AIRPORT': { x: 300, y: 200 },
       'TOURING': { x: 300, y: 210 },
       'HOTEL': { x: 280, y: 170 },
@@ -437,7 +437,7 @@ class Renderer {
       'STREET_WANDERING': 'walk',
       'FRIEND_HANGOUT': 'sit',
       'OVERTIME': 'work',
-      // 旅行场景
+      // travel scene
       'AIRPORT': 'walk',
       'TOURING': 'work',
       'HOTEL': 'sit',
@@ -456,7 +456,7 @@ class Renderer {
       'CAFE': [{ x: 280, y: 180 }],
       'CAFE_WORKING': [{ x: 280, y: 180 }],
       'FRIEND_HANGOUT': [{ x: 360, y: 190 }],
-      // 旅行场景
+      // travel scene
       'TOURING': [{ x: 200, y: 210 }, { x: 450, y: 220 }],
       'AIRPORT': [{ x: 200, y: 200 }, { x: 420, y: 195 }],
       'LOCAL_FOOD': [{ x: 250, y: 200 }],
@@ -467,7 +467,7 @@ class Renderer {
 
   _drawWeather() {
     const c = this.ctx;
-    // 粒子初始化
+    // particle initialization
     if (this.weather === 'rainy' || this.weather === 'heavy_rain') {
       const target = this.weather === 'heavy_rain' ? 120 : 60;
       while (this.particles.length < target) {
@@ -493,7 +493,7 @@ class Renderer {
         if (p.y > H) { p.y = -5; p.x = Math.random() * W; }
       }
     } else {
-      // 非天气场景，清除粒子
+      // non-weather scene, clear particles
       if (this.particles.length > 0) this.particles = [];
     }
   }
@@ -503,60 +503,60 @@ class Renderer {
   }
 }
 
-// ── 场景渲染函数（精细版）────────────────────
+// --- Scene Render Functions (Detailed) ---
 
 const SCENE_RENDERERS = {
 
   HOME_SLEEPING(r) {
     const c = r.ctx;
-    // 墙壁渐变
+    // wall gradient
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#1a1a30'); wg.addColorStop(1, '#0f0f22');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
 
-    // 地板
+    // floor
     const fg = c.createLinearGradient(0, 220, 0, H);
     fg.addColorStop(0, '#3a3228'); fg.addColorStop(1, '#2a2218');
     c.fillStyle = fg; c.fillRect(0, 220, W, H - 220);
 
-    // 墙线
+    // wall lines
     c.strokeStyle = 'rgba(255,255,255,0.03)'; c.lineWidth = 1;
     for (let i = 0; i < 6; i++) { c.beginPath(); c.moveTo(0, 220); c.lineTo(W, 220 - i * 40); c.stroke(); }
 
-    // 窗户
+    // window
     r.roundRect(60, 60, 80, 60, 3, '#1a2a4a');
     r.roundRect(63, 63, 36, 26, 1, '#2a3a5a');
     r.roundRect(102, 63, 36, 26, 1, '#2a3a5a');
-    // 窗框
+    // window frame
     c.fillStyle = '#555';
     c.fillRect(98, 60, 4, 60);
     c.fillRect(60, 90, 80, 3);
-    // 月光
+    // moonlight
     c.fillStyle = 'rgba(232,232,208,0.6)';
     c.beginPath(); c.arc(110, 75, 8, 0, Math.PI * 2); c.fill();
     c.fillStyle = 'rgba(232,232,208,0.08)';
     c.fillRect(63, 63, 75, 54);
 
-    // 月光投射到地面
+    // moonlight cast on floor
     c.fillStyle = 'rgba(200,200,180,0.04)';
     c.beginPath();
     c.moveTo(60, 220); c.lineTo(140, 220); c.lineTo(180, H); c.lineTo(20, H);
     c.fill();
 
-    // 床
-    r.roundRect(120, 170, 60, 50, 4, '#5a3a2a');   // 床身
-    r.roundRect(118, 158, 64, 16, 4, '#e8e0d0');   // 床头板
-    r.roundRect(124, 160, 52, 8, 2, '#c0b0a0');    // 枕头区
-    // 床头柜
+    // bed
+    r.roundRect(120, 170, 60, 50, 4, '#5a3a2a');   // bed frame
+    r.roundRect(118, 158, 64, 16, 4, '#e8e0d0');   // headboard
+    r.roundRect(124, 160, 52, 8, 2, '#c0b0a0');    // pillow area
+    // nightstand
     r.roundRect(190, 180, 28, 40, 3, '#4a3a2a');
-    // 小夜灯
+    // night light
     c.fillStyle = 'rgba(255,200,100,0.6)';
     c.beginPath(); c.arc(204, 178, 4, 0, Math.PI * 2); c.fill();
     c.fillStyle = 'rgba(255,200,100,0.06)';
     c.beginPath(); c.arc(204, 178, 40, 0, Math.PI * 2); c.fill();
 
-    // 植物
-    r.roundRect(520, 160, 20, 60, 2, '#3a4a3a');  // 花盆
+    // plant
+    r.roundRect(520, 160, 20, 60, 2, '#3a4a3a');  // flower pot
     c.fillStyle = '#3a5a3a';
     c.beginPath(); c.arc(530, 148, 16, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#4a7a4a';
@@ -567,94 +567,94 @@ const SCENE_RENDERERS = {
 
   HOME_MORNING(r) {
     const c = r.ctx;
-    // 墙壁暖色
+    // wall warm color
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#e8e0d0'); wg.addColorStop(1, '#d8d0c0');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
-    // 地板
+    // floor
     const fg = c.createLinearGradient(0, 220, 0, H);
     fg.addColorStop(0, '#3a3228'); fg.addColorStop(1, '#2a2218');
     c.fillStyle = fg; c.fillRect(0, 220, W, H - 220);
 
-    // 大窗户 + 阳光
+    // large window + sunlight
     r.roundRect(40, 40, 100, 80, 4, '#87CEEB');
     c.fillStyle = '#c0b0a0';
     c.fillRect(88, 40, 4, 80);
     c.fillRect(40, 78, 100, 3);
-    // 阳光射入
+    // sunlight rays
     c.fillStyle = 'rgba(255,240,180,0.08)';
     c.beginPath();
     c.moveTo(40, 120); c.lineTo(140, 120); c.lineTo(220, H); c.lineTo(0, H);
     c.fill();
 
-    // 厨房区域
+    // kitchen area
     r.roundRect(360, 120, 160, 100, 0, '#d0c8b8');
-    // 台面
+    // countertop
     r.roundRect(380, 140, 40, 30, 3, '#f0f0e8');
-    // 咖啡机
+    // coffee machine
     r.roundRect(400, 120, 20, 22, 3, '#555');
     c.fillStyle = '#f0e8a0';
-    c.beginPath(); c.arc(410, 125, 3, 0, Math.PI * 2); c.fill(); // 小灯
-    // 冰箱
+    c.beginPath(); c.arc(410, 125, 3, 0, Math.PI * 2); c.fill(); // indicator light
+    // fridge
     r.roundRect(490, 120, 30, 100, 3, '#b0a898');
     r.roundRect(494, 125, 22, 40, 2, '#a09888');
-    c.fillStyle = '#888'; c.fillRect(506, 140, 2, 10); // 把手
+    c.fillStyle = '#888'; c.fillRect(506, 140, 2, 10); // handle
   },
 
   HOME_EVENING(r) {
     const c = r.ctx;
-    // 暖色夜墙
+    // warm night wall
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#2a2030'); wg.addColorStop(1, '#1e1a28');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
-    // 地板
+    // floor
     const fg = c.createLinearGradient(0, 220, 0, H);
     fg.addColorStop(0, '#3a3228'); fg.addColorStop(1, '#2a2218');
     c.fillStyle = fg; c.fillRect(0, 220, W, H - 220);
 
-    // 电视
+    // TV
     r.roundRect(280, 80, 100, 60, 4, '#1a1a2a');
     r.roundRect(284, 84, 92, 52, 2, '#3a4a5a');
-    // 电视动态色彩
+    // TV dynamic colors
     const hue = (r.time * 0.5) % 360;
     c.fillStyle = `hsla(${hue},40%,50%,0.15)`;
     c.fillRect(284, 84, 92, 52);
-    // 电视柜
+    // TV stand
     r.roundRect(260, 144, 140, 16, 3, '#4a3a2a');
-    // 电视光
+    // TV glow
     c.fillStyle = `rgba(100,130,180,0.05)`;
     c.beginPath();
     c.moveTo(280, 160); c.lineTo(380, 160); c.lineTo(420, 360); c.lineTo(240, 360);
     c.fill();
 
-    // 沙发
+    // sofa
     r.roundRect(240, 180, 160, 40, 6, '#5a4a3a');
     r.roundRect(228, 170, 20, 60, 4, '#5a4a3a');
     r.roundRect(392, 170, 20, 60, 4, '#5a4a3a');
-    // 抱枕
+    // cushions
     r.roundRect(260, 178, 24, 22, 4, '#8a6a5a');
     r.roundRect(360, 180, 20, 18, 4, '#6a7a8a');
 
-    // 落地灯
+    // floor lamp
     r.roundRect(180, 100, 4, 120, 1, '#888');
     c.fillStyle = 'rgba(255,200,100,0.5)';
     c.beginPath(); c.arc(182, 96, 16, 0, Math.PI * 2); c.fill();
     c.fillStyle = 'rgba(255,200,100,0.06)';
     c.beginPath(); c.arc(182, 96, 80, 0, Math.PI * 2); c.fill();
 
-    // 猫
+    // cat
     const catX = 160 + Math.sin(r.time * 0.02) * 8;
     c.fillStyle = '#f5a623';
     c.beginPath(); c.ellipse(catX, 260, 16, 10, 0, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(catX + 14, 250, 6, 0, Math.PI * 2); c.fill();
-    // 耳朵
+    // ears
     c.beginPath(); c.moveTo(catX + 10, 246); c.lineTo(catX + 8, 238); c.lineTo(catX + 14, 244); c.fill();
     c.beginPath(); c.moveTo(catX + 18, 244); c.lineTo(catX + 20, 238); c.lineTo(catX + 22, 246); c.fill();
-    // 眼睛
+    // eyes
     c.fillStyle = '#333';
     c.beginPath(); c.arc(catX + 12, 250, 1.5, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(catX + 17, 250, 1.5, 0, Math.PI * 2); c.fill();
-    // 尾巴
+    // tail
     c.strokeStyle = '#f5a623'; c.lineWidth = 3; c.lineCap = 'round';
     c.beginPath();
     c.moveTo(catX - 14, 256);
@@ -670,15 +670,15 @@ const SCENE_RENDERERS = {
 
   COMMUTE_TO_WORK(r) {
     const c = r.ctx;
-    // 地铁车厢
+    // subway car
     const wg = c.createLinearGradient(0, 0, 0, 260);
     wg.addColorStop(0, '#e8e4e0'); wg.addColorStop(1, '#d8d4d0');
     c.fillStyle = wg; c.fillRect(0, 0, W, 260);
-    // 地板
+    // floor
     c.fillStyle = '#888'; c.fillRect(0, 260, W, H - 260);
     c.fillStyle = '#666'; c.fillRect(0, 280, W, H - 280);
 
-    // 大车窗
+    // large window
     for (let i = 0; i < 4; i++) {
       const wx = 40 + i * 150;
       r.roundRect(wx, 40, 100, 80, 4, '#87CEEB');
@@ -688,7 +688,7 @@ const SCENE_RENDERERS = {
       r.roundRect(wx, 40, 100, 80, 4, '#87CEEB');
     }
 
-    // 把手
+    // handle
     c.strokeStyle = '#999'; c.lineWidth = 2;
     for (let i = 0; i < 8; i++) {
       const hx = 60 + i * 70;
@@ -697,16 +697,16 @@ const SCENE_RENDERERS = {
       c.beginPath(); c.arc(hx, 136, 6, 0, Math.PI * 2); c.fill();
     }
 
-    // 门
+    // door
     r.roundRect(0, 80, 12, 140, 2, '#d0ccc8');
     r.roundRect(W - 12, 80, 12, 140, 2, '#d0ccc8');
 
-    // 运动线条
+    // motion lines
     const offset = (r.time * 2) % 40;
     c.fillStyle = 'rgba(150,150,150,0.2)';
     for (let i = 0; i < 10; i++) c.fillRect(0, offset + i * 40, W, 1);
 
-    // LED 线路图
+    // LED route map
     r.roundRect(490, 50, 120, 50, 3, '#1a1a2a');
     c.fillStyle = '#4a8af5';
     for (let i = 0; i < 4; i++) {
@@ -724,42 +724,42 @@ const SCENE_RENDERERS = {
 
   OFFICE_WORKING(r) {
     const c = r.ctx;
-    // 明亮办公室
+    // bright office
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#f5f5f0'); wg.addColorStop(1, '#e8e5e0');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
-    // 地板
+    // floor
     c.fillStyle = '#e0ddd5'; c.fillRect(0, 220, W, H - 220);
 
-    // 大落地窗
+    // large floor-to-ceiling window
     r.roundRect(0, 20, W, 100, 0, '#c0d8e8');
-    // 窗格
+    // window panes
     c.fillStyle = '#ddd';
     for (let i = 0; i < 10; i++) c.fillRect(i * 66 + 5, 20, 2, 100);
-    // 天际线
+    // skyline
     c.fillStyle = 'rgba(100,120,140,0.2)';
     for (let i = 0; i < 5; i++) {
       const bw = 30 + i * 15;
       c.fillRect(i * 130 + 20, 100 - 30 - i * 10, bw, 30 + i * 10);
     }
 
-    // 工位（3x2）
+    // workstations (3x2)
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 3; col++) {
         const dx = 80 + col * 200;
         const dy = 140 + row * 50;
-        // 桌面
+        // desktop
         r.roundRect(dx, dy, 120, 6, 2, '#8a7a6a');
-        // 桌腿
+        // desk legs
         c.fillStyle = '#7a6a5a'; c.fillRect(dx + 10, dy + 6, 4, 30); c.fillRect(dx + 106, dy + 6, 4, 30);
-        // 显示器
+        // monitor
         r.roundRect(dx + 30, dy - 30, 60, 28, 3, '#555');
         r.roundRect(dx + 33, dy - 27, 54, 22, 2, '#4a6a8a');
-        // 显示器支架
+        // monitor stand
         c.fillStyle = '#555'; c.fillRect(dx + 57, dy - 3, 6, 6);
-        // 键盘
+        // keyboard
         r.roundRect(dx + 35, dy + 1, 50, 4, 1, '#888');
-        // 屏幕内容微光
+        // screen content glow
         c.fillStyle = 'rgba(100,180,255,0.05)';
         c.fillRect(dx + 33, dy - 27, 54, 22);
       }
@@ -769,102 +769,102 @@ const SCENE_RENDERERS = {
   OFFICE_MEETING(r) {
     SCENE_RENDERERS.OFFICE_WORKING(r);
     const c = r.ctx;
-    // 会议桌
+    // conference table
     r.roundRect(160, 170, 320, 80, 6, '#8a7a6a');
     r.roundRect(160, 166, 320, 8, 4, '#9a8a7a');
-    // 投影幕
+    // projector screen
     r.roundRect(200, 50, 240, 120, 3, '#fff');
     c.fillStyle = '#e8e8e0';
     c.fillRect(202, 52, 236, 116);
-    c.fillStyle = '#333'; c.font = '14px sans-serif'; c.fillText('Q2 目标复盘', 260, 115);
+    c.fillStyle = '#333'; c.font = '14px sans-serif'; c.fillText('Q2 Goals Review', 260, 115);
   },
 
   OFFICE_LUNCH(r) {
     const c = r.ctx;
-    // 外面觅食街道
+    // food street outside
     c.fillStyle = '#e8e0d0'; c.fillRect(0, 0, W, 180);
     c.fillStyle = '#d0c8b8'; c.fillRect(0, 180, W, H - 180);
 
-    // 建筑背景
+    // building background
     r.roundRect(20, 60, 150, 120, 0, '#c0b8a8');
     r.roundRect(180, 40, 120, 140, 0, '#b8b0a0');
     r.roundRect(470, 50, 140, 130, 0, '#c8c0b0');
 
-    // 餐厅
+    // restaurant
     r.roundRect(200, 60, 240, 100, 6, '#f0e8d0');
     r.roundRect(200, 50, 240, 20, 6, '#e74c3c');
-    c.fillStyle = '#fff'; c.font = '14px sans-serif'; c.fillText('🍜 味千拉面', 280, 66);
+    c.fillStyle = '#fff'; c.font = '14px sans-serif'; c.fillText('🍜 Ajisen Ramen', 280, 66);
 
-    // 户外桌椅
+    // outdoor seating
     for (let i = 0; i < 3; i++) {
       const tx = 100 + i * 180;
       r.roundRect(tx, 200, 60, 6, 2, '#8a7a6a');
-      // 遮阳伞
+      // umbrella
       c.fillStyle = i % 2 === 0 ? 'rgba(230,80,60,0.7)' : 'rgba(60,140,200,0.7)';
       c.beginPath(); c.arc(tx + 30, 196, 30, Math.PI, Math.PI * 2); c.fill();
       c.fillStyle = '#888'; c.fillRect(tx + 28, 196, 4, 20);
     }
 
-    // 人行道
+    // sidewalk
     c.fillStyle = '#c0b8a8'; c.fillRect(0, 280, W, 10);
   },
 
   CAFE(r) {
     const c = r.ctx;
-    // 温暖咖啡色
+    // warm coffee tones
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#f0e8d0'); wg.addColorStop(1, '#e0d8c0');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
-    // 木地板
+    // wooden floor
     c.fillStyle = '#c0a880'; c.fillRect(0, 220, W, H - 220);
-    // 木纹
+    // wood grain
     c.strokeStyle = 'rgba(0,0,0,0.05)'; c.lineWidth = 1;
     for (let i = 0; i < 10; i++) { c.beginPath(); c.moveTo(0, 220 + i * 14); c.lineTo(W, 220 + i * 14); c.stroke(); }
 
-    // 大窗
+    // large window
     r.roundRect(40, 30, 240, 120, 4, '#d8d0c0');
     r.roundRect(44, 34, 232, 112, 2, '#e8e0d0');
-    // 窗外树影
+    // tree shadows outside
     c.fillStyle = 'rgba(100,160,80,0.3)';
     c.beginPath(); c.arc(100, 50, 30, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(250, 60, 20, 0, Math.PI * 2); c.fill();
 
-    // 吧台
+    // counter bar
     r.roundRect(0, 120, 200, 100, 0, '#6a4a3a');
     r.roundRect(0, 115, 200, 12, 4, '#7a5a4a');
-    // 咖啡机
+    // coffee machine
     r.roundRect(30, 90, 24, 28, 3, '#555');
     c.fillStyle = '#e74c3c'; c.beginPath(); c.arc(42, 96, 3, 0, Math.PI * 2); c.fill();
-    // 杯子架
+    // cup rack
     for (let i = 0; i < 4; i++) {
       c.fillStyle = i % 2 === 0 ? '#fff' : '#e8d8c8';
       c.beginPath(); c.arc(80 + i * 16, 100, 5, 0, Math.PI * 2); c.fill();
     }
-    // 菜单板
+    // menu board
     r.roundRect(60, 40, 80, 50, 3, '#2a2a2a');
     c.fillStyle = '#e8d8a8'; c.font = '10px sans-serif';
     c.fillText('Latte    ¥28', 68, 58);
     c.fillText('Mocha    ¥32', 68, 72);
     c.fillText('Matcha   ¥30', 68, 84);
 
-    // 桌子
+    // desk
     for (let i = 0; i < 2; i++) {
       const tx = 320 + i * 150;
       r.roundRect(tx, 190, 100, 6, 3, '#8a7a6a');
-      // 桌腿
+      // desk legs
       c.fillStyle = '#7a6a5a'; c.fillRect(tx + 45, 196, 10, 30);
-      // 桌上咖啡杯
+      // coffee cup on table
       c.fillStyle = '#fff';
       c.beginPath(); c.arc(tx + 30, 188, 7, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#6a4a3a';
       c.beginPath(); c.arc(tx + 30, 188, 5, 0, Math.PI * 2); c.fill();
-      // 蒸汽
+      // steam
       c.strokeStyle = 'rgba(255,255,255,0.3)'; c.lineWidth = 1;
       const sOff = Math.sin(r.time * 0.04 + i) * 2;
       c.beginPath(); c.moveTo(tx + 28, 182); c.quadraticCurveTo(tx + 26, 174 + sOff, tx + 30, 168); c.stroke();
     }
 
-    // 吊灯
+    // chandelier
     for (let i = 0; i < 3; i++) {
       const lx = 100 + i * 200;
       c.strokeStyle = '#999'; c.lineWidth = 1;
@@ -878,12 +878,12 @@ const SCENE_RENDERERS = {
 
   PARK(r) {
     const c = r.ctx;
-    // 天空渐变
+    // sky gradient
     const sg = c.createLinearGradient(0, 0, 0, 200);
     sg.addColorStop(0, '#6ab7e8'); sg.addColorStop(1, '#a8d8f0');
     c.fillStyle = sg; c.fillRect(0, 0, W, 200);
 
-    // 云
+    // clouds
     const drawCloud = (cx, cy, s) => {
       c.fillStyle = 'rgba(255,255,255,0.85)';
       c.beginPath(); c.arc(cx, cy, 18 * s, 0, Math.PI * 2); c.fill();
@@ -896,17 +896,17 @@ const SCENE_RENDERERS = {
     drawCloud(350 + (cloudOff * 0.7) % 500, 35, 0.9);
     drawCloud(550 + (cloudOff * 0.5) % 500, 60, 1.0);
 
-    // 草地
+    // grass
     const gg = c.createLinearGradient(0, 200, 0, H);
     gg.addColorStop(0, '#5aaa4a'); gg.addColorStop(1, '#3a8a3a');
     c.fillStyle = gg; c.fillRect(0, 200, W, H - 200);
-    // 草地纹理
+    // grass texture
     c.fillStyle = 'rgba(80,180,60,0.3)';
     for (let i = 0; i < 40; i++) {
       c.fillRect(Math.random() * W, 200 + Math.random() * 160, 3, 6);
     }
 
-    // 小路
+    // path
     c.fillStyle = '#c0b898';
     c.beginPath();
     c.moveTo(260, 200); c.lineTo(380, 200); c.lineTo(400, H); c.lineTo(240, H);
@@ -916,13 +916,13 @@ const SCENE_RENDERERS = {
     c.moveTo(280, 200); c.lineTo(360, 200); c.lineTo(380, H); c.lineTo(260, H);
     c.fill();
 
-    // 树
+    // trees
     const drawTree = (x, y, s) => {
-      // 树干
+      // tree trunk
       c.fillStyle = '#5a3a1a';
       c.beginPath(); c.moveTo(x - 5 * s, y); c.lineTo(x + 5 * s, y);
       c.lineTo(x + 3 * s, y + 40 * s); c.lineTo(x - 3 * s, y + 40 * s); c.fill();
-      // 树冠（多层圆）
+      // canopy (layered circles)
       c.fillStyle = '#3a7a3a';
       c.beginPath(); c.arc(x, y - 8 * s, 22 * s, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#4a8a4a';
@@ -936,14 +936,14 @@ const SCENE_RENDERERS = {
     drawTree(440, 148, 1.3);
     drawTree(560, 155, 1.1);
 
-    // 长椅
+    // bench
     r.roundRect(290, 230, 60, 6, 2, '#6a4a2a');
     r.roundRect(296, 236, 4, 14, 1, '#6a4a2a');
     r.roundRect(340, 236, 4, 14, 1, '#6a4a2a');
-    // 背板
+    // backrest
     r.roundRect(292, 220, 56, 4, 1, '#6a4a2a');
 
-    // 小花
+    // small flowers
     const flowerColors = ['#e74c3c', '#f39c12', '#e91e63', '#9b59b6'];
     for (let i = 0; i < 8; i++) {
       c.fillStyle = flowerColors[i % 4];
@@ -955,11 +955,11 @@ const SCENE_RENDERERS = {
 
   SUPERMARKET(r) {
     const c = r.ctx;
-    // 明亮超市
+    // bright supermarket
     c.fillStyle = '#f0f0e8'; c.fillRect(0, 0, W, 220);
     c.fillStyle = '#e0ddd5'; c.fillRect(0, 220, W, H - 220);
 
-    // 天花板灯
+    // ceiling lights
     for (let i = 0; i < 5; i++) {
       const lx = 60 + i * 130;
       r.roundRect(lx, 0, 60, 10, 3, '#f8f8f0');
@@ -967,13 +967,13 @@ const SCENE_RENDERERS = {
       c.fillRect(lx - 20, 0, 100, 220);
     }
 
-    // 货架（3排）
+    // shelves (3 rows)
     const shelfColors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#e67e22', '#1abc9c', '#c0392b'];
     for (let i = 0; i < 3; i++) {
       const sx = 40 + i * 200;
-      // 货架框架
+      // shelf frame
       r.roundRect(sx, 100, 160, 120, 3, '#d0d0c0');
-      // 层板 + 商品
+      // shelves + products
       for (let j = 0; j < 4; j++) {
         const ly = 105 + j * 28;
         c.fillStyle = '#c0c0b0'; c.fillRect(sx + 4, ly, 152, 3);
@@ -985,26 +985,26 @@ const SCENE_RENDERERS = {
       }
     }
 
-    // 价格标签（小细节）
+    // price tags (details)
     c.fillStyle = '#ff0'; c.font = '8px sans-serif';
     c.fillText('¥12.9', 52, 96); c.fillText('¥8.5', 252, 96); c.fillText('¥25.0', 452, 96);
   },
 
   STREET_WANDERING(r) {
     const c = r.ctx;
-    // 天空
+    // sky
     const sg = c.createLinearGradient(0, 0, 0, 180);
     sg.addColorStop(0, '#6ab7e8'); sg.addColorStop(1, '#a8d8f0');
     c.fillStyle = sg; c.fillRect(0, 0, W, 180);
 
-    // 云
+    // clouds
     c.fillStyle = 'rgba(255,255,255,0.8)';
     const cOff = (r.time * 0.08) % W;
     c.beginPath(); c.arc(100 + cOff % 600, 40, 20, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(120 + cOff % 600, 36, 14, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(400 + (cOff * 0.6) % 600, 55, 16, 0, Math.PI * 2); c.fill();
 
-    // 建筑
+    // buildings
     const drawBuilding = (x, w, h, color) => {
       r.roundRect(x, 180 - h, w, h, 0, color);
       for (let row = 0; row < Math.floor(h / 32); row++) {
@@ -1019,22 +1019,22 @@ const SCENE_RENDERERS = {
     drawBuilding(400, 120, 180, '#7a8090');
     drawBuilding(540, 100, 110, '#a09888');
 
-    // 招牌
+    // sign
     r.roundRect(130, 100, 70, 20, 3, '#e74c3c');
-    c.fillStyle = '#fff'; c.font = '11px sans-serif'; c.fillText('奶茶店', 142, 114);
+    c.fillStyle = '#fff'; c.font = '11px sans-serif'; c.fillText('Milk Tea', 142, 114);
     r.roundRect(420, 80, 80, 20, 3, '#3498db');
-    c.fillStyle = '#fff'; c.fillText('便利蜂', 435, 94);
+    c.fillStyle = '#fff'; c.fillText('BeeMart', 435, 94);
 
-    // 人行道
+    // sidewalk
     c.fillStyle = '#bbb'; c.fillRect(0, 220, W, 20);
-    // 斑马线
+    // crosswalk
     for (let i = 0; i < 6; i++) {
       c.fillStyle = '#fff';
       c.fillRect(280 + i * 18, 220, 10, 20);
     }
-    // 马路
+    // road
     c.fillStyle = '#666'; c.fillRect(0, 240, W, 80);
-    // 路灯
+    // street lamp
     c.fillStyle = '#555'; c.fillRect(300, 80, 4, 140);
     c.fillStyle = '#f0e8a0';
     c.beginPath(); c.arc(302, 76, 12, 0, Math.PI * 2); c.fill();
@@ -1053,10 +1053,10 @@ const SCENE_RENDERERS = {
     const c = r.ctx;
     c.fillStyle = 'rgba(10,10,30,0.55)';
     c.fillRect(0, 0, W, H);
-    // 只有主角工位亮
+    // only main char's desk is lit
     c.fillStyle = 'rgba(255,255,200,0.08)';
     c.beginPath(); c.arc(300, 170, 80, 0, Math.PI * 2); c.fill();
-    // 窗外夜景
+    // night view outside
     c.fillStyle = '#1a2a4a';
     c.fillRect(0, 20, W, 100);
     c.fillStyle = 'rgba(255,200,100,0.4)';
@@ -1065,17 +1065,17 @@ const SCENE_RENDERERS = {
     }
   },
 
-  // ── 自由职业场景 ──
+  // --- Freelance Scenes ---
 
   HOME_WORKING(r) {
     const c = r.ctx;
-    // 温暖室内色调
+    // warm indoor tones
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#2a2535'); wg.addColorStop(1, '#352a3a');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
-    // 地板
+    // floor
     c.fillStyle = '#3a3040'; c.fillRect(0, 220, W, H - 220);
-    // 窗户 — 日间
+    // window — daytime
     c.fillStyle = '#87CEEB';
     c.globalAlpha = 0.6;
     c.fillRect(380, 30, 120, 100);
@@ -1084,32 +1084,32 @@ const SCENE_RENDERERS = {
     c.strokeRect(380, 30, 120, 100);
     c.beginPath(); c.moveTo(440, 30); c.lineTo(440, 130); c.stroke();
     c.beginPath(); c.moveTo(380, 80); c.lineTo(500, 80); c.stroke();
-    // 书桌
+    // desk
     r.roundRect(180, 150, 200, 60, 4, '#5a4a5a');
     r.roundRect(180, 146, 200, 8, 4, '#6a5a6a');
-    // 笔记本电脑
+    // laptop
     r.roundRect(220, 140, 60, 40, 2, '#333');
     r.roundRect(222, 142, 56, 28, 1, '#4488cc');
-    // 键盘
+    // keyboard
     r.roundRect(290, 155, 50, 30, 2, '#444');
     c.fillStyle = '#555';
     c.fillRect(295, 158, 40, 2);
-    // 咖啡杯
+    // coffee cup
     c.fillStyle = '#e8d8c8';
     c.fillRect(350, 158, 14, 16);
     c.fillStyle = '#6a4a3a';
     c.fillRect(352, 160, 10, 8);
-    // 绿植（窗台）
+    // plant (window sill)
     c.fillStyle = '#4a6a3a';
     c.beginPath(); c.arc(395, 130, 10, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#5a3a3a';
     c.fillRect(393, 135, 4, 8);
-    // 书架
+    // bookshelf
     r.roundRect(20, 60, 100, 150, 3, '#4a3a4a');
     for (let i = 0; i < 3; i++) {
       c.fillStyle = '#5a4a5a';
       c.fillRect(25, 80 + i * 45, 90, 3);
-      // 书
+      // books
       const colors = ['#c06060', '#6060c0', '#60c060', '#c0a060', '#a060c0'];
       for (let j = 0; j < 4; j++) {
         c.fillStyle = colors[(i * 4 + j) % colors.length];
@@ -1121,52 +1121,52 @@ const SCENE_RENDERERS = {
   CAFE_WORKING(r) {
     SCENE_RENDERERS.CAFE(r);
     const c = r.ctx;
-    // 笔记本电脑
+    // laptop
     r.roundRect(260, 155, 55, 35, 2, '#333');
     r.roundRect(262, 157, 51, 24, 1, '#4488cc');
-    // 咖啡杯
+    // coffee cup
     c.fillStyle = '#e8d8c8';
     c.fillRect(330, 158, 12, 14);
     c.fillStyle = '#6a4a3a';
     c.fillRect(332, 160, 8, 7);
-    // 小标签：工作中
+    // label: working
     c.fillStyle = 'rgba(100,80,60,0.5)';
     c.font = '10px sans-serif';
-    c.fillText('工作模式', 270, 148);
+    c.fillText('Work Mode', 270, 148);
   },
 
   OUTDOOR_WORKING(r) {
     const c = r.ctx;
-    // 户外场景
+    // outdoor scene
     c.fillStyle = '#87CEEB'; c.fillRect(0, 0, W, 180);
     c.fillStyle = '#90c060'; c.fillRect(0, 180, W, 80);
     c.fillStyle = '#70a050'; c.fillRect(0, 220, W, H - 220);
-    // 远处建筑
+    // distant buildings
     c.fillStyle = '#b0c0d0';
     c.fillRect(0, 100, 80, 80);
     c.fillRect(90, 120, 60, 60);
     c.fillRect(450, 90, 70, 90);
     c.fillRect(530, 130, 60, 50);
-    // 树
+    // trees
     c.fillStyle = '#5a3a2a';
     c.fillRect(150, 150, 8, 50);
     c.fillStyle = '#4a8a3a';
     c.beginPath(); c.arc(154, 135, 25, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#3a7a2a';
     c.beginPath(); c.arc(145, 140, 18, 0, Math.PI * 2); c.fill();
-    // 另一棵树
+    // another tree
     c.fillStyle = '#5a3a2a';
     c.fillRect(420, 160, 7, 40);
     c.fillStyle = '#5a9a4a';
     c.beginPath(); c.arc(423, 145, 20, 0, Math.PI * 2); c.fill();
-    // 相机/器材（地面）
+    // camera/gear (ground)
     r.roundRect(200, 200, 30, 20, 2, '#333');
     c.fillStyle = '#555';
     c.beginPath(); c.arc(225, 205, 8, 0, Math.PI * 2); c.fill();
-    // 小路
+    // path
     c.fillStyle = '#c0b0a0';
     c.fillRect(0, 250, W, 20);
-    // 云
+    // clouds
     c.fillStyle = 'rgba(255,255,255,0.7)';
     c.beginPath(); c.arc(100 + Math.sin(r.time * 0.005) * 20, 50, 25, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(125, 45, 18, 0, Math.PI * 2); c.fill();
@@ -1175,87 +1175,87 @@ const SCENE_RENDERERS = {
 
   STUDIO_WORKING(r) {
     const c = r.ctx;
-    // 工作室 — 暗色调
+    // studio - dark tones
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#2a2530'); wg.addColorStop(1, '#352a35');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
     c.fillStyle = '#3a3040'; c.fillRect(0, 220, W, H - 220);
-    // 设备架
+    // equipment rack
     r.roundRect(400, 80, 120, 100, 3, '#3a3545');
     c.fillStyle = '#4a4555';
     c.fillRect(410, 90, 30, 20);
     c.fillRect(410, 120, 30, 20);
     c.fillRect(410, 150, 30, 20);
-    // 小指示灯
+    // indicator LEDs
     c.fillStyle = '#44cc44';
     c.beginPath(); c.arc(450, 100, 3, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#cc4444';
     c.beginPath(); c.arc(460, 100, 3, 0, Math.PI * 2); c.fill();
-    // 工作台
+    // workbench
     r.roundRect(150, 160, 220, 50, 4, '#4a3a4a');
     r.roundRect(150, 156, 220, 8, 4, '#5a4a5a');
-    // 显示器
+    // monitor
     r.roundRect(180, 100, 80, 55, 3, '#222');
     r.roundRect(183, 103, 74, 49, 1, '#3366aa');
     c.fillRect(215, 155, 10, 5);
-    // 麦克风
+    // microphone
     c.fillStyle = '#555';
     c.fillRect(320, 140, 4, 25);
     c.beginPath(); c.arc(322, 135, 8, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#666';
     c.beginPath(); c.arc(322, 135, 5, 0, Math.PI * 2); c.fill();
-    // 地毯
+    // rug
     c.fillStyle = 'rgba(80,60,80,0.3)';
     c.fillRect(200, 230, 160, 30);
   },
 
-  // ── 旅行场景 ──
+  // --- Travel Scenes ---
 
   AIRPORT(r) {
     const c = r.ctx;
-    // 明亮机场大厅
+    // bright airport terminal
     const wg = c.createLinearGradient(0, 0, 0, 260);
     wg.addColorStop(0, '#e8e4e0'); wg.addColorStop(1, '#d8d4d0');
     c.fillStyle = wg; c.fillRect(0, 0, W, 260);
-    // 地板
+    // floor
     c.fillStyle = '#c0b8a8'; c.fillRect(0, 260, W, H - 260);
 
-    // 大玻璃窗
+    // large glass window
     r.roundRect(40, 30, 250, 120, 4, '#c0d8e8');
-    // 窗外 - 天空 + 飞机
+    // outside - sky + airplane
     c.fillStyle = '#87CEEB';
     c.fillRect(44, 34, 242, 112);
-    // 云
+    // clouds
     c.fillStyle = 'rgba(255,255,255,0.7)';
     c.beginPath(); c.arc(150, 70, 20, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(180, 65, 14, 0, Math.PI * 2); c.fill();
-    // 小飞机
+    // small plane
     const planeOff = (r.time * 0.3) % 300;
     c.fillStyle = '#555';
     c.beginPath(); c.moveTo(60 + planeOff, 80); c.lineTo(80 + planeOff, 80);
     c.lineTo(85 + planeOff, 76); c.lineTo(90 + planeOff, 80); c.lineTo(95 + planeOff, 80); c.fill();
 
-    // 航班信息屏
+    // flight info screen
     r.roundRect(350, 30, 240, 60, 3, '#1a1a2a');
     c.fillStyle = '#f0a020'; c.font = '10px monospace';
     c.fillText('DEPARTURES', 360, 48);
     c.fillStyle = '#4ae04a'; c.font = '9px monospace';
-    c.fillText('CA123  北京  ON TIME   12:30', 360, 62);
-    c.fillText('MU567  东京  DELAYED  14:15', 360, 75);
+    c.fillText('CA123  Beijing  ON TIME   12:30', 360, 62);
+    c.fillText('MU567  Tokyo  DELAYED  14:15', 360, 75);
 
-    // 登机口
+    // boarding gate
     r.roundRect(480, 130, 80, 50, 4, '#d0ccc8');
     c.fillStyle = '#888'; c.font = '12px sans-serif';
     c.fillText('GATE 12', 490, 160);
 
-    // 行李
+    // luggage
     r.roundRect(100, 220, 40, 30, 3, '#4a6a8a');
     r.roundRect(100, 215, 40, 8, 2, '#5a7a9a');
-    // 拉杆箱
+    // suitcase
     r.roundRect(160, 225, 25, 25, 3, '#e74c3c');
     c.fillStyle = '#555'; c.fillRect(170, 220, 2, 8);
 
-    // 候车座椅
+    // waiting seats
     for (let i = 0; i < 3; i++) {
       const sx = 240 + i * 80;
       r.roundRect(sx, 210, 50, 5, 1, '#888');
@@ -1266,26 +1266,26 @@ const SCENE_RENDERERS = {
 
   TOURING(r) {
     const c = r.ctx;
-    // 天空
+    // sky
     const sg = c.createLinearGradient(0, 0, 0, 180);
     sg.addColorStop(0, '#4ab0e8'); sg.addColorStop(1, '#8ad0f0');
     c.fillStyle = sg; c.fillRect(0, 0, W, 180);
-    // 云
+    // clouds
     c.fillStyle = 'rgba(255,255,255,0.8)';
     const cOff = (r.time * 0.08) % W;
     c.beginPath(); c.arc(100 + cOff % 600, 40, 18, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(400 + (cOff * 0.5) % 600, 55, 15, 0, Math.PI * 2); c.fill();
 
-    // 远处 - 标志性建筑剪影（寺庙/城堡）
+    // distant - landmark silhouette (temple/castle)
     c.fillStyle = '#8a8090';
     r.roundRect(280, 80, 80, 100, 0, '#8a8090');
-    // 塔顶
+    // tower top
     c.beginPath(); c.moveTo(280, 80); c.lineTo(320, 30); c.lineTo(360, 80); c.fill();
-    // 屋檐
+    // eaves
     c.fillStyle = '#7a7080';
     c.beginPath(); c.moveTo(265, 100); c.lineTo(375, 100); c.lineTo(370, 90); c.lineTo(270, 90); c.fill();
 
-    // 树
+    // trees
     c.fillStyle = '#3a7a3a';
     c.beginPath(); c.arc(100, 140, 22, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#5a3a1a'; c.fillRect(96, 155, 8, 30);
@@ -1293,21 +1293,21 @@ const SCENE_RENDERERS = {
     c.beginPath(); c.arc(500, 145, 18, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#5a3a1a'; c.fillRect(497, 158, 6, 25);
 
-    // 地面（石板路）
+    // ground (stone path)
     c.fillStyle = '#b0a898'; c.fillRect(0, 200, W, H - 200);
-    // 石板纹理
+    // stone texture
     c.strokeStyle = 'rgba(0,0,0,0.06)'; c.lineWidth = 1;
     for (let i = 0; i < 20; i++) {
       const sx = (i * 35 + 10) % W;
       c.beginPath(); c.moveTo(sx, 200); c.lineTo(sx + 15, H); c.stroke();
     }
 
-    // 路灯
+    // street lamp
     c.fillStyle = '#555'; c.fillRect(40, 100, 3, 100);
     c.fillStyle = '#f0e8a0';
     c.beginPath(); c.arc(41, 96, 10, 0, Math.PI * 2); c.fill();
 
-    // 相机标志（主角在拍照）
+    // camera mark (main char taking photo)
     c.fillStyle = '#333';
     c.beginPath(); c.arc(560, 195, 10, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#555';
@@ -1316,39 +1316,39 @@ const SCENE_RENDERERS = {
 
   HOTEL(r) {
     const c = r.ctx;
-    // 酒店房间 — 暖色
+    // hotel room - warm tones
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#2a2030'); wg.addColorStop(1, '#1e1a28');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
     c.fillStyle = '#3a3040'; c.fillRect(0, 220, W, H - 220);
 
-    // 大窗户（夜景）
+    // large window (night)
     r.roundRect(350, 40, 160, 120, 4, '#1a2a4a');
-    // 窗外城市灯光
+    // city lights outside
     c.fillStyle = 'rgba(255,200,100,0.5)';
     for (let i = 0; i < 15; i++) {
       c.fillRect(360 + (i * 11) % 140, 60 + (i * 7) % 80, 3, 3);
     }
-    // 窗帘
+    // curtains
     c.fillStyle = '#4a3a5a';
     c.fillRect(345, 35, 12, 130);
     c.fillRect(503, 35, 12, 130);
 
-    // 大床
+    // large bed
     r.roundRect(80, 160, 180, 50, 4, '#5a4a3a');
     r.roundRect(80, 155, 180, 12, 4, '#e8e0d0');
     r.roundRect(90, 158, 70, 8, 3, '#f0e8d8');
 
-    // 床头柜 + 灯
+    // nightstand + lamp
     r.roundRect(270, 170, 30, 40, 3, '#4a3a2a');
     c.fillStyle = 'rgba(255,180,100,0.6)';
     c.beginPath(); c.arc(285, 168, 6, 0, Math.PI * 2); c.fill();
 
-    // 电视
+    // TV
     r.roundRect(330, 130, 10, 50, 2, '#333');
     r.roundRect(325, 120, 20, 5, 2, '#444');
 
-    // 笔记本电脑（在另一张小桌上）
+    // laptop (on a small side table)
     r.roundRect(420, 170, 80, 40, 3, '#4a3a5a');
     r.roundRect(435, 155, 50, 18, 2, '#333');
     r.roundRect(437, 157, 46, 14, 1, '#4488cc');
@@ -1356,13 +1356,13 @@ const SCENE_RENDERERS = {
 
   LOCAL_FOOD(r) {
     const c = r.ctx;
-    // 温暖的街头美食氛围
+    // warm street food atmosphere
     const wg = c.createLinearGradient(0, 0, 0, 220);
     wg.addColorStop(0, '#f0d8a0'); wg.addColorStop(1, '#e8c888');
     c.fillStyle = wg; c.fillRect(0, 0, W, 220);
     c.fillStyle = '#c0a870'; c.fillRect(0, 220, W, H - 220);
 
-    // 灯笼
+    // lanterns
     for (let i = 0; i < 4; i++) {
       const lx = 80 + i * 150;
       c.fillStyle = '#e74c3c';
@@ -1373,55 +1373,55 @@ const SCENE_RENDERERS = {
       c.beginPath(); c.moveTo(lx, 24); c.lineTo(lx, 15); c.stroke();
     }
 
-    // 摊位
+    // food stall
     r.roundRect(50, 140, 200, 80, 3, '#6a4a2a');
     r.roundRect(50, 135, 200, 12, 4, '#7a5a3a');
-    // 蒸笼
+    // steamers
     for (let i = 0; i < 3; i++) {
       r.roundRect(70 + i * 55, 110, 40, 28, 2, '#f0f0e8');
       c.fillStyle = '#d0d0c0';
       c.fillRect(70 + i * 55, 108, 40, 4);
     }
-    // 蒸汽
+    // steam
     c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 1;
     const sOff = Math.sin(r.time * 0.04) * 2;
     c.beginPath(); c.moveTo(90, 106); c.quadraticCurveTo(88, 98 + sOff, 92, 92); c.stroke();
     c.beginPath(); c.moveTo(145, 106); c.quadraticCurveTo(143, 100 + sOff, 148, 94); c.stroke();
 
-    // 第二个摊位
+    // second stall
     r.roundRect(350, 150, 180, 70, 3, '#5a4a3a');
     c.fillStyle = '#ff0'; c.font = '11px sans-serif';
     c.fillText('🍜', 400, 180);
     c.fillText('🍜', 440, 185);
     c.fillText('🍜', 470, 178);
 
-    // 路面
+    // pavement
     c.fillStyle = '#a09880'; c.fillRect(0, 280, W, 20);
   },
 
   SCENIC_DRIVE(r) {
     const c = r.ctx;
-    // 车窗视角 — 蓝天 + 流动的风景
+    // car window view - blue sky + flowing scenery
     const sg = c.createLinearGradient(0, 0, 0, 200);
     sg.addColorStop(0, '#4ab0e8'); sg.addColorStop(1, '#8ad0f0');
     c.fillStyle = sg; c.fillRect(0, 0, W, 200);
-    // 云（流动）
+    // clouds (drifting)
     c.fillStyle = 'rgba(255,255,255,0.7)';
     const drift = (r.time * 1.5) % W;
     c.beginPath(); c.arc(W - drift, 50, 25, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(W - drift + 30, 45, 18, 0, Math.PI * 2); c.fill();
     c.beginPath(); c.arc(W - (drift * 0.7 + 300) % W, 70, 20, 0, Math.PI * 2); c.fill();
 
-    // 远山
+    // distant mountains
     c.fillStyle = '#7aaa7a';
     c.beginPath(); c.moveTo(0, 200); c.lineTo(100, 120); c.lineTo(200, 160);
     c.lineTo(350, 100); c.lineTo(500, 150); c.lineTo(640, 110); c.lineTo(640, 200); c.fill();
-    // 近山
+    // near mountains
     c.fillStyle = '#5a8a5a';
     c.beginPath(); c.moveTo(0, 200); c.lineTo(150, 140); c.lineTo(300, 170);
     c.lineTo(450, 130); c.lineTo(640, 160); c.lineTo(640, 200); c.fill();
 
-    // 流动的路边树
+    // drifting roadside trees
     const treeOff = (r.time * 2) % 80;
     for (let i = 0; i < 10; i++) {
       const tx = (i * 80 - treeOff) % (W + 40) - 20;
@@ -1430,16 +1430,16 @@ const SCENE_RENDERERS = {
       c.beginPath(); c.arc(tx + 7, 170, 14, 0, Math.PI * 2); c.fill();
     }
 
-    // 路面
+    // pavement
     c.fillStyle = '#666'; c.fillRect(0, 200, W, 80);
-    // 车道线
+    // lane lines
     c.fillStyle = '#fff';
     const lineOff = (r.time * 3) % 60;
     for (let i = 0; i < 15; i++) {
       c.fillRect(i * 60 - lineOff, 240, 30, 3);
     }
 
-    // 车窗边框
+    // window frame
     c.strokeStyle = '#333'; c.lineWidth = 6;
     c.strokeRect(0, 0, W, H);
   },
@@ -1447,40 +1447,40 @@ const SCENE_RENDERERS = {
   RESTAURANT_LOCAL(r) {
     SCENE_RENDERERS.CAFE(r);
     const c = r.ctx;
-    // 覆盖为当地餐厅风格
+    // overlay local restaurant style
     c.fillStyle = 'rgba(200,160,80,0.1)';
     c.fillRect(0, 0, W, H);
-    // 菜单板改为当地特色
+    // menu board with local specials
     r.roundRect(60, 40, 80, 50, 3, '#2a2a2a');
     c.fillStyle = '#f0d8a8'; c.font = '9px sans-serif';
-    c.fillText('当地特色菜', 68, 58);
-    c.fillText('招牌推荐 ¥35', 68, 72);
-    c.fillText('时令鲜蔬 ¥28', 68, 84);
+    c.fillText('Local Specials', 68, 58);
+    c.fillText('Signature Dish ¥35', 68, 72);
+    c.fillText('Seasonal Veg ¥28', 68, 84);
   },
 
   TRAIN_STATION(r) {
     const c = r.ctx;
-    // 火车站风格
+    // train station style
     const wg = c.createLinearGradient(0, 0, 0, 260);
     wg.addColorStop(0, '#d8d4d0'); wg.addColorStop(1, '#c8c4c0');
     c.fillStyle = wg; c.fillRect(0, 0, W, 260);
     c.fillStyle = '#999'; c.fillRect(0, 260, W, H - 260);
 
-    // 铁轨结构天花板
+    // rail structure ceiling
     c.fillStyle = '#888';
     for (let i = 0; i < 8; i++) {
       c.fillRect(i * 85, 0, 4, 40);
     }
     c.fillRect(0, 35, W, 6);
 
-    // 大显示屏
+    // large display
     r.roundRect(200, 60, 200, 50, 3, '#1a1a2a');
     c.fillStyle = '#4ae04a'; c.font = '11px monospace';
-    c.fillText('G5  开往成都  15:30', 215, 82);
+    c.fillText('G5  To Chengdu  15:30', 215, 82);
     c.fillStyle = '#f0a020'; c.font = '10px monospace';
-    c.fillText('检票口 B3', 215, 98);
+    c.fillText('Platform B3', 215, 98);
 
-    // 候车座椅
+    // waiting seats
     for (let i = 0; i < 5; i++) {
       const sx = 40 + i * 120;
       r.roundRect(sx, 180, 80, 5, 1, '#888');
@@ -1488,7 +1488,7 @@ const SCENE_RENDERERS = {
       c.fillRect(sx + 71, 185, 4, 25);
     }
 
-    // 时钟
+    // clock
     c.fillStyle = '#fff';
     c.beginPath(); c.arc(550, 80, 20, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#333';

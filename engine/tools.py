@@ -1,11 +1,11 @@
 """
-工具集定义
-B 层可以调用的所有工具函数
+Tool definitions
+All tool functions that the B layer can call
 
-每个工具都有：
-  - 函数实现
-  - schema（告诉 LLM 这个工具的作用和参数）
-  - 风险等级（low/medium/high）- 高风险操作需要 A 层向用户确认
+Each tool has:
+  - Function implementation
+  - schema (tells LLM what the tool does and its parameters)
+  - Risk level (low/medium/high) - high-risk operations require A layer user confirmation
 """
 
 import os
@@ -56,16 +56,16 @@ def _get_desktop() -> Path:
 
 
 # ═══════════════════════════════════════════════════
-# 工具注册表
+# Tool Registry
 # ═══════════════════════════════════════════════════
 
 TOOL_REGISTRY: Dict[str, Dict] = {}
 
 
 def register_tool(name: str, description: str, parameters: dict, risk: str = "low"):
-    """装饰器：注册工具到注册表"""
+    """Decorator: register a tool in the registry"""
     def decorator(func):
-        # required 必须在顶层，不能在 properties 里（DeepSeek/OpenAI 规范）
+        # required must be at the top level, not inside properties (DeepSeek/OpenAI spec)
         required_keys = [k for k, v in parameters.items() if v.get("required", False)]
         clean_props = {
             k: {pk: pv for pk, pv in v.items() if pk != "required"}
@@ -89,15 +89,15 @@ def register_tool(name: str, description: str, parameters: dict, risk: str = "lo
 
 
 # ═══════════════════════════════════════════════════
-# 文件系统工具
+# File System Tools
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="read_file",
-    description="读取本地文件内容。支持文本文件（txt/md/py/json/csv等）",
+    description="Read local file content. Supports text files (txt/md/py/json/csv, etc.)",
     parameters={
-        "path": {"type": "string", "description": "文件路径（绝对路径或相对路径）", "required": True},
-        "encoding": {"type": "string", "description": "编码格式，默认 utf-8"}
+        "path": {"type": "string", "description": "File path (absolute or relative)", "required": True},
+        "encoding": {"type": "string", "description": "Encoding format, default utf-8"}
     },
     risk="low"
 )
@@ -107,9 +107,9 @@ def read_file(path: str, encoding: str = "utf-8") -> Dict:
         with open(path, "r", encoding=encoding, errors="replace") as f:
             content = f.read()
         size = len(content)
-        # 超过 50k 字符只返回前 50k
+        # If over 50k chars, return only first 50k
         if size > 50000:
-            content = content[:50000] + f"\n\n[文件过大，已截断。总大小: {size} 字符]"
+            content = content[:50000] + f"\n\n[File too large, truncated. Total size: {size} chars]"
         return {"ok": True, "content": content, "path": path, "size": size}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -118,14 +118,14 @@ def read_file(path: str, encoding: str = "utf-8") -> Dict:
 @register_tool(
     name="search_in_file",
     description=(
-        "在指定文件中搜索关键词，返回匹配的行及其上下文。"
-        "适用于在已读文件中查找特定人物、事件、段落等细节。"
+        "Search for a keyword in a specified file, return matching lines with context."
+        "Useful for finding specific people, events, passages, etc. in already-read files."
     ),
     parameters={
-        "path": {"type": "string", "description": "文件路径（绝对路径或相对路径）", "required": True},
-        "keyword": {"type": "string", "description": "要搜索的关键词", "required": True},
-        "encoding": {"type": "string", "description": "编码格式，默认 utf-8"},
-        "context_lines": {"type": "integer", "description": "返回匹配行前后各几行上下文，默认 3"}
+        "path": {"type": "string", "description": "File path (absolute or relative)", "required": True},
+        "keyword": {"type": "string", "description": "Keyword to search for", "required": True},
+        "encoding": {"type": "string", "description": "Encoding format, default utf-8"},
+        "context_lines": {"type": "integer", "description": "Lines of context before/after each match, default 3"}
     },
     risk="low"
 )
@@ -149,7 +149,7 @@ def search_in_file(path: str, keyword: str, encoding: str = "utf-8",
                 })
 
         total_chars = sum(len(m["context"]) for m in matches)
-        # 截断过长的结果
+        # Truncate overly long results
         if total_chars > 8000:
             for m in matches:
                 m["context"] = m["context"][:500]
@@ -169,20 +169,20 @@ def search_in_file(path: str, keyword: str, encoding: str = "utf-8",
 
 @register_tool(
     name="write_file",
-    description="写入内容到文件。路径不填则默认保存到桌面。支持相对路径和绝对路径",
+    description="Write content to file. If path is empty, saves to desktop by default. Supports relative and absolute paths",
     parameters={
         "path": {"type": "string",
-                 "description": "目标文件路径。可以是文件名（自动保存到桌面）、相对路径或绝对路径",
+                 "description": "Target file path. Can be a filename (auto-save to desktop), relative path, or absolute path",
                  "required": True},
-        "content": {"type": "string", "description": "要写入的内容", "required": True},
-        "append": {"type": "boolean", "description": "是否追加（而非覆盖），默认 false"}
+        "content": {"type": "string", "description": "Content to write", "required": True},
+        "append": {"type": "boolean", "description": "Whether to append (instead of overwrite), default false"}
     },
     risk="medium"
 )
 def write_file(path: str, content: str, append: bool = False) -> Dict:
     try:
         path = path.strip()
-        # 如果只是文件名（没有路径分隔符），自动放到桌面
+        # If it is just a filename (no path separator), auto-save to desktop
         if not any(c in path for c in ["/", "\\", ":"]):
             desktop = _get_desktop()
             path = str(desktop / path)
@@ -194,9 +194,9 @@ def write_file(path: str, content: str, append: bool = False) -> Dict:
             f.write(content)
         return {
             "ok": True,
-            "path": abs_path,          # 返回绝对路径，让用户知道文件在哪
+            "path": abs_path,
             "bytes_written": len(content.encode()),
-            "tip": f"文件已保存到: {abs_path}"
+            "tip": f"File saved to: {abs_path}"
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -204,10 +204,10 @@ def write_file(path: str, content: str, append: bool = False) -> Dict:
 
 @register_tool(
     name="list_directory",
-    description="列出目录内容，包括文件和子目录",
+    description="List directory contents, including files and subdirectories",
     parameters={
-        "path": {"type": "string", "description": "目录路径，默认当前目录"},
-        "pattern": {"type": "string", "description": "过滤模式，如 *.py、*.txt"}
+        "path": {"type": "string", "description": "Directory path, default current directory"},
+        "pattern": {"type": "string", "description": "Filter pattern, e.g. *.py, *.txt"}
     },
     risk="low"
 )
@@ -233,11 +233,11 @@ def list_directory(path: str = ".", pattern: str = "*") -> Dict:
 
 @register_tool(
     name="search_files",
-    description="在目录中搜索包含指定内容的文件（仅搜索一层子目录，最多返回20个结果）",
+    description="Search for files containing specified content in a directory (searches one level of subdirectories, max 20 results)",
     parameters={
-        "directory": {"type": "string", "description": "搜索目录（默认项目根目录）", "required": False},
-        "keyword": {"type": "string", "description": "搜索关键词", "required": True},
-        "file_pattern": {"type": "string", "description": "文件类型过滤，如 *.py"}
+        "directory": {"type": "string", "description": "Search directory (default: project root)", "required": False},
+        "keyword": {"type": "string", "description": "Search keyword", "required": True},
+        "file_pattern": {"type": "string", "description": "File type filter, e.g. *.py"}
     },
     risk="low"
 )
@@ -251,7 +251,7 @@ def search_files(keyword: str, directory: str = ".", file_pattern: str = "*") ->
         blocked = {"C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)",
                     "/usr", "/etc", "/bin", "/System", "/Library"}
         if any(abs_dir.is_relative_to(Path(b)) for b in blocked):
-            return {"ok": False, "error": f"不允许搜索系统目录：{directory}"}
+            return {"ok": False, "error": f"Cannot search system directory: {directory}"}
         results = []
         max_depth = 3  # limit recursion depth
         for filepath in abs_dir.rglob(file_pattern):
@@ -284,9 +284,9 @@ def search_files(keyword: str, directory: str = ".", file_pattern: str = "*") ->
 
 @register_tool(
     name="delete_file",
-    description="删除文件或空目录",
+    description="Delete a file or empty directory",
     parameters={
-        "path": {"type": "string", "description": "要删除的文件路径", "required": True}
+        "path": {"type": "string", "description": "Path of file to delete", "required": True}
     },
     risk="high"
 )
@@ -298,7 +298,7 @@ def delete_file(path: str) -> Dict:
         elif os.path.isdir(path):
             shutil.rmtree(path)
         else:
-            return {"ok": False, "error": "路径不存在"}
+            return {"ok": False, "error": "Path does not exist"}
         return {"ok": True, "deleted": path}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -306,17 +306,17 @@ def delete_file(path: str) -> Dict:
 
 @register_tool(
     name="export_guest_photos",
-    description="导出游客会话的人脸照片到桌面。可指定会话ID导出单张，不指定则导出全部",
+    description="Export guest session facial photos to desktop. Specify session ID for a single export, or export all without specifying",
     parameters={
         "session_id": {"type": "string",
-                       "description": "要导出的游客会话ID（可选，不填则导出全部有照片的记录）"}
+                       "description": "Guest session ID to export (optional, exports all records with photos if not specified)"}
     },
     risk="low"
 )
 def export_guest_photos(session_id: str = "") -> Dict:
     try:
         import sqlite3
-        # 获取数据库路径
+        # Get database path
         try:
             from desktop.config import DB_FILE
             db_path = DB_FILE
@@ -327,7 +327,7 @@ def export_guest_photos(session_id: str = "") -> Dict:
                               / "AGI-Desktop" / "memory.db")
 
         desktop = _get_desktop()
-        export_dir = desktop / "AGI游客照片"
+        export_dir = desktop / "AGI Guest Photos"
         export_dir.mkdir(parents=True, exist_ok=True)
 
         with guarded_connect(db_path) as conn:
@@ -345,7 +345,7 @@ def export_guest_photos(session_id: str = "") -> Dict:
                 ).fetchall()
 
         if not rows:
-            return {"ok": False, "error": "没有找到含照片的游客记录"}
+            return {"ok": False, "error": "No guest records with photos found"}
 
         saved = []
         for row in rows:
@@ -358,30 +358,30 @@ def export_guest_photos(session_id: str = "") -> Dict:
                 filepath.write_bytes(img_data)
                 saved.append(filename)
             except Exception as e:
-                saved.append(f"{sid}: 导出失败({e})")
+                saved.append(f"{sid}: export failed({e})")
 
         return {
             "ok": True,
             "export_dir": str(export_dir),
             "total": len(rows),
             "saved": saved,
-            "tip": f"已导出 {len(rows)} 张照片到: {export_dir}"
+            "tip": f"Exported {len(rows)} photos to: {export_dir}"
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 终端命令工具
+# Terminal Command Tools
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="run_command",
-    description="在终端执行 shell 命令。适合：安装包、运行脚本、git操作、文件处理等",
+    description="Execute shell commands in terminal. Suitable for: installing packages, running scripts, git operations, file processing, etc.",
     parameters={
-        "command": {"type": "string", "description": "要执行的命令", "required": True},
-        "cwd": {"type": "string", "description": "工作目录，默认当前目录"},
-        "timeout": {"type": "integer", "description": "超时秒数，默认 30"}
+        "command": {"type": "string", "description": "Command to execute", "required": True},
+        "cwd": {"type": "string", "description": "Working directory, default current directory"},
+        "timeout": {"type": "integer", "description": "Timeout in seconds, default 30"}
     },
     risk="high"
 )
@@ -408,17 +408,17 @@ def run_command(command: str, cwd: str = None, timeout: int = 30) -> Dict:
             "command": command
         }
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"命令超时（{timeout}秒）"}
+        return {"ok": False, "error": f"Command timed out ({timeout}s)"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     name="run_python",
-    description="执行 Python 代码片段，返回输出结果",
+    description="Execute Python code snippet, return output results",
     parameters={
-        "code": {"type": "string", "description": "Python 代码", "required": True},
-        "cwd": {"type": "string", "description": "工作目录"}
+        "code": {"type": "string", "description": "Python code", "required": True},
+        "cwd": {"type": "string", "description": "Working directory"}
     },
     risk="high"
 )
@@ -429,7 +429,7 @@ def run_python(code: str, cwd: str = None) -> Dict:
                                          delete=False, encoding='utf-8') as f:
             f.write(code)
         tmp_path = f.name
-        # Windows 兼容：优先 python3，回退 python
+        # Windows compat: prefer python3, fallback python
         python_cmd = "python3" if shutil.which("python3") else "python"
         result = subprocess.run(
             [python_cmd, tmp_path],
@@ -437,7 +437,7 @@ def run_python(code: str, cwd: str = None) -> Dict:
             cwd=cwd, timeout=30,
         )
         os.unlink(tmp_path)
-        # 手动解码：优先 utf-8，失败则按系统默认编码（Windows GBK）
+        # Manual decode: prefer utf-8, fallback to system default encoding
         def _safe_decode(data: bytes) -> str:
             try:
                 return data.decode("utf-8", errors="replace")
@@ -456,28 +456,28 @@ def run_python(code: str, cwd: str = None) -> Dict:
             os.unlink(tmp_path)
         except Exception:
             pass
-        return {"ok": False, "error": "脚本执行超时（30秒）"}
+        return {"ok": False, "error": "Script execution timed out (30s)"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 网络工具
+# Network Tools
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="web_search",
-    description="搜索网络信息。优先使用 DuckDuckGo，失败时自动切换到 Bing 搜索",
+    description="Search the web. Prefers DuckDuckGo, automatically falls back to Bing search on failure",
     parameters={
-        "query": {"type": "string", "description": "搜索关键词", "required": True},
-        "max_results": {"type": "integer", "description": "最大结果数，默认 5"}
+        "query": {"type": "string", "description": "Search keyword", "required": True},
+        "max_results": {"type": "integer", "description": "Maximum results, default 5"}
     },
     risk="low"
 )
 def web_search(query: str, max_results: int = 5) -> Dict:
-    """搜索网络，多引擎备用"""
+    """Search the web, multi-engine fallback"""
 
-    # ── 方式1：DuckDuckGo Instant Answer API ──
+    # -- Method 1: DuckDuckGo Instant Answer API --
     try:
         encoded = urllib.parse.quote(query)
         url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
@@ -490,7 +490,7 @@ def web_search(query: str, max_results: int = 5) -> Dict:
         results = []
         if data.get("AbstractText"):
             results.append({
-                "title":   data.get("Heading", "摘要"),
+                "title":   data.get("Heading", "Summary"),
                 "snippet": data["AbstractText"][:500],
                 "url":     data.get("AbstractURL", "")
             })
@@ -505,9 +505,9 @@ def web_search(query: str, max_results: int = 5) -> Dict:
             return {"ok": True, "engine": "DuckDuckGo",
                     "query": query, "results": results[:max_results]}
     except Exception:
-        pass   # 静默失败，尝试备用
+        pass   # Silent failure, try fallback
 
-    # ── 方式2：Bing 搜索（抓取结果页）──────────
+    # -- Method 2: Bing search (scrape results page) --
     try:
         import re
         encoded = urllib.parse.quote(query)
@@ -524,9 +524,9 @@ def web_search(query: str, max_results: int = 5) -> Dict:
         with urllib.request.urlopen(req, timeout=12) as resp:
             html = resp.read().decode("utf-8", errors="replace")
 
-        # 提取搜索结果
+        # Extract search results
         results = []
-        # 匹配 Bing 结果标题和链接
+        # Match Bing result titles and links
         titles   = re.findall(r'<h2[^>]*><a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html)
         snippets = re.findall(r'<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>(.*?)</p>', html)
 
@@ -545,20 +545,20 @@ def web_search(query: str, max_results: int = 5) -> Dict:
                     "query": query, "results": results}
         else:
             return {"ok": True, "engine": "Bing", "query": query,
-                    "results": [], "note": "未解析到结果，建议用 fetch_url 直接访问"}
+                    "results": [], "note": "No results parsed, suggest using fetch_url to directly access"}
 
     except Exception as e:
         return {"ok": False,
-                "error": f"搜索失败（DuckDuckGo 和 Bing 均不可用）: {e}",
-                "tip": "建议使用 fetch_url 工具直接访问目标网页"}
+                "error": f"Search failed (both DuckDuckGo and Bing unavailable): {e}",
+                "tip": "Suggest using fetch_url tool to directly access the target webpage"}
 
 
 @register_tool(
     name="fetch_url",
-    description="获取指定 URL 的网页内容（纯文本）。结果直接返回在 content 字段中，不会写入任何文件，请直接使用返回的数据",
+    description="Fetch web page content (plain text) from a specified URL. Results returned directly in content field, no files written, use returned data directly",
     parameters={
-        "url": {"type": "string", "description": "目标 URL", "required": True},
-        "max_chars": {"type": "integer", "description": "最大字符数，默认 8000"}
+        "url": {"type": "string", "description": "Target URL", "required": True},
+        "max_chars": {"type": "integer", "description": "Maximum characters, default 8000"}
     },
     risk="low"
 )
@@ -576,7 +576,7 @@ def fetch_url(url: str, max_chars: int = 8000) -> Dict:
             charset = resp.headers.get_content_charset() or "utf-8"
             html = raw.decode(charset, errors="replace")
 
-        # 简单去除 HTML 标签
+        # Simple HTML tag removal
         import re
         text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
         text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
@@ -595,10 +595,10 @@ def fetch_url(url: str, max_chars: int = 8000) -> Dict:
 
 @register_tool(
     name="read_article",
-    description="从新闻/文章 URL 中提取正文内容、标题、作者、发布时间等元信息。比 fetch_url 更智能，能自动去除广告和导航栏，只保留文章正文",
+    description="Extract article body, title, author, publish date and other metadata from news/article URLs. Smarter than fetch_url, automatically removes ads and navigation bars, keeping only the article body",
     parameters={
-        "url": {"type": "string", "description": "文章 URL", "required": True},
-        "max_chars": {"type": "integer", "description": "正文最大字符数，默认 5000"}
+        "url": {"type": "string", "description": "Article URL", "required": True},
+        "max_chars": {"type": "integer", "description": "Maximum body characters, default 5000"}
     },
     risk="low"
 )
@@ -612,7 +612,7 @@ def read_article(url: str, max_chars: int = 5000) -> Dict:
             if sys.platform != "win32":
                 import signal
                 def _handler(signum, frame):
-                    raise TimeoutError("下载超时")
+                    raise TimeoutError("Download timed out")
                 signal.signal(signal.SIGALRM, _handler)
                 signal.alarm(timeout)
                 try:
@@ -628,7 +628,7 @@ def read_article(url: str, max_chars: int = 5000) -> Dict:
                     future = executor.submit(_do)
                     future.result(timeout=timeout)
 
-        # 确保 NLTK 分词资源可用（首次使用时自动下载）
+        # Ensure NLTK tokenizer resources are available (auto-download on first use)
         try:
             import nltk
             nltk.data.find('tokenizers/punkt_tab')
@@ -644,12 +644,12 @@ def read_article(url: str, max_chars: int = 5000) -> Dict:
         try:
             _download_with_timeout(article, timeout=10)
         except (TimeoutError, concurrent.futures.TimeoutError):
-            return {"ok": False, "error": "页面下载超时（10秒）"}
+            return {"ok": False, "error": "Page download timed out (10s)"}
 
         try:
             article.nlp()
         except Exception:
-            pass  # NLP 失败不影响正文提取
+            pass  # NLP failure does not affect text extraction
 
         result = {
             "ok": True,
@@ -669,14 +669,14 @@ def read_article(url: str, max_chars: int = 5000) -> Dict:
 
 
 # ═══════════════════════════════════════════════════
-# 系统控制工具（需要安装额外依赖）
+# System Control Tools (requires additional dependencies)
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="screenshot",
-    description="截取当前屏幕截图，返回图片的 base64 编码。需要 pyautogui",
+    description="Take current screen screenshot, return base64 encoded image. Requires pyautogui",
     parameters={
-        "region": {"type": "string", "description": "截图区域 'x,y,w,h'，不填则全屏"}
+        "region": {"type": "string", "description": "Screenshot region 'x,y,w,h', full screen if not specified"}
     },
     risk="low"
 )
@@ -692,26 +692,26 @@ def screenshot(region: str = None) -> Dict:
         else:
             img = pyautogui.screenshot()
 
-        # 压缩后转 base64
+        # Compress then convert to base64
         buf = io.BytesIO()
         img.save(buf, format="PNG", optimize=True)
         b64 = base64.b64encode(buf.getvalue()).decode()
         return {"ok": True, "image_base64": b64,
                 "size": f"{img.width}x{img.height}"}
     except ImportError:
-        return {"ok": False, "error": "需要安装：pip install pyautogui pillow"}
+        return {"ok": False, "error": "Requires installation: pip install pyautogui pillow"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     name="mouse_click",
-    description="点击屏幕指定位置。需要 pyautogui",
+    description="Click at specified screen position. Requires pyautogui",
     parameters={
-        "x": {"type": "integer", "description": "X 坐标", "required": True},
-        "y": {"type": "integer", "description": "Y 坐标", "required": True},
-        "button": {"type": "string", "description": "left/right/middle，默认 left"},
-        "clicks": {"type": "integer", "description": "点击次数，默认 1"}
+        "x": {"type": "integer", "description": "X coordinate", "required": True},
+        "y": {"type": "integer", "description": "Y coordinate", "required": True},
+        "button": {"type": "string", "description": "left/right/middle, default left"},
+        "clicks": {"type": "integer", "description": "Number of clicks, default 1"}
     },
     risk="high"
 )
@@ -719,19 +719,19 @@ def mouse_click(x: int, y: int, button: str = "left", clicks: int = 1) -> Dict:
     try:
         import pyautogui
         pyautogui.click(x, y, button=button, clicks=clicks)
-        return {"ok": True, "action": f"点击 ({x},{y}) {button} {clicks}次"}
+        return {"ok": True, "action": f"Clicked ({x},{y}) {button} {clicks} time(s)"}
     except ImportError:
-        return {"ok": False, "error": "需要安装：pip install pyautogui"}
+        return {"ok": False, "error": "Requires installation: pip install pyautogui"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     name="keyboard_type",
-    description="模拟键盘输入文字或按键。需要 pyautogui",
+    description="Simulate keyboard typing or key presses. Requires pyautogui",
     parameters={
-        "text": {"type": "string", "description": "要输入的文字"},
-        "hotkey": {"type": "string", "description": "组合键，如 'ctrl,c' 或 'alt,tab'"}
+        "text": {"type": "string", "description": "Text to type"},
+        "hotkey": {"type": "string", "description": "Hotkey combo, e.g. 'ctrl,c' or 'alt,tab'"}
     },
     risk="high"
 )
@@ -742,23 +742,23 @@ def keyboard_type(text: str = None, hotkey: str = None) -> Dict:
         if hotkey:
             keys = [k.strip() for k in hotkey.split(",")]
             pyautogui.hotkey(*keys)
-            return {"ok": True, "action": f"按键 {hotkey}"}
+            return {"ok": True, "action": f"Pressed key {hotkey}"}
         elif text:
             pyautogui.typewrite(text, interval=0.03)
-            return {"ok": True, "action": f"输入文字 ({len(text)} 字符)"}
+            return {"ok": True, "action": f"Typed text ({len(text)} chars)"}
         else:
-            return {"ok": False, "error": "必须提供 text 或 hotkey"}
+            return {"ok": False, "error": "Must provide either text or hotkey"}
     except ImportError:
-        return {"ok": False, "error": "需要安装：pip install pyautogui"}
+        return {"ok": False, "error": "Requires installation: pip install pyautogui"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     name="open_application",
-    description="打开应用程序或文件",
+    description="Open an application or file",
     parameters={
-        "target": {"type": "string", "description": "应用名称或文件路径", "required": True}
+        "target": {"type": "string", "description": "Application name or file path", "required": True}
     },
     risk="medium"
 )
@@ -779,14 +779,14 @@ def open_application(target: str) -> Dict:
 
 @register_tool(
     name="browser_action",
-    description="控制浏览器：打开URL、获取页面内容、点击元素。需要 playwright",
+    description="Control browser: open URL, get page content, click elements. Requires playwright",
     parameters={
         "action": {"type": "string",
-                   "description": "操作类型：open_url / get_text / click_text / fill_input / get_screenshot",
+                   "description": "Action type: open_url / get_text / click_text / fill_input / get_screenshot",
                    "required": True},
-        "url": {"type": "string", "description": "目标 URL（open_url 时必填）"},
-        "selector": {"type": "string", "description": "CSS 选择器或文字内容"},
-        "value": {"type": "string", "description": "填写的内容（fill_input 时）"}
+        "url": {"type": "string", "description": "Target URL (required for open_url)"},
+        "selector": {"type": "string", "description": "CSS selector or text content"},
+        "value": {"type": "string", "description": "Content to fill (for fill_input)"}
     },
     risk="medium"
 )
@@ -829,25 +829,25 @@ def browser_action(action: str, url: str = None,
                 return {"ok": True, "image_base64": b64}
 
             browser.close()
-            return {"ok": False, "error": f"未知操作: {action}"}
+            return {"ok": False, "error": f"Unknown action: {action}"}
 
     except ImportError:
         return {"ok": False,
-                "error": "需要安装：pip install playwright && playwright install chromium"}
+                "error": "Requires installation: pip install playwright && playwright install chromium"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 系统信息工具
+# System Information Tools
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="get_system_info",
-    description="获取系统信息：OS、磁盘、内存、运行进程等",
+    description="Get system information: OS, disk, memory, running processes, etc.",
     parameters={
         "info_type": {"type": "string",
-                      "description": "os / disk / memory / processes / all，默认 all"}
+                      "description": "os / disk / memory / processes / all, default all"}
     },
     risk="low"
 )
@@ -882,7 +882,7 @@ def get_system_info(info_type: str = "all") -> Dict:
 
 @register_tool(
     name="read_clipboard",
-    description="读取剪贴板内容",
+    description="Read clipboard content",
     parameters={},
     risk="low"
 )
@@ -899,9 +899,9 @@ def read_clipboard() -> Dict:
 
 @register_tool(
     name="write_clipboard",
-    description="写入内容到剪贴板",
+    description="Write content to clipboard",
     parameters={
-        "content": {"type": "string", "description": "要写入剪贴板的内容", "required": True}
+        "content": {"type": "string", "description": "Content to write to clipboard", "required": True}
     },
     risk="low"
 )
@@ -919,16 +919,16 @@ def write_clipboard(content: str) -> Dict:
 
 
 # ═══════════════════════════════════════════════════
-# 金融数据工具
+# Financial Data Tools
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="get_stock_info",
-    description="获取股票/基金实时行情和基本信息，支持 A股、美股、港股等全球市场",
+    description="Get real-time stock/fund quotes and basic info, supports A-shares, US stocks, HK stocks, and global markets",
     parameters={
-        "symbol": {"type": "string", "description": "股票代码，如 600519.SS（茅台）、AAPL（苹果）、00700.HK（腾讯）", "required": True},
-        "period": {"type": "string", "description": "查询内容类型：info（基本信息）、quote（实时报价）、history（历史K线）", "required": False},
-        "range": {"type": "string", "description": "历史K线范围（仅 period=history 时有效）：1d/5d/1mo/3mo/6mo/1y/2y/5y/max，默认 1mo"}
+        "symbol": {"type": "string", "description": "Stock symbol, e.g. 600519.SS (Kweichow Moutai), AAPL (Apple), 00700.HK (Tencent)", "required": True},
+        "period": {"type": "string", "description": "Query type: info (basic info), quote (real-time quote), history (historical K-line)", "required": False},
+        "range": {"type": "string", "description": "Historical K-line range (only effective when period=history): 1d/5d/1mo/3mo/6mo/1y/2y/5y/max, default 1mo"}
     },
     risk="low"
 )
@@ -952,13 +952,13 @@ def get_stock_info(symbol: str, period: str = "info", range: str = "1mo") -> Dic
                 "day_low": getattr(info, "day_low", None),
                 "volume": getattr(info, "last_volume", None),
             }
-            # 过滤 None 值
+            # Filter out None values
             result = {k: v for k, v in result.items() if v is not None}
 
         elif period == "history":
             hist = ticker.history(period=range)
             if hist.empty:
-                return {"ok": False, "error": f"未获取到 {symbol} 的历史数据"}
+                return {"ok": False, "error": f"Failed to get historical data for {symbol}"}
             records = []
             for idx, row in hist.iterrows():
                 records.append({
@@ -979,7 +979,7 @@ def get_stock_info(symbol: str, period: str = "info", range: str = "1mo") -> Dic
             }
 
         else:
-            # 基本信息
+            # Basic info
             info = ticker.info
             result = {
                 "ok": True,
@@ -1007,17 +1007,17 @@ def get_stock_info(symbol: str, period: str = "info", range: str = "1mo") -> Dic
         return result
 
     except ImportError:
-        return {"ok": False, "error": "需要安装 yfinance：pip install yfinance"}
+        return {"ok": False, "error": "Requires installation: pip install yfinance"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 @register_tool(
     name="search_stock",
-    description="搜索股票代码，根据关键词模糊匹配股票名称或代码",
+    description="Search stock symbols, fuzzy match stock names or codes by keyword",
     parameters={
-        "keyword": {"type": "string", "description": "搜索关键词，如 茅台、苹果、腾讯、TSLA", "required": True},
-        "max_results": {"type": "integer", "description": "最大返回数量，默认 5"}
+        "keyword": {"type": "string", "description": "Search keyword, e.g. Apple, Tencent, TSLA", "required": True},
+        "max_results": {"type": "integer", "description": "Max results, default 5"}
     },
     risk="low"
 )
@@ -1048,26 +1048,26 @@ def search_stock(keyword: str, max_results: int = 5) -> Dict:
             "keyword": keyword,
             "quotes": quotes,
             "news": news,
-            "tip": f"找到 {len(quotes)} 个结果，使用 get_stock_info 获取详细信息"
+            "tip": f"Found {len(quotes)} results, use get_stock_info for detailed info"
         }
 
     except ImportError:
-        return {"ok": False, "error": "需要安装 yfinance：pip install yfinance"}
+        return {"ok": False, "error": "Requires installation: pip install yfinance"}
     except Exception as e:
-        # 旧版本 yfinance 没有 Search，给出手动提示
+        # Older yfinance versions lack Search, provide manual tip
         return {
             "ok": False,
             "error": str(e),
-            "tip": "请确保 yfinance 版本 >= 0.2.31：pip install --upgrade yfinance"
+            "tip": "Please ensure yfinance version >= 0.2.31: pip install --upgrade yfinance"
         }
 
 
 # ═══════════════════════════════════════════════════
-# 新闻资讯工具
+# News Tools
 # ═══════════════════════════════════════════════════
 
 def _get_newsapi_key(api_key: str = "") -> str:
-    """获取 NewsAPI key，优先用传入的，回退到系统配置和环境变量"""
+    """Get NewsAPI key, prefer passed value, fallback to system config and env vars"""
     if api_key:
         return api_key
     try:
@@ -1083,13 +1083,13 @@ def _get_newsapi_key(api_key: str = "") -> str:
 
 @register_tool(
     name="get_news",
-    description="获取最新新闻资讯，支持按关键词、来源、国家、分类搜索。需要 NewsAPI Key（在设置中配置 newsapi_key）",
+    description="Get latest news, supports keyword, source, country, category search. Requires NewsAPI Key (configure newsapi_key in settings)",
     parameters={
-        "keyword":     {"type": "string", "description": "搜索关键词，如 AI、苹果、科技"},
-        "category":    {"type": "string", "description": "新闻分类：general/business/entertainment/health/science/sports/technology"},
-        "country":     {"type": "string", "description": "国家代码，如 us（美国）、jp（日本），默认 us（免费版不支持 cn）"},
-        "page_size":   {"type": "integer", "description": "返回条数，默认 5，最大 100"},
-        "api_key":     {"type": "string", "description": "NewsAPI Key（可选，不填则用系统配置）"}
+        "keyword":     {"type": "string", "description": "Search keyword, e.g. AI, Apple, tech"},
+        "category":    {"type": "string", "description": "News category: general/business/entertainment/health/science/sports/technology"},
+        "country":     {"type": "string", "description": "Country code, e.g. us (USA), jp (Japan), default us (free tier does not support cn)"},
+        "page_size":   {"type": "integer", "description": "Number of results, default 5, max 100"},
+        "api_key":     {"type": "string", "description": "NewsAPI Key (optional, uses system config if not specified)"}
     },
     risk="low"
 )
@@ -1102,15 +1102,15 @@ def get_news(keyword: str = "", category: str = "", country: str = "us",
         if not key:
             return {
                 "ok": False,
-                "error": "未配置 NewsAPI Key",
-                "tip": "请在设置中填写 newsapi_key，或设置环境变量 NEWSAPI_KEY。"
-                      "免费申请：https://newsapi.org/register"
+                "error": "NewsAPI Key not configured",
+                "tip": "Please fill in newsapi_key in settings, or set NEWSAPI_KEY environment variable. "
+                      "Free registration: https://newsapi.org/register"
             }
 
         client = NewsApiClient(api_key=key)
 
         if keyword:
-            # get_everything 按关键词全文搜索，不支持 category 参数
+            # get_everything searches by keyword full-text, does not support category param
             articles = client.get_everything(
                 q=keyword,
                 language="zh" if country in ("cn", "tw", "hk") else "en",
@@ -1118,7 +1118,7 @@ def get_news(keyword: str = "", category: str = "", country: str = "us",
                 sort_by="publishedAt"
             )
         else:
-            # get_top_headlines 支持按 category + country 获取头条
+            # get_top_headlines supports getting headlines by category + country
             articles = client.get_top_headlines(
                 category=category or None,
                 country=country,
@@ -1126,7 +1126,7 @@ def get_news(keyword: str = "", category: str = "", country: str = "us",
             )
 
         if articles.get("status") != "ok":
-            return {"ok": False, "error": articles.get("message", "请求失败")}
+            return {"ok": False, "error": articles.get("message", "Request failed")}
 
         total = articles.get("totalResults", 0)
         items = []
@@ -1152,23 +1152,23 @@ def get_news(keyword: str = "", category: str = "", country: str = "us",
         }
 
     except ImportError:
-        return {"ok": False, "error": "需要安装 newsapi-python：pip install newsapi-python"}
+        return {"ok": False, "error": "Requires installation: pip install newsapi-python"}
     except Exception as e:
         err_msg = str(e)
-        # 常见错误友好提示
+        # Common error friendly messages
         if "apiKey" in err_msg or "API key" in err_msg:
-            return {"ok": False, "error": "NewsAPI Key 无效或未配置",
-                    "tip": "请在设置中检查 newsapi_key。免费申请：https://newsapi.org/register"}
+            return {"ok": False, "error": "NewsAPI Key invalid or not configured",
+                    "tip": "Please check newsapi_key in settings. Free registration: https://newsapi.org/register"}
         return {"ok": False, "error": err_msg}
 
 
 @register_tool(
     name="get_news_sources",
-    description="获取 NewsAPI 支持的新闻来源列表，可按国家、语言、分类过滤",
+    description="Get NewsAPI supported news source list, filterable by country, language, category",
     parameters={
-        "country":   {"type": "string", "description": "国家代码，如 cn、us"},
-        "language":  {"type": "string", "description": "语言代码，如 zh、en"},
-        "category":  {"type": "string", "description": "分类：general/business/entertainment/health/science/sports/technology"}
+        "country":   {"type": "string", "description": "Country code, e.g. cn, us"},
+        "language":  {"type": "string", "description": "Language code, e.g. zh, en"},
+        "category":  {"type": "string", "description": "Category: general/business/entertainment/health/science/sports/technology"}
     },
     risk="low"
 )
@@ -1180,8 +1180,8 @@ def get_news_sources(country: str = "", language: str = "", category: str = "") 
         if not key:
             return {
                 "ok": False,
-                "error": "未配置 NewsAPI Key",
-                "tip": "请在设置中填写 newsapi_key。免费申请：https://newsapi.org/register"
+                "error": "NewsAPI Key not configured",
+                "tip": "Please fill in newsapi_key in settings. Free signup: https://newsapi.org/register"
             }
 
         client = NewsApiClient(api_key=key)
@@ -1197,7 +1197,7 @@ def get_news_sources(country: str = "", language: str = "", category: str = "") 
         result = client.get_sources(**kwargs)
 
         if result.get("status") != "ok":
-            return {"ok": False, "error": result.get("message", "请求失败")}
+            return {"ok": False, "error": result.get("message", "Request failed")}
 
         sources = []
         for s in result.get("sources", [])[:50]:
@@ -1218,26 +1218,26 @@ def get_news_sources(country: str = "", language: str = "", category: str = "") 
         }
 
     except ImportError:
-        return {"ok": False, "error": "需要安装 newsapi-python：pip install newsapi-python"}
+        return {"ok": False, "error": "Requires installation: pip install newsapi-python"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 图片生成工具（pollinations.ai，免费无需 API Key）
+# Image Generation Tool (pollinations.ai, free, no API Key needed)
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="generate_image",
     description=(
-        "在线生成图片（pollinations.ai），质量一般、速度慢（10-30秒）。"
-        "仅在 generate_image_comfy 不可用时作为备选。优先使用 generate_image_comfy。"
+        "Online image generation (pollinations.ai), average quality, slow (10-30s)."
+        "Only use as fallback when generate_image_comfy is unavailable. Prefer generate_image_comfy."
     ),
     parameters={
-        "prompt": {"type": "string", "description": "英文画面描述，如 'a cat sitting on a rainbow, digital art'", "required": True},
-        "width": {"type": "integer", "description": "图片宽度（像素），默认 1024"},
-        "height": {"type": "integer", "description": "图片高度（像素），默认 1024"},
-        "use_simlife_scene": {"type": "boolean", "description": "是否使用 SimLife 当前场景作为背景（拍照/自拍时设为 true），默认 false"},
+        "prompt": {"type": "string", "description": "English image description, e.g. 'a cat sitting on a rainbow, digital art'", "required": True},
+        "width": {"type": "integer", "description": "Image width (pixels), default 1024"},
+        "height": {"type": "integer", "description": "Image height (pixels), default 1024"},
+        "use_simlife_scene": {"type": "boolean", "description": "Whether to use SimLife current scene as background (set true for photo/selfie), default false"},
     },
     risk="low"
 )
@@ -1248,7 +1248,7 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, use_simli
         from datetime import datetime
         import uuid
 
-        # 如果请求使用 SimLife 场景，尝试获取当前状态并融入 prompt
+        # If SimLife scene is requested, try to get current state and merge into prompt
         if use_simlife_scene:
             try:
                 from engine.simlife_client import SimLifeClient
@@ -1270,23 +1270,23 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, use_simli
                 "image_path": image_path,
                 "prompt": prompt,
                 "size": f"{width}x{height}",
-                "message": f"图片已生成并保存到: {image_path}"
+                "message": f"Image generated and saved to: {image_path}"
             }
         else:
-            return {"ok": False, "error": "图片生成或下载失败"}
+            return {"ok": False, "error": "Image generation or download failed"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 图片生成工具（ComfyUI 本地后端，高质量 SDXL）
+# Image Generation Tool (ComfyUI local backend, high quality SDXL)
 # ═══════════════════════════════════════════════════
 
 _WORKFLOW_JSON = str(Path(__file__).parent.parent / "workflow_api.json")
 
 
 def _load_comfyui_config() -> dict:
-    """从 config.json 读取 ComfyUI 配置，未配置时使用默认值"""
+    """Read ComfyUI config from config.json, use defaults if not configured"""
     try:
         from desktop.config import load_config
         cfg = load_config()
@@ -1299,13 +1299,13 @@ def _load_comfyui_config() -> dict:
     }
 
 
-# 风格关键词预设（追加到 prompt 最前面，保证权重最高）
+# Style keyword presets (prepended to prompt for highest weight)
 _STYLE_PREFIX = {
     "anime": "pixiv",
     "realistic": "photorealistic, 8k uhd, dslr, soft lighting, high quality",
 }
 
-# 风格冲突词表：当 config 设定某风格时，从 prompt 中移除对立风格词
+# Style conflict word list: when config sets a style, remove opposing style words from prompt
 _STYLE_CONFLICTS = {
     "anime": [
         "real", "realistic", "real_photo", "real photo", "photorealistic", "photograph",
@@ -1319,7 +1319,7 @@ _STYLE_CONFLICTS = {
 
 
 def _clean_style_conflicts(prompt: str, style: str) -> str:
-    """移除 prompt 中与当前设定风格冲突的词汇"""
+    """Remove words from prompt that conflict with the current style setting"""
     import re as _re
     conflicts = _STYLE_CONFLICTS.get(style, [])
     removed = []
@@ -1330,12 +1330,12 @@ def _clean_style_conflicts(prompt: str, style: str) -> str:
             removed.append(word)
             prompt = new_prompt
     if removed:
-        print(f"[ComfyUI] 已移除与 {style} 风格冲突的词: {', '.join(removed)}")
+        print(f"[ComfyUI] Removed style-conflicting words for {style}: {', '.join(removed)}")
     return prompt
 
 
 def _get_style_prefix() -> str:
-    """根据 config.json 的 comfyui_style 返回风格前缀"""
+    """Return style prefix based on comfyui_style in config.json"""
     style = _load_comfyui_config()["style"]
     return _STYLE_PREFIX.get(style, "")
 
@@ -1348,7 +1348,7 @@ def _comfyui_output_dir() -> str:
     cfg = _load_comfyui_config()
     if cfg["output_dir"]:
         return cfg["output_dir"]
-    # 兜底：尝试常见路径
+    # Fallback: try common paths
     import sys
     if sys.platform == "win32":
         candidates = [r"D:\ComfyUI_windows_portable\ComfyUI\output",
@@ -1363,17 +1363,17 @@ def _comfyui_output_dir() -> str:
 
 def _parse_comfy_workflow() -> Optional[Dict]:
     """
-    加载并解析 workflow_api.json，自动定位关键节点。
-    返回 dict: {positive_node_id, negative_node_id, sampler_node_id, seed_node_id, output_node_id, workflow}
+    Load and parse workflow_api.json, auto-locate key nodes.
+    Returns dict: {positive_node_id, negative_node_id, sampler_node_id, seed_node_id, output_node_id, workflow}
     """
     try:
         with open(_WORKFLOW_JSON, "r", encoding="utf-8") as f:
             workflow = json.load(f)
     except Exception as e:
-        print(f"[ComfyUI] 无法加载 workflow: {e}")
+        print(f"[ComfyUI] Unable to load workflow: {e}")
         return None
 
-    # 自动定位 KSampler 节点
+    # Auto-locate KSampler node
     sampler_id = None
     for nid, node in workflow.items():
         if isinstance(node, dict) and node.get("class_type") in ("KSampler", "KSamplerAdvanced"):
@@ -1381,14 +1381,14 @@ def _parse_comfy_workflow() -> Optional[Dict]:
             break
 
     if not sampler_id:
-        print("[ComfyUI] workflow 中未找到 KSampler 节点")
+        print("[ComfyUI] KSampler node not found in workflow")
         return None
 
     sampler_inputs = workflow[sampler_id].get("inputs", {})
     positive_id = str(sampler_inputs.get("positive", [None])[0])
     negative_id = str(sampler_inputs.get("negative", [None])[0])
 
-    # 找 SaveImage 节点（输出）
+    # Find SaveImage node (output)
     output_id = None
     for nid, node in workflow.items():
         if isinstance(node, dict) and node.get("class_type") == "SaveImage":
@@ -1405,7 +1405,7 @@ def _parse_comfy_workflow() -> Optional[Dict]:
 
 
 def _check_comfyui_alive() -> bool:
-    """检查 ComfyUI 是否在线"""
+    """Check if ComfyUI is online"""
     try:
         import requests
         resp = requests.get(f"{_comfyui_url()}/system_stats", timeout=3)
@@ -1416,8 +1416,8 @@ def _check_comfyui_alive() -> bool:
 
 def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
     """
-    轮询 ComfyUI 等待生成完成。
-    返回输出图片的文件名（如 ComfyUI_00001_.png），超时返回 None。
+    Poll ComfyUI until generation is complete.
+    Returns output image filename (e.g. ComfyUI_00001_.png), or None on timeout.
     """
     import requests, time
 
@@ -1442,38 +1442,38 @@ def _wait_for_comfyui(prompt_id: str, timeout: int = 120) -> Optional[str]:
 @register_tool(
     name="generate_image_comfy",
     description=(
-        "首选图片生成工具。使用本地 ComfyUI 生成图片，"
-        "适用于生成自拍、场景分享、各种风格画面。"
-        "当用户想看你的样子、环境、周围场景时优先使用此工具。"
-        "注意：如果用户要求看风景、场景、环境，不要在 prompt 中添加人物，"
-        "同时将 no_human 参数设为 true。"
-        "当用户明确点击工具面板画图（对话中包含工具名），系统会自动跳过角色特征注入。"
-        "当是你自己要拍照或拍风景时（如'让我看看你''拍张照'），直接生成 prompt 即可，系统会自动注入你的角色特征。"
+        "Primary image generation tool. Uses local ComfyUI to generate images,"
+        "suitable for selfies, scene sharing, and various style images."
+        "Use this tool when the user wants to see your appearance, environment, or surroundings."
+        "Note: if the user asks to see scenery, landscape, or environment, do not add people to the prompt,"
+        "and set the no_human parameter to true."
+        "When the user explicitly clicks the tool panel to draw (tool name in dialogue), the system will auto-skip character trait injection."
+        "When you are taking a photo or landscape shot yourself (e.g. 'let me see you' 'take a photo'), just generate the prompt and the system will auto-inject your character traits."
     ),
     parameters={
         "prompt": {
             "type": "string",
-            "description": "英文画面描述，使用逗号分隔的标签/关键词格式。人数用 1girl/1boy/2girls 等，构图用 solo/full body/upper body 等，服装外貌用具体描述如 white_shirt/black_dress/long_hair。示例: '1girl, solo, full body, long_hair, white_shirt, standing, indoors, cafe, warm_lighting'",
+            "description": "English image description in comma-separated tag/keyword format. Count: 1girl/1boy/2girls etc. Composition: solo/full body/upper body etc. Clothing/appearance: white_shirt/black_dress/long_hair etc. Example: '1girl, solo, full body, long_hair, white_shirt, standing, indoors, cafe, warm_lighting'",
             "required": True,
         },
         "negative_prompt": {
             "type": "string",
-            "description": "负向提示词（排除内容），不填则使用 workflow 默认值",
+            "description": "Negative prompt (content to exclude), uses workflow default if not specified",
             "required": False,
         },
         "no_human": {
             "type": "boolean",
-            "description": "是否生成纯风景/静物图（不包含人物）。当用户要求看风景、景色、场景、环境、食物、物品时设为 true，此时不要在 prompt 中添加 1girl/1boy/solo 等人物标签",
+            "description": "Whether to generate pure landscape/still life (no people). Set true when user asks to see scenery, landscape, environment, food, objects - do not add 1girl/1boy/solo etc. person tags to prompt",
             "required": False,
         },
         "width": {
             "type": "integer",
-            "description": "图片宽度（像素），如 512/768/1024。不填则自动根据 prompt 推断（人像768/风景1024/默认832）",
+            "description": "Image width (pixels), e.g. 512/768/1024. Auto-inferred from prompt if not specified (portrait 768/landscape 1024/default 832)",
             "required": False,
         },
         "height": {
             "type": "integer",
-            "description": "图片高度（像素），如 512/768/1024。不填则自动根据 prompt 推断（人像1024/风景768/默认832）",
+            "description": "Image height (pixels), e.g. 512/768/1024. Auto-inferred from prompt if not specified (portrait 1024/landscape 768/default 832)",
             "required": False,
         },
     },
@@ -1488,48 +1488,48 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
         from datetime import datetime
         from engine.image_gen import get_image_dir
 
-        # 0.0 判断是否跳过角色特征注入
-        # 策略：用户原始消息包含"generate_image_comfy"（点击工具面板）→ 跳过注入
-        #       其他情况（系统自主调用、自然对话触发）→ 注入角色特征
+        # 0.0 Determine whether to skip character trait injection
+        # Strategy: if user raw message contains "generate_image_comfy" (clicked tool panel) -> skip injection
+        #       Other cases (system autonomous call, natural dialogue trigger) -> inject character traits
         _raw_input = getattr(generate_image_comfy, '_user_raw_input', '') or ''
         no_inject = 'generate_image_comfy' in _raw_input
-        # 兼容：LLM 也可能加 [NO_INJECT]，仅当用户消息也匹配时才生效
+        # Compat: LLM may also add [NO_INJECT], only effective when user message also matches
         if not no_inject and prompt.strip().startswith("[NO_INJECT]"):
             prompt = prompt.strip().replace("[NO_INJECT]", "").strip().lstrip(",").strip()
-            # LLM 单方面加的 [NO_INJECT]，用户消息没有工具名，忽略
+            # LLM unilaterally added [NO_INJECT], user message has no tool name, ignore
         if no_inject:
             prompt = prompt.strip().replace("[NO_INJECT]", "").strip().lstrip(",").strip()
-            print(f"[ComfyUI] 用户主动指定画图，跳过角色特征注入")
+            print(f"[ComfyUI] User explicitly specified drawing, skipping character trait injection")
         else:
-            print(f"[ComfyUI] 系统自主调用，将注入角色特征")
+            print(f"[ComfyUI] System autonomous call, will inject character traits")
 
-        # 0.0.1 风格冲突清理（anime ↔ realistic，两个模式都需要）
+        # 0.0.1 Style conflict cleanup (anime <-> realistic, needed for both modes)
         _current_style = _load_comfyui_config()["style"]
         if _current_style in _STYLE_CONFLICTS:
             prompt = _clean_style_conflicts(prompt, _current_style)
 
         if no_inject:
-            # 用户指定画图：仅注入风格前缀，跳过所有角色特征注入
+            # User-specified drawing: only inject style prefix, skip all character trait injection
             style_prefix = _get_style_prefix()
             if style_prefix:
                 prompt = f"{style_prefix}, {prompt}"
-                print(f"[ComfyUI] 用户指定模式，仅注入风格前缀: {style_prefix}")
+                print(f"[ComfyUI] User-specified mode, only injecting style prefix: {style_prefix}")
             else:
-                print(f"[ComfyUI] 用户指定模式，无风格前缀，使用原始 prompt")
+                print(f"[ComfyUI] User-specified mode, no style prefix, using original prompt")
             prompt_lower = prompt.lower()
         else:
-            # 0. 注入风格前缀（anime/realistic，权重最高放最前）
+            # 0. Inject style prefix (anime/realistic, highest weight placed first)
             style_prefix = _get_style_prefix()
             if style_prefix:
                 prompt = f"{style_prefix}, {prompt}"
-                print(f"[ComfyUI] 已注入风格前缀: {style_prefix}")
+                print(f"[ComfyUI] Injected style prefix: {style_prefix}")
 
-            # 0.1 判断是否包含人物主体（纯风景/静物时不注入 avatar 和穿着）
+            # 0.1 Determine if person subject is present (no avatar/clothing injection for pure landscape/still life)
             prompt_lower = prompt.lower()
-            # no_human 参数优先（工具描述已引导 LLM 拍风景时设为 true）
+            # no_human parameter takes priority (tool description guides LLM to set true for landscapes)
             if no_human:
                 has_person = False
-                # 从 prompt 中移除常见人物标签
+                # Remove common person tags from prompt
                 import re as _re
                 _human_tags_remove = ("1girl", "1boy", "2girls", "2boys", "3girls", "3boys",
                                       "solo", "girl", "boy", "woman", "man",
@@ -1537,29 +1537,29 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
                 for tag in _human_tags_remove:
                     prompt = _re.sub(rf'\b{_re.escape(tag)}\b\s*,?\s*', '', prompt, flags=_re.IGNORECASE)
                 prompt_lower = prompt.lower()
-                print(f"[ComfyUI] no_human=true，已清除人物标签")
+                print(f"[ComfyUI] no_human=true, cleared person tags")
             else:
                 _person_indicators = (
-                    # 人称
+                    # Person terms
                     "1girl", "1boy", "2girls", "2boys", "3girls", "3boys",
                     "solo", "duo", "trio",
                     "girl", "boy", "woman", "man", "person", "people",
                     "child", "kid", "teen", "elder", "lady", "gentleman",
-                    # 身体部位
+                    # Body parts
                     "hair", "eye", "eyes", "face", "skin", "hand", "hands",
                     "smile", "expression", "lips", "mouth", "body",
-                    # 动作/姿态
+                    # Actions/poses
                     "sitting", "standing", "walking", "lying", "looking",
                     "selfie", "portrait", "upper body", "full body",
-                    # 明确无人
+                    # Explicitly no people
                     "no humans",
                 )
                 has_person = any(tag in prompt_lower for tag in _person_indicators)
                 if "no humans" in prompt_lower:
                     has_person = False
 
-            # 0.5 注入角色外貌特征（国籍/发色/眼睛颜色/身材，仅有人物时注入）
-            # 从角色卡（CharacterCard）读取结构化字段，而非 personality.json 的自由文本
+            # 0.5 Inject character appearance traits (nationality/hair/eye/size, only when person present)
+            # Read structured fields from CharacterCard, not free text from personality.json
             if has_person:
                 try:
                     from engine.simlife_client import SimLifeClient
@@ -1584,13 +1584,13 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
                             avatar_desc = ", ".join(parts)
                             if avatar_desc.lower() not in prompt_lower:
                                 prompt = f"{avatar_desc}, {prompt}"
-                                print(f"[ComfyUI] 已注入角色外貌: {avatar_desc}")
+                                print(f"[ComfyUI] Injected character appearance: {avatar_desc}")
                             else:
-                                print(f"[ComfyUI] 角色外貌已存在于 prompt 中，跳过注入")
+                                print(f"[ComfyUI] Character appearance already in prompt, skipping injection")
                         else:
-                            print(f"[ComfyUI] 角色卡中无外貌字段（nationality/hair_color/eye_color/body_type）")
+                            print(f"[ComfyUI] No appearance fields in character card (nationality/hair_color/eye_color/body_type)")
                     else:
-                        # 兜底：从 personality.json 读取 avatar_prompt
+                        # Fallback: read avatar_prompt from personality.json
                         from desktop.config import PERSONALITY_FILE
                         import json
                         if Path(PERSONALITY_FILE).exists():
@@ -1598,15 +1598,15 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
                             avatar = personality.get("avatar_prompt", "").strip()
                             if avatar and avatar.lower() not in prompt_lower:
                                 prompt = f"{avatar}, {prompt}"
-                                print(f"[ComfyUI] 兜底：已注入 avatar_prompt: {avatar[:60]}...")
+                                print(f"[ComfyUI] Fallback: injected avatar_prompt: {avatar[:60]}...")
                 except Exception as e:
-                    print(f"[ComfyUI] 注入角色外貌失败: {e}")
+                    print(f"[ComfyUI] Character appearance injection failed: {e}")
             else:
-                print(f"[ComfyUI] 检测为风景/静物图，跳过外貌注入")
+                print(f"[ComfyUI] Detected as landscape/still life, skipping appearance injection")
 
-            # 0.6 穿着由 A层 LLM 自行决定写入 prompt，后端不再注入 SimLife 穿着
+            # 0.6 Clothing decided by Layer A LLM in prompt, backend no longer injects SimLife clothing
 
-            # 0.7 随机姿势/拍摄角度（避免画面呆板，人物和风景各用不同的池）
+            # 0.7 Random pose/angle (avoid static images, different pools for person vs landscape)
             _pose_angles_person = [
                 "hand on hip", "leaning forward", "arms crossed", "head tilt", "looking away",
                 "stretching", "adjusting hair", "hand resting on chin", "turning back",
@@ -1628,9 +1628,9 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
                 _chosen = random.sample(_pool, min(2, len(_pool)))
                 _angle_str = ", ".join(_chosen)
                 prompt = f"{prompt}, {_angle_str}"
-                print(f"[ComfyUI] 已追加姿势/角度: {_angle_str}")
+                print(f"[ComfyUI] Appended pose/angle: {_angle_str}")
 
-            # 0.6 注入旅行目的地信息（旅行博主模式下，添加当前所在城市的场景描述）
+            # 0.6 Inject travel destination info (in travel blogger mode, add current city scene description)
             try:
                 from engine.simlife_client import SimLifeClient
                 _sl = SimLifeClient()
@@ -1655,24 +1655,24 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
                                                 location_hint = f"in {city_en}, {country}"
                                             if location_hint.lower() not in prompt.lower():
                                                 prompt = f"{prompt}, {location_hint}"
-                                                print(f"[ComfyUI] 已注入旅行目的地: {location_hint}")
+                                                print(f"[ComfyUI] Injected travel destination: {location_hint}")
                                             break
                                     except (ValueError, TypeError):
                                         continue
             except Exception as e:
-                print(f"[ComfyUI] 注入旅行目的地失败: {e}")
+                print(f"[ComfyUI] Travel destination injection failed: {e}")
 
-        # 1. 解析 workflow
+        # 1. Parse workflow
         parsed = _parse_comfy_workflow()
         if not parsed:
-            return {"ok": False, "error": "无法加载 workflow_api.json，请确认文件存在于项目根目录"}
+            return {"ok": False, "error": "Unable to load workflow_api.json, please confirm the file exists in the project root directory"}
 
         workflow = parsed["workflow"]
 
-        # 1.1 分辨率：用户指定优先，否则自动推断（人物竖屏 / 风景横屏 / 默认正方形）
+        # 1.1 Resolution: user-specified first, otherwise auto-infer (portrait / landscape / default square)
         if width > 0 and height > 0:
             _w, _h = width, height
-            print(f"[ComfyUI] 用户指定分辨率: {_w}x{_h}")
+            print(f"[ComfyUI] User-specified resolution: {_w}x{_h}")
         else:
             _portrait_tags = (
                 "selfie", "portrait", "full body", "upper body", "headshot",
@@ -1692,25 +1692,25 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
                 _w, _h = 1024, 768
             else:
                 _w, _h = 832, 832
-        # 找 EmptyLatentImage 节点并修改分辨率
+        # Find EmptyLatentImage node and modify resolution
         for nid, node in workflow.items():
             if isinstance(node, dict) and node.get("class_type") == "EmptyLatentImage":
                 node["inputs"]["width"] = _w
                 node["inputs"]["height"] = _h
-                print(f"[ComfyUI] 分辨率: {_w}x{_h}")
+                print(f"[ComfyUI] Resolution: {_w}x{_h}")
                 break
 
-        # 2. 替换正向提示词
+        # 2. Replace positive prompt
         workflow[parsed["positive_id"]]["inputs"]["text"] = prompt
 
-        # 3. 替换负向提示词（如果提供了的话）
+        # 3. Replace negative prompt (if provided)
         if negative_prompt.strip():
             workflow[parsed["negative_id"]]["inputs"]["text"] = negative_prompt
 
-        # 4. 随机种子
+        # 4. Random seed
         workflow[parsed["sampler_id"]]["inputs"]["seed"] = random.randint(1, 10**12)
 
-        # 5. 发送任务到 ComfyUI
+        # 5. Send job to ComfyUI
         resp = requests.post(
             f"{_comfyui_url()}/prompt",
             json={"prompt": workflow},
@@ -1719,41 +1719,41 @@ def generate_image_comfy(prompt: str, negative_prompt: str = "", no_human: bool 
         result = resp.json()
 
         if "error" in result:
-            return {"ok": False, "error": f"ComfyUI 返回错误: {result['error'].get('message', result['error'])}"}
+            return {"ok": False, "error": f"ComfyUI returned error: {result['error'].get('message', result['error'])}"}
 
         prompt_id = result.get("prompt_id")
         if not prompt_id:
-            return {"ok": False, "error": "ComfyUI 未返回 prompt_id"}
+            return {"ok": False, "error": "ComfyUI did not return prompt_id"}
 
-        # 6. 轮询等待生成完成（最多 120 秒）
+        # 6. Poll and wait for generation to complete (max 120 seconds)
         output_filename = _wait_for_comfyui(prompt_id, timeout=120)
         if not output_filename:
-            return {"ok": False, "error": "图片生成超时（120秒），ComfyUI 可能卡住了"}
+            return {"ok": False, "error": "Image generation timed out (120s), ComfyUI may be stuck"}
 
-        # 7. 从 ComfyUI output 目录复制到 AGI 的 images 目录
+        # 7. Copy from ComfyUI output dir to AGI images dir
         comfy_output = Path(_comfyui_output_dir()) / output_filename
         if not comfy_output.exists():
-            return {"ok": False, "error": f"生成完成但找不到图片: {comfy_output}"}
+            return {"ok": False, "error": f"Generation complete but image not found: {comfy_output}"}
 
         dest_dir = get_image_dir()
         dest_path = dest_dir / f"comfy_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{output_filename}"
         shutil.copy2(str(comfy_output), str(dest_path))
 
         size_kb = dest_path.stat().st_size // 1024
-        print(f"[ComfyUI] 图片已保存: {dest_path} ({size_kb}KB)")
+        print(f"[ComfyUI] Image saved: {dest_path} ({size_kb}KB)")
         return {
             "ok": True,
             "image_path": str(dest_path),
             "prompt": prompt,
             "size": f"{size_kb}KB",
-            "message": f"ComfyUI 图片已生成并保存到: {dest_path} ({size_kb}KB)",
+            "message": f"ComfyUI image generated and saved to: {dest_path} ({size_kb}KB)",
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# Everything 全盘搜索工具（Windows）
+# Everything full-disk search tool (Windows)
 # ═══════════════════════════════════════════════════
 
 _ES_PATHS = [
@@ -1765,30 +1765,30 @@ _es_exe_cache: Optional[str] = None
 
 
 def _find_es_exe() -> Optional[str]:
-    """查找 es.exe 路径（结果缓存，失败时缓存空字符串）"""
+    """Find es.exe path (cache result, cache empty string on failure)"""
     global _es_exe_cache
     if _es_exe_cache is not None:
         return _es_exe_cache
 
-    # 1. 在 PATH 里找
+    # 1. Find in PATH
     es_in_path = shutil.which("es")
     if es_in_path:
         _es_exe_cache = es_in_path
         return _es_exe_cache
 
-    # 2. 检查固定路径
+    # 2. Check fixed paths
     for p in _ES_PATHS:
         if os.path.isfile(p):
             _es_exe_cache = p
             return _es_exe_cache
 
-    # 3. 缓存失败结果
+    # 3. Cache failure result
     _es_exe_cache = ""
     return ""
 
 
 def _reset_es_cache():
-    """重置 es.exe 查找缓存（安装 es.exe 后调用）"""
+    """Reset es.exe search cache (call after installing es.exe)"""
     global _es_exe_cache
     _es_exe_cache = None
 
@@ -1796,21 +1796,21 @@ def _reset_es_cache():
 @register_tool(
     name="everything_search",
     description=(
-        "使用 Everything 进行毫秒级全盘文件搜索（比系统搜索快百倍）。"
-        "需要安装 Everything 并将 es.exe 放到 PATH 或 Everything 安装目录。"
-        "支持通配符，如 *.py、report*.docx"
+        "Ultra-fast full-disk file search using Everything (100x faster than system search)."
+        "Requires Everything installed and es.exe placed in PATH or Everything installation directory."
+        "Supports wildcards, e.g. *.py, report*.docx"
     ),
     parameters={
-        "query":       {"type": "string", "description": "搜索关键词或通配符，如 *.py、report*.docx", "required": True},
-        "max_results": {"type": "integer", "description": "最多返回条数，默认 20"},
-        "search_path": {"type": "string", "description": "限定搜索目录（如 D:\\Projects），留空表示全盘"},
+        "query":       {"type": "string", "description": "Search keyword or wildcard, e.g. *.py, report*.docx", "required": True},
+        "max_results": {"type": "integer", "description": "Max results to return, default 20"},
+        "search_path": {"type": "string", "description": "Limit search directory (e.g. D:\\Projects), empty means full disk"},
     },
     risk="low"
 )
 def everything_search(query: str, max_results: int = 20, search_path: str = "") -> Dict:
     try:
         es = _find_es_exe()
-        # 如果之前缓存了失败，重新查找（es.exe 可能是后来安装的）
+        # If previously cached as failure, re-search (es.exe may have been installed later)
         if not es:
             _reset_es_cache()
             es = _find_es_exe()
@@ -1818,9 +1818,9 @@ def everything_search(query: str, max_results: int = 20, search_path: str = "") 
             return {
                 "ok": False,
                 "error": (
-                    "未找到 es.exe。请安装 Everything (https://www.voidtools.com) "
-                    "并下载 es.exe (https://www.voidtools.com/es.zip) "
-                    "放到 Everything 安装目录或 PATH 中。"
+                    "es.exe not found. Install Everything (https://www.voidtools.com) "
+                    "and download es.exe (https://www.voidtools.com/es.zip) "
+                    "and place it in the Everything installation directory or PATH."
                     "\n\nes.exe not found. Install Everything and put es.exe "
                     "in the Everything directory or PATH."
                 ),
@@ -1843,7 +1843,7 @@ def everything_search(query: str, max_results: int = 20, search_path: str = "") 
 
         if result.returncode != 0:
             stderr = result.stderr.strip()
-            return {"ok": False, "error": stderr or "es.exe 执行失败"}
+            return {"ok": False, "error": stderr or "es.exe execution failed"}
 
         lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
         return {
@@ -1851,17 +1851,17 @@ def everything_search(query: str, max_results: int = 20, search_path: str = "") 
             "results": lines,
             "count": len(lines),
             "query": query,
-            "search_path": search_path or "(全盘)",
+            "search_path": search_path or "(full disk)",
         }
 
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "搜索超时（5秒）/ Search timed out (5s)"}
+        return {"ok": False, "error": "Search timed out (5s)"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 热点趋势工具
+# Trending tools
 # ═══════════════════════════════════════════════════
 
 _HEADERS = {
@@ -1875,7 +1875,7 @@ _HEADERS = {
 
 
 def _fetch_baidu_trending() -> list:
-    """百度热搜"""
+    """Baidu trending"""
     import httpx
     url = "https://top.baidu.com/api/board?tab=realtime"
     with httpx.Client(headers=_HEADERS, timeout=10, verify=False) as client:
@@ -1896,7 +1896,7 @@ def _fetch_baidu_trending() -> list:
 
 
 def _fetch_sspai_feed() -> list:
-    """少数派 RSS"""
+    """SSpai RSS"""
     import feedparser
     feed = feedparser.parse("https://sspai.com/feed")
     result = []
@@ -1923,12 +1923,12 @@ def _fetch_github_trending() -> list:
     articles = soup.select("article.Box-row")
     result = []
     for art in articles[:10]:
-        # 仓库名在 h2 > a
+        # Repo name in h2 > a
         h2 = art.select_one("h2 a")
         if not h2:
             continue
         repo = "/".join(h2.get_text(strip=True).split())
-        # 描述在 p
+        # Description in p
         p = art.select_one("p")
         desc = p.get_text(strip=True) if p else ""
         result.append({"repo": repo, "desc": desc})
@@ -1937,40 +1937,40 @@ def _fetch_github_trending() -> list:
 
 @register_tool(
     name="get_trending",
-    description="获取百度热搜、少数派最新文章、GitHub今日热门Python项目",
+    description="Get Baidu trending, SSpai latest articles, GitHub trending Python projects today",
     parameters={},
     risk="low"
 )
 def get_trending() -> Dict:
-    """抓取三个平台的热点数据并返回结构化结果"""
+    """Scrape trending data from three platforms and return structured results"""
     baidu, sspai, github = [], [], []
     errors = []
 
-    # 百度热搜
+    # Baidu trending
     try:
         baidu = _fetch_baidu_trending()
     except Exception as e:
-        errors.append(f"百度热搜失败: {e}")
+        errors.append(f"Baidu trending failed: {e}")
 
-    # 少数派
+    # SSpai
     try:
         sspai = _fetch_sspai_feed()
     except Exception as e:
-        errors.append(f"少数派失败: {e}")
+        errors.append(f"SSpai failed: {e}")
 
     # GitHub Trending
     try:
         github = _fetch_github_trending()
     except Exception as e:
-        errors.append(f"GitHub Trending失败: {e}")
+        errors.append(f"GitHub Trending failed: {e}")
 
     summary_parts = []
     if baidu:
-        summary_parts.append(f"百度热搜 {len(baidu)} 条")
+        summary_parts.append(f"Baidu trending {len(baidu)} items")
     if sspai:
-        summary_parts.append(f"少数派 {len(sspai)} 条")
+        summary_parts.append(f"SSpai {len(sspai)} items")
     if github:
-        summary_parts.append(f"GitHub {len(github)} 条")
+        summary_parts.append(f"GitHub {len(github)} items")
 
     result = {
         "ok": True,
@@ -1980,19 +1980,19 @@ def get_trending() -> Dict:
     }
     if errors:
         result["partial_errors"] = errors
-        result["summary"] = "，".join(summary_parts) + f"（部分失败：{len(errors)}/3）"
+        result["summary"] = ", ".join(summary_parts) + f" (partial failure: {len(errors)}/3)"
     else:
-        result["summary"] = "，".join(summary_parts) + "，全部获取成功"
+        result["summary"] = ", ".join(summary_parts) + ", all fetched successfully"
 
     return result
 
 
 # ═══════════════════════════════════════════════════
-# 记忆查询工具（B 层按需调用，记忆回想的兜底手段）
+# Memory query tool (B layer on-demand call, fallback for memory recall)
 # ═══════════════════════════════════════════════════
 
 def _get_memory_store():
-    """获取全局 MemoryStore 实例"""
+    """Get global MemoryStore instance"""
     try:
         from engine.tools import _memory_store_ref
         if _memory_store_ref:
@@ -2005,20 +2005,20 @@ def _get_memory_store():
 @register_tool(
     name="search_memories_by_date",
     description=(
-        "按日期范围搜索历史记忆。当你根据已有的记忆上下文无法回忆起"
-        "用户所问的某个时间段的对话时才使用此工具。"
-        "如果已有上下文中已经包含相关信息，不要重复查询。"
-        "日期格式：YYYY-MM-DD 或 YYYY-MM-DDTHH:MM:SS"
+        "Search historical memories by date range. Use only when you cannot recall "
+        "a specific time period the user is asking about from your existing memory context. "
+        "Do not repeat queries if the relevant information is already in your context. "
+        "Date format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS"
     ),
     parameters={
         "start_date": {"type": "string",
-                       "description": "开始日期，格式 YYYY-MM-DD", "required": True},
+                       "description": "Start date, format YYYY-MM-DD", "required": True},
         "end_date":   {"type": "string",
-                       "description": "结束日期，格式 YYYY-MM-DD", "required": True},
+                       "description": "End date, format YYYY-MM-DD", "required": True},
         "level":      {"type": "string",
-                       "description": "记忆层级：summary(大纲)/outline(细纲)/detail(细节)，默认 summary"},
+                       "description": "Memory level: summary/outline/detail, default summary"},
         "top_k":      {"type": "integer",
-                       "description": "最大返回条数，默认 30"},
+                       "description": "Max results, default 30"},
     },
     risk="low"
 )
@@ -2031,7 +2031,7 @@ def search_memories_by_date(
 
         store = _get_memory_store()
         if not store:
-            # 尝试通过 db_path 直接创建
+            # Try direct creation via db_path
             try:
                 from desktop.config import DB_FILE
                 db_path = DB_FILE
@@ -2052,7 +2052,7 @@ def search_memories_by_date(
         }
         mem_level = level_map.get(level, MemoryLevel.SUMMARY)
 
-        # 补全时间：纯日期自动补 00:00:00 / 23:59:59
+        # Complete time: pure date auto-filled with 00:00:00 / 23:59:59
         if len(start_date) == 10:
             start_date += "T00:00:00"
         if len(end_date) == 10:
@@ -2067,7 +2067,7 @@ def search_memories_by_date(
 
         if not nodes:
             return {"ok": True, "count": 0, "memories": [],
-                    "hint": f"在 {start_date[:10]} ~ {end_date[:10]} 之间没有找到记忆记录"}
+                    "hint": f"No memory records found between {start_date[:10]} ~ {end_date[:10]}"}
 
         items = []
         for n in nodes:
@@ -2088,49 +2088,49 @@ def search_memories_by_date(
         return {"ok": False, "error": str(e)}
 
 
-# 全局引用：外部注入 MemoryStore 实例
+# Global reference: externally inject MemoryStore instance
 _memory_store_ref = None
 
 
 def set_memory_store(store):
-    """由 agent 启动时调用，注入 MemoryStore 实例"""
+    """Called at agent startup, inject MemoryStore instance"""
     global _memory_store_ref
     _memory_store_ref = store
 
 
 # ═══════════════════════════════════════════════════
-# SimLife 行程管理工具
+# SimLife Schedule management tools
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     "add_schedule",
-    "将用户或系统提到的未来计划添加到 SimLife 日程中。当对话中出现未来要做的事情时调用。",
+    "Add future plans mentioned by user or system to SimLife schedule. Call when future events appear in conversation.",
     {
-        "content": {"type": "string", "description": "计划内容描述", "required": True},
-        "date": {"type": "string", "description": "计划日期，格式 YYYY-MM-DD。支持相对日期如'明天'、'后天'、'下周一'", "required": True},
-        "category": {"type": "string", "description": "分类：entertainment(娱乐)/work(工作)/personal(个人)/health(健康)/social(社交)/other(其他)", "required": False},
-        "source": {"type": "string", "description": "来源：user(用户提出) / system(系统提议)", "required": False},
+        "content": {"type": "string", "description": "Plan content description", "required": True},
+        "date": {"type": "string", "description": "Plan date, format YYYY-MM-DD. Supports relative dates like 'tomorrow', 'day after', 'next Monday'", "required": True},
+        "category": {"type": "string", "description": "Category: entertainment/work/personal/health/social/other", "required": False},
+        "source": {"type": "string", "description": "Source: user / system", "required": False},
     },
     risk="low",
 )
 def add_schedule(content: str, date: str, category: str = "personal", source: str = "user") -> Dict:
-    """将计划添加到 SimLife 行程（仅记录，不触发定时执行）"""
+    """Add plan to SimLife schedule (record only, no scheduled execution)"""
     try:
         from datetime import timedelta
 
         date_lower = date.strip().lower()
-        if date_lower in ("明天", "tmr", "tomorrow"):
+        if date_lower in ("tomorrow", "tmr"):
             target = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        elif date_lower in ("后天", "day after tomorrow"):
+        elif date_lower in ("day after tomorrow",):
             target = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
-        elif date_lower in ("大后天",):
+        elif date_lower in ("day after day after tomorrow",):
             target = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
-        elif date_lower.startswith("下周"):
-            weekdays = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6,
+        elif date_lower.startswith("next week"):
+            weekdays = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
                         "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6,
                         "mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
             today = datetime.now()
-            target_dow = weekdays.get(date_lower.replace("下周", ""), 0)
+            target_dow = weekdays.get(date_lower.replace("next week", "").strip(), 0)
             current_dow = today.weekday()
             days_ahead = (target_dow - current_dow + 7) % 7
             if days_ahead == 0:
@@ -2139,7 +2139,7 @@ def add_schedule(content: str, date: str, category: str = "personal", source: st
         elif "-" in str(date) and len(str(date)) >= 8:
             target = str(date)[:10]
         else:
-            return {"ok": False, "error": f"无法解析日期: {date}"}
+            return {"ok": False, "error": f"Cannot parse date: {date}"}
 
         schedule_path = Path(__file__).resolve().parent.parent / "simlife" / "data" / "scheduled_events.json"
         schedule_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2166,34 +2166,34 @@ def add_schedule(content: str, date: str, category: str = "personal", source: st
         with open(schedule_path, "w", encoding="utf-8") as f:
             json.dump(events, f, ensure_ascii=False, indent=2)
 
-        return {"ok": True, "message": f"已添加行程：{content}（{target}）", "event": event}
+        return {"ok": True, "message": f"Schedule added: {content} ({target})", "event": event}
 
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════
-# 定时任务（TaskScheduler 后台线程调度）
+# Scheduled tasks (TaskScheduler background thread)
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     "create_timed_task",
     description=(
-        "创建定时任务，到指定时间后主动说话或执行工具。"
-        "支持多种时间格式："
-        "1) ISO格式 '2026-05-21T15:00:00' "
-        "2) 简单时间 '15:00'（今天或明天） "
-        "3) 相对时间 '+30m' '+2h' '+1d'（从现在起30分钟/2小时/1天后）"
-        "repeat 可选：daily（每天）/ weekly（每周）/ interval:N（每N分钟）/ 留空表示一次性"
+        "Create a scheduled task to speak or execute a tool at a specified time."
+        "Supports multiple time formats:"
+        "1) ISO format '2026-05-21T15:00:00' "
+        "2) Simple time '15:00' (today or tomorrow) "
+        "3) Relative time '+30m' '+2h' '+1d' (30min/2h/1day from now)"
+        "repeat options: daily/weekly/interval:N (every N minutes)/empty means one-time"
     ),
     parameters={
-        "content": {"type": "string", "description": "任务描述，如'提醒用户喝水'", "required": True},
-        "trigger_time": {"type": "string", "description": "触发时间，如 '+30m' 或 '15:00' 或 '2026-05-19T15:00:00'", "required": True},
-        "action": {"type": "string", "description": "执行动作：speak（主动说话）/ tool（调用工具）", "required": True},
-        "message": {"type": "string", "description": "action=speak 时要说的话", "required": False},
-        "tool_name": {"type": "string", "description": "action=tool 时要调用的工具名", "required": False},
-        "tool_params": {"type": "object", "description": "action=tool 时传给工具的参数", "required": False},
-        "repeat": {"type": "string", "description": "重复模式：daily/weekly/interval:N，留空为一次性", "required": False},
+        "content": {"type": "string", "description": "Task description, e.g. 'remind user to drink water'", "required": True},
+        "trigger_time": {"type": "string", "description": "Trigger time, e.g. '+30m' or '15:00' or '2026-05-19T15:00:00'", "required": True},
+        "action": {"type": "string", "description": "Action: speak / tool", "required": True},
+        "message": {"type": "string", "description": "Message to speak when action=speak", "required": False},
+        "tool_name": {"type": "string", "description": "Tool name to call when action=tool", "required": False},
+        "tool_params": {"type": "object", "description": "Parameters to pass to tool when action=tool", "required": False},
+        "repeat": {"type": "string", "description": "Repeat mode: daily/weekly/interval:N, empty for one-time", "required": False},
     },
     risk="medium"
 )
@@ -2231,9 +2231,9 @@ def create_timed_task(
 
 @register_tool(
     "cancel_timed_task",
-    "取消一个待执行的定时任务。传入任务ID即可取消。",
+    "Cancel a pending scheduled task. Pass the task ID to cancel.",
     {
-        "task_id": {"type": "string", "description": "要取消的任务ID", "required": True},
+        "task_id": {"type": "string", "description": "Task ID to cancel", "required": True},
     },
     risk="low"
 )
@@ -2248,9 +2248,9 @@ def cancel_timed_task(task_id: str) -> Dict:
 
 @register_tool(
     "list_timed_tasks",
-    "列出当前所有待执行的定时任务。",
+    "List all currently pending scheduled tasks.",
     {
-        "status": {"type": "string", "description": "筛选状态：pending（待执行）/ done（已完成）/ all（全部）", "required": False},
+        "status": {"type": "string", "description": "Filter status: pending / done / all", "required": False},
     },
     risk="low"
 )
@@ -2263,12 +2263,12 @@ def list_timed_tasks(status: str = "pending") -> Dict:
         else:
             tasks = scheduler.list_tasks(status)
         if not tasks:
-            return {"ok": True, "tasks": [], "message": "当前没有定时任务"}
+            return {"ok": True, "tasks": [], "message": "No scheduled tasks"}
         summaries = []
         for t in tasks:
             s = f"[{t['id']}] {t['content']} \u2192 {t['trigger_time'][:16]} ({t['action']})"
             if t.get("repeat"):
-                s += f" 重复:{t['repeat']}"
+                s += f" repeat:{t['repeat']}"
             summaries.append(s)
         return {"ok": True, "tasks": tasks, "summary": "\n".join(summaries)}
     except Exception as e:
@@ -2276,24 +2276,24 @@ def list_timed_tasks(status: str = "pending") -> Dict:
 
 
 # ═══════════════════════════════════════════════════
-# 工具执行入口
+# Tool Execution Entry Point
 # ═══════════════════════════════════════════════════
 
 def execute_tool(name: str, params: dict, user_input: str = "") -> Dict:
-    """执行指定工具，返回结果。user_input 用于传递用户原始消息（供工具内部判断上下文）"""
+    """Execute specified tool and return results. user_input passes user raw message (for tool context awareness)"""
     if name not in TOOL_REGISTRY:
-        return {"ok": False, "error": f"工具 '{name}' 不存在"}
+        return {"ok": False, "error": f"Tool '{name}' does not exist"}
     try:
         func = TOOL_REGISTRY[name]["function"]
-        # 注入用户原始消息到函数属性，供 generate_image_comfy 等工具使用
+        # Inject user raw message into function attribute for tools like generate_image_comfy
         if user_input and hasattr(func, '_user_raw_input') is not False:
             func._user_raw_input = user_input
         result = func(**params)
         return result
     except TypeError as e:
-        return {"ok": False, "error": f"参数错误: {e}"}
+        return {"ok": False, "error": f"Parameter error: {e}"}
     except Exception as e:
-        return {"ok": False, "error": f"执行异常: {e}"}
+        return {"ok": False, "error": f"Execution exception: {e}"}
 
 
 def get_tool_risk(name: str) -> str:
@@ -2301,12 +2301,12 @@ def get_tool_risk(name: str) -> str:
 
 
 def get_all_schemas() -> List[Dict]:
-    """获取所有工具的 schema，用于传给 LLM"""
+    """Get all tool schemas for passing to LLM"""
     return [info["schema"] for info in TOOL_REGISTRY.values()]
 
 
 def get_schemas_by_risk(max_risk: str = "high") -> List[Dict]:
-    """按风险等级过滤工具"""
+    """Filter tools by risk level"""
     risk_order = {"low": 0, "medium": 1, "high": 2}
     max_level = risk_order.get(max_risk, 2)
     return [
@@ -2315,16 +2315,16 @@ def get_schemas_by_risk(max_risk: str = "high") -> List[Dict]:
     ]
 
 # ═══════════════════════════════════════════════════
-# 工具自检（检测依赖库是否安装）
+# Tool self-test (check if dependencies are installed)
 # ═══════════════════════════════════════════════════
 
-# 工具依赖清单
+# Tool dependency list
 TOOL_DEPS = {
     "screenshot":      ["pyautogui", "PIL"],
     "mouse_click":     ["pyautogui"],
     "keyboard_type":   ["pyautogui"],
     "browser_action":  ["playwright"],
-    "read_clipboard":  [],   # Linux 需要 xclip，Windows/Mac 内置
+    "read_clipboard":  [],   # Linux needs xclip, built-in on Windows/Mac
     "write_clipboard": [],
     "get_stock_info":  ["yfinance"],
     "search_stock":    ["yfinance"],
@@ -2332,13 +2332,13 @@ TOOL_DEPS = {
     "get_news_sources":["newsapi"],
     "read_article":    ["newspaper"],
     "get_trending":    ["httpx", "feedparser", "bs4"],
-    "everything_search": [],   # 依赖 es.exe 外部程序，非 Python 包
+    "everything_search": [],   # Depends on es.exe external program, not a Python package
 }
 
 def check_tool_deps(tool_name: str) -> Dict:
     """
-    检测某个工具的依赖库是否已安装
-    返回 {ok, missing, installable}
+    Check if dependencies for a tool are installed
+    Returns {ok, missing, installable}
     """
     deps = TOOL_DEPS.get(tool_name, [])
     missing = []
@@ -2361,13 +2361,13 @@ def check_tool_deps(tool_name: str) -> Dict:
         "tool":    tool_name,
         "missing": missing,
         "install": cmds,
-        "tip":     ("所有依赖已安装" if not missing
-                    else f"缺少依赖: {', '.join(missing)}\n安装命令:\n" + "\n".join(cmds))
+        "tip":     ("All dependencies installed" if not missing
+                    else f"Missing dependencies: {', '.join(missing)}\nInstall commands:\n" + "\n".join(cmds))
     }
 
 
 def check_all_deps() -> Dict[str, Dict]:
-    """检测所有有依赖的工具"""
+    """Check all tools with dependencies"""
     results = {}
     for tool_name in TOOL_DEPS:
         results[tool_name] = check_tool_deps(tool_name)
@@ -2376,33 +2376,33 @@ def check_all_deps() -> Dict[str, Dict]:
 
 def self_test(tool_name: str = None) -> List[Dict]:
     """
-    工具自测：每个工具用安全参数测一遍，返回测试结果
-    tool_name=None 时测试所有安全工具
+    Tool self-test: test each tool with safe parameters, return test results
+    When tool_name=None, tests all safe tools
     """
     safe_tests = {
         "list_directory":  {"path": ".", "pattern": "*.py"},
         "get_system_info": {"info_type": "os"},
-        "read_file":       {"path": __file__},          # 读自身
+        "read_file":       {"path": __file__},          # Read self
         "write_file":      {"path": "agi_self_test.txt",
-                            "content": "AGI工具自测成功"},
+                            "content": "AGI tool self-test success"},
         "web_search":      {"query": "python", "max_results": 1},
         "fetch_url":       {"url": "http://httpbin.org/get", "max_chars": 200},
         "run_command":     {"command": "echo AGI_TOOL_TEST_OK", "timeout": 5},
-        "run_python":      {"code": "print('AGI Python工具测试OK')"},
+        "run_python":      {"code": "print('AGI Python tool test OK')"},
         "search_files":    {"keyword": "def", "directory": ".",
                             "file_pattern": "*.py"},
         "search_stock":    {"keyword": "AAPL", "max_results": 1},
     }
 
-    # 高危工具和需要依赖的工具跳过自动测试
+    # Skip auto-test for high-risk tools and tools needing dependencies
     skip = {
         "delete_file", "mouse_click", "keyboard_type",
         "screenshot", "browser_action",
         "read_clipboard", "write_clipboard",
         "open_application", "get_stock_info",
-        "get_news", "get_news_sources",   # 需要 API Key
-        "read_article",                    # 需要网络请求文章
-        "everything_search",               # 需要外部 es.exe
+        "get_news", "get_news_sources",   # Requires API Key
+        "read_article",                    # Requires network request for articles
+        "everything_search",               # Requires external es.exe
     }
 
     targets = [tool_name] if tool_name else list(safe_tests.keys())
@@ -2411,7 +2411,7 @@ def self_test(tool_name: str = None) -> List[Dict]:
     for name in targets:
         if name in skip:
             results.append({"tool": name, "status": "skipped",
-                             "reason": "高危/需依赖，跳过自动测试"})
+                             "reason": "High-risk/needs dependencies, skipping auto-test"})
             continue
         if name not in safe_tests:
             results.append({"tool": name, "status": "no_test_case"})
@@ -2437,15 +2437,15 @@ def self_test(tool_name: str = None) -> List[Dict]:
 
 
 # ══════════════════════════════════════════
-# Office 文件工具（读写 docx/xlsx/pptx/pdf）
+# Office File Tools (read/write docx/xlsx/pptx/pdf)
 # ══════════════════════════════════════════
 
 @register_tool(
     name="read_office",
-    description="读取 Office 文件或 PDF 内容。支持 .docx .xlsx .pptx .pdf .csv .txt",
+    description="Read Office file or PDF content. Supports .docx .xlsx .pptx .pdf .csv .txt",
     parameters={
         "path": {"type": "string",
-                 "description": "文件路径（绝对路径或相对路径）",
+                 "description": "File path (absolute or relative)",
                  "required": True}
     },
     risk="low"
@@ -2456,19 +2456,19 @@ def read_office(path: str) -> Dict:
     if result.get("ok"):
         text = result.get("text", "")
         if len(text) > 8000:
-            text = text[:8000] + f"\n\n[内容已截断，共 {len(text)} 字符]"
+            text = text[:8000] + f"\n\n[Content truncated, {len(text)} total chars]"
         return {"ok": True, "type": result.get("type"), "text": text,
-                "summary": f"成功读取 {result.get('type','').upper()} 文件，{len(text)} 字符"}
+                "summary": f"Successfully read {result.get('type','').upper()} file, {len(text)} chars"}
     return result
 
 
 @register_tool(
     name="create_word",
-    description="创建 Word 文档（.docx）。内容支持 Markdown 格式：# 标题，**粗体**，- 列表，| 表格",
+    description="Create Word document (.docx). Content supports Markdown: # heading, **bold**, - list, | table",
     parameters={
-        "path":    {"type": "string", "description": "保存路径或文件名（如 报告.docx）", "required": True},
-        "content": {"type": "string", "description": "文档内容，支持 Markdown", "required": True},
-        "title":   {"type": "string", "description": "文档标题（可选）"}
+        "path":    {"type": "string", "description": "Save path or filename (e.g. report.docx)", "required": True},
+        "content": {"type": "string", "description": "Document content, supports Markdown", "required": True},
+        "title":   {"type": "string", "description": "Document title (optional)"}
     },
     risk="medium"
 )
@@ -2479,11 +2479,11 @@ def create_word(path: str, content: str, title: str = "") -> Dict:
 
 @register_tool(
     name="create_excel",
-    description="创建 Excel 表格（.xlsx）。传入二维数组，第一行自动设为标题行",
+    description="Create Excel spreadsheet (.xlsx). Pass a 2D array, first row auto-set as header row",
     parameters={
-        "path":       {"type": "string", "description": "保存路径或文件名", "required": True},
-        "data":       {"type": "string", "description": "JSON格式的二维数组，如 [[\"姓名\",\"分数\"],[\"张三\",90]]", "required": True},
-        "sheet_name": {"type": "string", "description": "Sheet名称，默认 Sheet1"}
+        "path":       {"type": "string", "description": "Save path or filename", "required": True},
+        "data":       {"type": "string", "description": "2D array in JSON format, e.g. [[\"Name\",\"Score\"],[\"Alice\",90]]", "required": True},
+        "sheet_name": {"type": "string", "description": "Sheet name, default Sheet1"}
     },
     risk="medium"
 )
@@ -2492,17 +2492,17 @@ def create_excel(path: str, data: str, sheet_name: str = "Sheet1") -> Dict:
     try:
         parsed = json.loads(data)
     except Exception:
-        return {"ok": False, "error": "data 必须是有效的 JSON 二维数组"}
+        return {"ok": False, "error": "data must be a valid JSON 2D array"}
     return create_xlsx(path, parsed, sheet_name)
 
 
 @register_tool(
     name="create_ppt",
-    description="创建 PowerPoint 演示文稿（.pptx）",
+    description="Create PowerPoint presentation (.pptx)",
     parameters={
-        "path":        {"type": "string", "description": "保存路径或文件名", "required": True},
+        "path":        {"type": "string", "description": "Save path or filename", "required": True},
         "slides_json": {"type": "string",
-                       "description": 'JSON数组，每项含 title/content/bullets，如 [{"title":"介绍","bullets":["要点1","要点2"]}]',
+                       "description": 'JSON array, each item with title/content/bullets, e.g. [{"title":"Intro","bullets":["Point 1","Point 2"]}]',
                        "required": True}
     },
     risk="medium"
@@ -2512,17 +2512,17 @@ def create_ppt(path: str, slides_json: str) -> Dict:
     try:
         slides = json.loads(slides_json)
     except Exception:
-        return {"ok": False, "error": "slides_json 必须是有效的 JSON 数组"}
+        return {"ok": False, "error": "slides_json must be a valid JSON array"}
     return create_pptx(path, slides)
 
 
 @register_tool(
     name="create_pdf",
-    description="创建 PDF 文档。内容支持 Markdown 标题格式",
+    description="Create PDF document. Content supports Markdown heading format",
     parameters={
-        "path":    {"type": "string", "description": "保存路径或文件名（如 文档.pdf）", "required": True},
-        "content": {"type": "string", "description": "文档内容，支持 # ## 标题", "required": True},
-        "title":   {"type": "string", "description": "PDF标题（可选）"}
+        "path":    {"type": "string", "description": "Save path or filename (e.g. document.pdf)", "required": True},
+        "content": {"type": "string", "description": "Document content, supports # ## headings", "required": True},
+        "title":   {"type": "string", "description": "PDF title (optional)"}
     },
     risk="medium"
 )
@@ -2533,10 +2533,10 @@ def create_pdf_file(path: str, content: str, title: str = "") -> Dict:
 
 @register_tool(
     name="analyze_image",
-    description="分析图片内容。使用独立的多模态模型（非文本LLM），支持 OCR、图表解读、场景描述等。支持 OpenAI GPT-4o / Claude / Gemini / Qwen-VL / GLM-4V / Ollama(llava)",
+    description="Analyze image content. Uses independent multimodal model (non-text LLM), supports OCR, chart interpretation, scene description, etc. Supports OpenAI GPT-4o / Claude / Gemini / Qwen-VL / GLM-4V / Ollama(llava)",
     parameters={
-        "image_path": {"type": "string", "description": "图片文件路径（jpg/png/gif/webp等）", "required": True},
-        "question":   {"type": "string", "description": "关于图片的问题，不填则自动描述图片内容"}
+        "image_path": {"type": "string", "description": "Image file path (jpg/png/gif/webp, etc.)", "required": True},
+        "question":   {"type": "string", "description": "Question about the image, auto-describes if not specified"}
     },
     risk="low"
 )
@@ -2545,18 +2545,18 @@ def analyze_image_tool(image_path: str, question: str = "") -> Dict:
     client = create_vision_client()
     if not client:
         return {"ok": False,
-                "error": "未配置多模态模型",
-                "tip": "请在设置中配置多模态模型（Vision），或在设置页面点击\"多模态配置\"进行设置"}
-    result = client.analyze(image_path, question or "请详细描述这张图片的内容，包括主要对象、场景、文字等关键信息。")
+                "error": "Multimodal model not configured",
+                "tip": "Please configure multimodal model (Vision) in settings, or click \"Multimodal Config\" on the settings page"}
+    result = client.analyze(image_path, question or "Please describe this image in detail, including main objects, scene, text, and other key information.")
     return result
 
 
 @register_tool(
     name="analyze_video",
-    description="分析视频内容。使用多模态模型理解视频，描述画面、动作、场景等。需要 Gemini 等支持视频的模型",
+    description="Analyze video content. Uses multimodal model to understand video, describing visuals, actions, scenes, etc. Requires Gemini or other video-capable models",
     parameters={
-        "video_path": {"type": "string", "description": "视频文件路径（mp4/webm/mov等，建议不超过30秒）", "required": True},
-        "question":   {"type": "string", "description": "关于视频的问题，不填则自动描述视频内容"}
+        "video_path": {"type": "string", "description": "Video file path (mp4/webm/mov, etc., recommended under 30s)", "required": True},
+        "question":   {"type": "string", "description": "Question about the video, auto-describes if not specified"}
     },
     risk="low"
 )
@@ -2565,18 +2565,18 @@ def analyze_video_tool(video_path: str, question: str = "") -> Dict:
     client = create_vision_client()
     if not client:
         return {"ok": False,
-                "error": "未配置多模态模型",
-                "tip": "视频分析需要 Gemini 等支持视频的模型，请在设置中配置多模态模型"}
-    result = client.analyze(video_path, question or "请详细描述这个视频的内容，包括场景、人物动作、关键事件等。")
+                "error": "Multimodal model not configured",
+                "tip": "Video analysis requires Gemini or other video-capable models, please configure multimodal model in settings"}
+    result = client.analyze(video_path, question or "Please describe this video in detail, including scenes, character actions, key events, etc.")
     return result
 
 
 @register_tool(
     name="analyze_audio",
-    description="分析音频内容。使用多模态模型理解音频，可进行语音识别、音乐分析、情感判断等。需要 Gemini 等支持音频的模型",
+    description="Analyze audio content. Uses multimodal model to understand audio, can perform speech recognition, music analysis, emotion detection, etc. Requires Gemini or other audio-capable models",
     parameters={
-        "audio_path": {"type": "string", "description": "音频文件路径（mp3/wav/ogg/m4a等）", "required": True},
-        "question":   {"type": "string", "description": "关于音频的问题，不填则自动转录和描述音频内容"}
+        "audio_path": {"type": "string", "description": "Audio file path (mp3/wav/ogg/m4a, etc.)", "required": True},
+        "question":   {"type": "string", "description": "Question about the audio, auto-transcribes and describes if not specified"}
     },
     risk="low"
 )
@@ -2585,36 +2585,36 @@ def analyze_audio_tool(audio_path: str, question: str = "") -> Dict:
     client = create_vision_client()
     if not client:
         return {"ok": False,
-                "error": "未配置多模态模型",
-                "tip": "音频分析需要 Gemini 等支持音频的模型，请在设置中配置多模态模型"}
-    result = client.analyze(audio_path, question or "请转录并描述这个音频的内容。")
+                "error": "Multimodal model not configured",
+                "tip": "Audio analysis requires Gemini or other audio-capable models, please configure multimodal model in settings"}
+    result = client.analyze(audio_path, question or "Please transcribe and describe this audio content.")
     return result
 
 
 # ═══════════════════════════════════════════════════
-# 语音识别工具（STT）
+# Speech-to-Text Tool (STT)
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="stt_tool",
     description=(
-        "语音识别工具。将音频文件转成文字。"
-        "支持讯飞在线、DeepSeek Whisper、本地 Whisper 三种后端。"
-        "当用户发送语音消息或需要转录音频时使用。"
+        "Speech-to-text tool. Convert audio files to text."
+        "Supports iFlytek online, DeepSeek Whisper, and local Whisper backends."
+        "Use when user sends voice messages or needs audio transcription."
     ),
     parameters={
         "audio_path": {"type": "string",
-                       "description": "音频文件路径（wav/mp3/m4a/ogg等），支持绝对路径和相对路径",
+                       "description": "Audio file path (wav/mp3/m4a/ogg, etc.), supports absolute and relative paths",
                        "required": True},
         "language":   {"type": "string",
-                       "description": "语言代码，默认 zh（中文）。支持 en、ja、ko 等"},
+                       "description": "Language code, default zh (Chinese). Supports en, ja, ko, etc."},
     },
     risk="low"
 )
 def stt_tool(audio_path: str, language: str = "zh") -> Dict:
     """
-    语音识别：音频文件 → 文字
-    以工具插件形式运行，不修改 agent.py 主逻辑
+    STT: audio file -> text
+    Runs as a tool plugin, does not modify agent.py main logic
     """
     try:
         from engine.stt_engine import STTEngine
@@ -2627,7 +2627,7 @@ def stt_tool(audio_path: str, language: str = "zh") -> Dict:
         if not engine.is_available():
             return {
                 "ok": False,
-                "error": "语音识别不可用",
+                "error": "Speech recognition unavailable",
                 "tip": STTEngine.install_guide()
             }
 
@@ -2635,25 +2635,25 @@ def stt_tool(audio_path: str, language: str = "zh") -> Dict:
         return result
 
     except Exception as e:
-        return {"ok": False, "error": f"语音识别异常: {e}"}
+        return {"ok": False, "error": f"Speech recognition error: {e}"}
 
 
 @register_tool(
     name="stt_record",
     description=(
-        "录制一段语音并识别为文字。"
-        "会打开麦克风录制指定时长的音频，然后转成文字。"
-        "需要安装 sounddevice 或 pyaudio。"
+        "Record speech and transcribe to text."
+        "Opens microphone to record audio for specified duration, then transcribes to text."
+        "Requires sounddevice or pyaudio installed."
     ),
     parameters={
         "duration": {"type": "integer",
-                     "description": "录制时长（秒），默认 5 秒，最大 30 秒"},
+                     "description": "Recording duration (seconds), default 5s, max 30s"},
     },
     risk="low"
 )
 def stt_record(duration: int = 5) -> Dict:
     """
-    录音 + 语音识别
+    Recording + STT
     """
     try:
         duration = max(1, min(30, duration))
@@ -2667,19 +2667,19 @@ def stt_record(duration: int = 5) -> Dict:
         if not engine.is_available():
             return {
                 "ok": False,
-                "error": "语音识别不可用",
+                "error": "Speech recognition unavailable",
                 "tip": STTEngine.install_guide()
             }
 
-        # 录制音频
+        # Record audio
         audio_path = record_audio(duration=duration)
         if not audio_path:
-            return {"ok": False, "error": "录音失败，请检查麦克风或安装 sounddevice: pip install sounddevice"}
+            return {"ok": False, "error": "Recording failed, check microphone or install sounddevice: pip install sounddevice"}
 
-        # 识别
+        # Recognize
         result = engine.recognize_file(audio_path)
 
-        # 清理临时文件
+        # Clean up temp file
         try:
             os.unlink(audio_path)
         except Exception:
@@ -2688,31 +2688,31 @@ def stt_record(duration: int = 5) -> Dict:
         return result
 
     except Exception as e:
-        return {"ok": False, "error": f"录音识别异常: {e}"}
+        return {"ok": False, "error": f"Recording/recognition error: {e}"}
 
 
 # ═══════════════════════════════════════════════════
-# 语音合成工具（TTS）
+# Text-to-Speech Tool (TTS)
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="tts_tool",
     description=(
-        "语音合成工具。将文字转成语音并播放。"
-        "使用微软 Edge TTS（高质量在线合成）或 pyttsx3（离线兜底）。"
-        "当需要将回复朗读出来时使用。"
+        "Text-to-speech tool. Convert text to speech and play."
+        "Uses Microsoft Edge TTS (high-quality online synthesis) or pyttsx3 (offline fallback)."
+        "Use when you need to read replies aloud."
     ),
     parameters={
-        "text":    {"type": "string", "description": "要朗读的文字", "required": True},
-        "voice":   {"type": "string", "description": "声音ID，如 zh-CN-XiaoxiaoNeural（默认），zh-CN-YunjianNeural（男声）"},
-        "save_to": {"type": "string", "description": "保存到文件路径（可选，不填则直接播放）"},
+        "text":    {"type": "string", "description": "Text to read aloud", "required": True},
+        "voice":   {"type": "string", "description": "Voice ID, e.g. zh-CN-XiaoxiaoNeural (default female), zh-CN-YunjianNeural (male)"},
+        "save_to": {"type": "string", "description": "Save to file path (optional, plays directly if not specified)"},
     },
     risk="low"
 )
 def tts_tool(text: str, voice: str = "", save_to: str = "") -> Dict:
     """
-    语音合成：文字 → 语音播放/保存
-    复用现有 TTSEngine（edge-tts / pyttsx3）
+    TTS: text -> speech play/save
+    Reuses existing TTSEngine (edge-tts / pyttsx3)
     """
     try:
         from engine.tts_engine import get_tts
@@ -2723,7 +2723,7 @@ def tts_tool(text: str, voice: str = "", save_to: str = "") -> Dict:
         if not tts.is_available():
             return {
                 "ok": False,
-                "error": "语音合成不可用",
+                "error": "TTS unavailable",
                 "tip": tts.install_guide()
             }
 
@@ -2731,7 +2731,7 @@ def tts_tool(text: str, voice: str = "", save_to: str = "") -> Dict:
             tts.set_voice(voice)
 
         if save_to:
-            # 保存到文件
+            # Save to file
             import asyncio
             try:
                 import edge_tts
@@ -2750,9 +2750,9 @@ def tts_tool(text: str, voice: str = "", save_to: str = "") -> Dict:
                 size = os.path.getsize(save_to) if os.path.exists(save_to) else 0
                 return {"ok": True, "saved_to": save_to, "size_bytes": size}
             except Exception as e:
-                return {"ok": False, "error": f"保存失败: {e}"}
+                return {"ok": False, "error": f"Save failed: {e}"}
         else:
-            # 异步播放（不阻塞工具调用）
+            # Async playback (non-blocking tool call)
             result_holder = {"done": False, "ok": False, "error": ""}
             done_event = threading.Event()
 
@@ -2767,42 +2767,42 @@ def tts_tool(text: str, voice: str = "", save_to: str = "") -> Dict:
 
             tts.speak(text, on_done=_on_done, on_error=_on_error)
 
-            # 等待播放开始（最多等 2 秒）
+            # Wait for playback to start (max 2 seconds)
             done_event.wait(timeout=2)
 
             return {
                 "ok": True,
-                "message": f"语音合成已开始播放（{tts.get_backend_name()}）",
+                "message": f"TTS playback started ({tts.get_backend_name()})",
                 "text_preview": text[:100],
                 "backend": tts.get_backend_name()
             }
 
     except Exception as e:
-        return {"ok": False, "error": f"语音合成异常: {e}"}
+        return {"ok": False, "error": f"TTS error: {e}"}
 
 
 # ═══════════════════════════════════════════════════
-# 传感器数据工具（Sensor Agent）
+# Sensor Data Tool (Sensor Agent)
 # ═══════════════════════════════════════════════════
 
 @register_tool(
     name="sensor_status",
     description=(
-        "查询机器人/机器狗的传感器状态。"
-        "返回电量、温度、姿态、速度、障碍物距离等数据的自然语言描述。"
-        "当需要了解机器人当前物理状态时使用。"
-        "无硬件时使用模拟数据。"
+        "Query robot/robot dog sensor status."
+        "Returns natural language description of battery, temperature, attitude, speed, obstacle distance, etc."
+        "Use when you need to know the robot's current physical state."
+        "Uses simulated data when no hardware is present."
     ),
     parameters={
         "detailed": {"type": "boolean",
-                     "description": "是否返回详细数据（JSON），默认 false 返回文字摘要"},
+                     "description": "Whether to return detailed data (JSON), default false returns text summary"},
     },
     risk="low"
 )
 def sensor_status(detailed: bool = False) -> Dict:
     """
-    查询传感器状态
-    以工具插件形式运行，不修改 agent.py 主逻辑
+    Query sensor status
+    Runs as tool plugin, does not modify agent.py main logic
     """
     try:
         from engine.sensor_agent import get_sensor_agent
@@ -2812,14 +2812,14 @@ def sensor_status(detailed: bool = False) -> Dict:
         agent = get_sensor_agent(cfg)
 
         if not agent.is_available():
-            return {"ok": False, "error": "传感器模块未启用"}
+            return {"ok": False, "error": "Sensor module not enabled"}
 
         if detailed:
             data = agent.get_all_sensors()
-            # 截断过大的数据
+            # Truncate overly large data
             data_str = json.dumps(data, ensure_ascii=False, default=str)
             if len(data_str) > 5000:
-                data_str = data_str[:5000] + "...(已截断)"
+                data_str = data_str[:5000] + "...(truncated)"
             return {
                 "ok": True,
                 "data": json.loads(data_str),
@@ -2829,31 +2829,31 @@ def sensor_status(detailed: bool = False) -> Dict:
             return {
                 "ok": True,
                 "status_text": agent.get_status_text(),
-                "source": "模拟" if agent.mock_mode else "硬件"
+                "source": "simulated" if agent.mock_mode else "hardware"
             }
 
     except Exception as e:
-        return {"ok": False, "error": f"传感器查询异常: {e}"}
+        return {"ok": False, "error": f"Sensor query error: {e}"}
 
 
 @register_tool(
     name="sensor_command",
     description=(
-        "向机器人/机器狗发送控制指令。"
-        "支持行走、坐下、站立、停止、转向等基本动作。"
+        "Send control commands to robot/robot dog."
+        "Supports walk, sit, stand, stop, turn and other basic actions."
     ),
     parameters={
         "command": {"type": "string",
-                    "description": "控制指令：walk/sit/stand/stop/turn_left/turn_right/speed_up/speed_down",
+                    "description": "Control command: walk/sit/stand/stop/turn_left/turn_right/speed_up/speed_down",
                     "required": True},
         "params":  {"type": "string",
-                    "description": "附加参数（JSON 格式），如 {\"speed\": 0.5, \"duration\": 3}"},
+                    "description": "Additional parameters (JSON format), e.g. {\"speed\": 0.5, \"duration\": 3}"},
     },
     risk="medium"
 )
 def sensor_command(command: str, params: str = "") -> Dict:
     """
-    发送控制指令到机器人
+    Send control command to robot
     """
     try:
         from engine.sensor_agent import get_sensor_agent
@@ -2863,27 +2863,27 @@ def sensor_command(command: str, params: str = "") -> Dict:
         agent = get_sensor_agent(cfg)
 
         if not agent.is_available():
-            return {"ok": False, "error": "传感器模块未启用"}
+            return {"ok": False, "error": "Sensor module not enabled"}
 
         param_dict = {}
         if params:
             try:
                 param_dict = json.loads(params)
             except Exception:
-                return {"ok": False, "error": "params 必须是有效的 JSON 格式"}
+                return {"ok": False, "error": "params must be valid JSON format"}
 
         result = agent.send_command(command, param_dict)
         return result
 
     except Exception as e:
-        return {"ok": False, "error": f"指令发送异常: {e}"}
+        return {"ok": False, "error": f"Command send error: {e}"}
 
 
-# 更新工具依赖清单
+# Update tool dependency list
 TOOL_DEPS.update({
-    "stt_tool":     ["websocket-client"],     # 讯飞
-    "stt_record":   ["sounddevice"],           # 录音
-    "tts_tool":     ["edge_tts", "pyttsx3"],   # 已在 requirements.txt
+    "stt_tool":     ["websocket-client"],     # iFlytek
+    "stt_record":   ["sounddevice"],           # Recording
+    "tts_tool":     ["edge_tts", "pyttsx3"],   # Already in requirements.txt
     "sensor_status": ["paho.mqtt"],            # MQTT
     "sensor_command": ["paho.mqtt"],           # MQTT
 })

@@ -1,14 +1,14 @@
 """
-AI 生成器 - 生成人物卡 + NPC卡 + Activity描述 + 事件队列
-支持多种工作模式：上班族 / 自由职业 / 学生 / 旅行博主
-支持多世界观：现代世界（默认）+ 自定义世界（fantasy/scifi/...）
+AI Generator - Character Cards + NPC Cards + Activity Descriptions + Event Queue
+Supports: office worker / freelancer / student / travel blogger
+Supports multi-world: modern (default) + custom worlds (fantasy/scifi/...)
 """
 import json
 import random
 import sys
 from pathlib import Path
 
-# 复用主项目的 LLM 客户端
+# Reuse the main project LLM client
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
@@ -16,7 +16,7 @@ from engine.llm_client import create_client
 
 
 def _get_world_context() -> str:
-    """获取当前世界观的 context 文本，现代世界返回空字符串"""
+    """Get current worldview context text; returns empty string for modern world"""
     try:
         from simlife.worlds.world_manager import load_world_setting, build_world_context
         ws = load_world_setting()
@@ -28,7 +28,7 @@ def _get_world_context() -> str:
 
 
 def _get_story_influences() -> str:
-    """读取用户聊天中对剧情的影响信息"""
+    """Read story influence info from user chat"""
     try:
         from engine.simlife_client import SimLifeClient
         sl = SimLifeClient()
@@ -38,7 +38,7 @@ def _get_story_influences() -> str:
 
 
 def _get_world_guide(guide_type: str = "character") -> str:
-    """获取世界观的生成引导（character/activity/event）"""
+    """Get worldview generation guide (character/activity/event)"""
     try:
         from simlife.worlds.world_manager import load_world_setting
         ws = load_world_setting()
@@ -63,66 +63,66 @@ def generate_world_setting(
     character_role: str = "",
 ) -> dict:
     """
-    用 LLM 生成一个完整的世界观设定 JSON。
-    返回 world_setting dict 或 None。
+    Generate a complete world setting JSON using LLM.
+    Returns world_setting dict or None.
     """
     import re
 
     llm = get_llm_client()
 
     type_names = {
-        "fantasy": "奇幻魔法",
-        "scifi": "科幻未来",
-        "xianxia": "仙侠修真",
-        "post_apocalyptic": "末世废土",
-        "custom": "自定义",
+        "fantasy": "Fantasy Magic",
+        "scifi": "Sci-Fi Future",
+        "xianxia": "Cultivation",
+        "post_apocalyptic": "Post-Apocalyptic",
+        "custom": "Custom",
     }
     type_label = type_names.get(world_type, world_type)
 
-    prompt = f"""你是一个专业的世界观设计师。请创建一个{type_label}类型的世界观设定。
+    prompt = f"""You are a professional world-building designer. Create a {type_label} world setting.
 
-核心主题：{core_theme}
-角色在这个世界的身份：{character_role or '（未指定）'}
+Core theme: {core_theme}
+Character's identity in this world: {character_role or "(not specified)"}
 
-设计要求：
-1. 世界观必须自洽：地理、种族、力量体系、势力之间要有合理的因果关系
-2. 细节要丰富：每个区域、种族、势力都要有独特性
-3. 要有故事潜力：留出冲突点和悬念
-4. 数量适当：区域4-8个，种族3-6个，势力3-5个，副本3-5个
-5. 所有名称要有风格统一性
+Design requirements:
+1. Self-consistent world: geography, races, power system, factions must have logical causal relationships
+2. Rich details: each region, race, faction must have uniqueness
+3. Story potential: leave conflict points and suspense
+4. Appropriate quantity: 4-8 regions, 3-6 races, 3-5 factions, 3-5 dungeons
+5. All names should have stylistic unity
 
-返回完整的 JSON 格式，必须包含以下顶层字段：
-world_id（英文小写id）、world_name、world_type、era、communication（device/device_description/narrative_style）、geography（overview/regions数组）、races数组、power_system、factions数组、history、daily_life、dangers（monster_types/dungeons数组）、character_generation_guide、activity_generation_guide、event_generation_guide
+Return complete JSON with these top-level fields:
+world_id (lowercase id), world_name, world_type, era, communication (device/device_description/narrative_style), geography (overview/regions array), races array, power_system, factions array, history, daily_life, dangers (monster_types/dungeons array), character_generation_guide, activity_generation_guide, event_generation_guide
 
-只返回JSON，不要任何其他文字。确保JSON可以直接被解析。"""
+Return only JSON, no other text. Ensure JSON can be parsed directly."""
 
     try:
         response = llm.generate(prompt, max_tokens=8000, temperature=0.8)
         response = response.strip()
-        # 提取 JSON（可能被 markdown 代码块包裹）
+        # Extract JSON (may be wrapped in markdown code block)
         json_match = re.search(r'\{[\s\S]*\}', response)
         if json_match:
             response = json_match.group(0)
 
         setting = json.loads(response)
 
-        # 确保 world_id 合法
+        # Ensure world_id is valid
         if not setting.get("world_id") or setting["world_id"] == "modern":
             import hashlib
             setting["world_id"] = "world_" + hashlib.md5(core_theme.encode()).hexdigest()[:8]
 
-        # 确保 world_type
+        # Ensure world_type
         if not setting.get("world_type"):
             setting["world_type"] = world_type
 
         return setting
     except Exception as e:
-        print(f"[SimLife] 世界观生成失败: {e}")
+        print(f"[SimLife] World setting generation failed: {e}")
         return None
 
 
 def get_llm_client(config: dict = None):
-    """获取 LLM 客户端实例（从 SimLife 配置或主项目配置）"""
+    """Get LLM client instance (from SimLife config or main project config)"""
     if config is None:
         config_path = Path(__file__).parent.parent / "data" / "simlife_config.json"
         if config_path.exists():
@@ -150,24 +150,24 @@ def get_llm_client(config: dict = None):
 
 
 def _detect_work_style(occupation: str) -> str:
-    """根据职业描述推断工作模式"""
+    """Infer work style from occupation description"""
     from .character import detect_work_style
     return detect_work_style(occupation).value
 
 
 def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> dict:
     """
-    根据锚点和人格数据生成完整人物卡。
-    根据职业类型自动选择不同的生成模板。
-    返回 CharacterCard dict（不含 basic.name，需后续填充）。
+    Generate complete character card from anchor and personality data.
+    Auto-selects generation template based on occupation type.
+    Returns CharacterCard dict (without basic.name, to be filled later).
     """
     llm = get_llm_client()
 
-    name = anchor.get("character_name", "小AI")
-    city = anchor.get("city", "上海")
-    occupation = anchor.get("occupation_hint", "UI设计师")
+    name = anchor.get("character_name", "AI")
+    city = anchor.get("city", "New York")
+    occupation = anchor.get("occupation_hint", "UI Designer")
     age = anchor.get("age", 24)
-    personality = anchor.get("personality_word", "温柔")
+    personality = anchor.get("personality_word", "gentle")
 
     extra_context = ""
     if agidpa_personality:
@@ -175,11 +175,11 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
         style = agidpa_personality.get("speaking_style", "")
         bg = agidpa_personality.get("background_story", "")
         if traits:
-            extra_context += f"\n性格标签：{', '.join(traits)}"
+            extra_context += f"\npersonality_traits: {', '.join(traits)}"
         if style:
-            extra_context += f"\n说话风格：{style}"
+            extra_context += f"\nSpeaking style: {style}"
         if bg:
-            extra_context += f"\n背景故事：{bg[:100]}"
+            extra_context += f"\nBackground story: {bg[:100]}"
 
     work_style = _detect_work_style(occupation)
 
@@ -192,7 +192,7 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
     else:
         prompt = _build_office_prompt(name, age, city, occupation, personality, extra_context)
 
-    # 注入世界观设定（非现代世界时）
+    # Inject worldview setting (for non-modern world)
     world_ctx = _get_world_context()
     if world_ctx:
         prompt = world_ctx + _get_world_guide("character") + "\n\n" + prompt
@@ -209,33 +209,33 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
 
         card = json.loads(response)
         card["basic"]["name"] = name
-        # 确保有 work_style
+        # Ensure work_style exists
         if "work_style" not in card.get("basic", {}):
             card["basic"]["work_style"] = work_style
         else:
             work_style = card["basic"]["work_style"]
-        # 确保有 work_location_weights
+        # Ensure work_location_weights exists
         if work_style == "freelance" and "work_location_weights" not in card.get("basic", {}):
             card["basic"]["work_location_weights"] = {"home": 50, "cafe": 25, "outdoor": 15, "studio": 10}
-        # 确保有 life_goals
+        # Ensure life_goals exists
         if "life_goals" not in card:
             card["life_goals"] = []
-        # 确保有 work_start/work_end
+        # Ensure work_start/work_end
         if "work_start" not in card.get("daily_schedule", {}):
             card["daily_schedule"]["work_start"] = card["daily_schedule"].get("arrive_work", "10:00")
         if "work_end" not in card.get("daily_schedule", {}):
             card["daily_schedule"]["work_end"] = card["daily_schedule"].get("leave_work", "18:00")
-        # 兼容旧数据：通勤信息
+        # Backward compat: commute info
         if work_style in ("freelance", "remote", "travel") and "commute" not in card:
             card["commute"] = {"method": "", "line": "", "duration_minutes": 0}
-        # 旅行博主：确保有 travel_plan
+        # Travel blogger: ensure travel_plan
         if work_style == "travel" and "travel_plan" not in card:
             card["travel_plan"] = {"enabled": True, "destinations": []}
-        # 兼容旧数据：wardrobe 缺少 travel 字段
+        # Backward compat: wardrobe missing travel field
         if "travel" not in card.get("wardrobe", {}):
-            card.setdefault("wardrobe", {})["travel"] = "轻便旅行装"
-            card.setdefault("wardrobe", {})["travel_en"] = "lightweight travel outfit with backpack"
-        # ── 自动生成生日：性格→星座→随机日期 ──
+            card.setdefault("wardrobe", {})["travel"] = "lightweight travel outfit"
+            card.setdefault("wardrobe", {})["travel_en"] = "lightweight travel outfit with backpack and camera"
+        # -- Auto generate birthday: personality -> zodiac -> random date --
         if "birth_date" not in card.get("basic", {}) or not card["basic"].get("birth_date"):
             from .birthday_engine import auto_generate_birthday
             bd_info = auto_generate_birthday(personality, age)
@@ -243,46 +243,46 @@ def generate_character_card(anchor: dict, agidpa_personality: dict = None) -> di
             card["basic"]["zodiac"] = bd_info["zodiac"]
         return card
     except Exception as e:
-        print(f"[SimLife] 人物卡生成失败: {e}")
+        print(f"[SimLife] Character card generation failed: {e}")
         return None
 
 
 def _build_office_prompt(name, age, city, occupation, personality, extra_context):
-    """上班族生成模板"""
-    return f"""为一个名叫"{name}"的虚拟角色生成详细的人物设定卡。
+    """Office worker generation template"""
+    return f"""Generate a detailed character card for a virtual character named "{name}".
 
-基本信息：
-- 年龄：{age}
-- 城市：{city}
-- 职业：{occupation}（上班族，固定地点工作）
-- 性格关键词：{personality}{extra_context}
+Basic info:
+- Age: {age}
+- City: {city}
+- Occupation: {occupation} (office worker, fixed location)
+- Personality keywords: {personality}{extra_context}
 
-请生成以下信息，返回JSON格式：
+Generate the following information, return in JSON format:
 {{
   "basic": {{
     "age": {age},
     "city": "{city}",
-    "district": "一个{city}真实的区名",
+    "district": "a real district in {city}",
     "occupation": "{occupation}",
     "work_style": "office",
-    "company_name": "一个合理的公司名",
-    "company_area": "一个合理的商务区名",
+    "company_name": "a plausible company name",
+    "company_area": "a plausible business district name",
     "work_location_weights": {{"home": 0, "cafe": 0, "outdoor": 0, "studio": 0}},
-    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
-    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
-    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
-    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
+    "nationality": "Nationality/ethnicity (e.g. american, british, japanese, korean, mixed)",
+    "hair_color": "Hair color (e.g. black, brown, dark brown, blonde)",
+    "eye_color": "Eye color (e.g. brown, dark brown, black, blue)",
+    "body_type": "Body type (e.g. tall and slender, petite, average height, athletic)"
   }},
   "home": {{
-    "type": "合理的户型",
-    "description": "30字以内的住处描述，有生活细节",
+    "type": "plausible home type",
+    "description": "Home description under 30 words with life details",
     "has_roommate": false,
-    "pets": "如果没有宠物写空字符串"
+    "pets": "Pet names or empty string if none"
   }},
   "family": {{
-    "parents_location": "一个合理的城市",
-    "contact_frequency": "合理的联系频率",
-    "notes": "一个家庭小细节"
+    "parents_location": "a plausible city",
+    "contact_frequency": "a plausible contact frequency",
+    "notes": "a small family detail"
   }},
   "daily_schedule": {{
     "wake_up": "07:30",
@@ -297,44 +297,44 @@ def _build_office_prompt(name, age, city, occupation, personality, extra_context
     "work_end": "18:30"
   }},
   "commute": {{
-    "method": "地铁/公交/骑车",
-    "line": "具体线路",
-    "duration_minutes": 30
+    "method": "subway/bus/bike",
+    "line": "specific route line",
+    "duration_minutes": "commute duration in minutes"
   }},
   "locations": {{
-    "home_address_hint": "一个{city}真实的路名附近",
-    "company_landmark": "一个{city}真实的地标",
-    "favorite_cafe": "一个真实的咖啡馆名",
-    "supermarket": "一个真实的超市名",
-    "park": "一个真实的公园名",
-    "weekend_hangout": "一个真实的商圈/街道名",
-    "frequent_outdoor_spots": ""
+    "home_address_hint": "a real street near {city}",
+    "company_landmark": "a real landmark in {city}",
+    "favorite_cafe": "a real cafe name",
+    "supermarket": "a real supermarket name",
+    "park": "a real park name",
+    "weekend_hangout": "a real shopping/street name",
+    "frequent_outdoor_spots": "frequently visited outdoor spots"
   }},
   "habits": {{
-    "morning_drink": "早上的饮品",
-    "lunch_style": "午餐习惯",
-    "evening_routine": "晚上做什么",
-    "weekend_morning": "周末早上"
+    "morning_drink": "morning drink preference",
+    "lunch_style": "lunch habits",
+    "evening_routine": "evening routine",
+    "weekend_morning": "weekend morning routine"
   }},
-  "current_context": "最近在忙什么，30字以内",
+  "current_context": "What they are busy with lately, under 30 words",
   "pixel_appearance": {{
-    "hair_color": "#十六进制颜色",
-    "hair_style": "发型",
-    "default_outfit_color": "#十六进制颜色"
+    "hair_color": "#hex color",
+    "hair_style": "hairstyle",
+    "default_outfit_color": "#hex color"
   }},
   "life_goals": [
-    {{"category": "事业", "description": "一个职业相关的短期目标", "target_date": "", "progress": 0, "priority": 1}},
-    {{"category": "生活", "description": "一个生活相关的目标（如考驾照、学游泳、练肌肉、画油画、种花、学做饭等）", "target_date": "", "progress": 0, "priority": 2}},
-    {{"category": "学习", "description": "一个学习成长相关的目标", "target_date": "", "progress": 0, "priority": 3}}
+    {{"category": "Career", "description": "a short-term career-related goal", "target_date": "", "progress": 0, "priority": 1}},
+    {{"category": "Life", "description": "a lifestyle goal (e.g. get drivers license, learn swimming, workout, learn painting, gardening, cooking)", "target_date": "", "progress": 0, "priority": 2}},
+    {{"category": "Learning", "description": "a learning/growth goal", "target_date": "", "progress": 0, "priority": 3}}
   ],
   "wardrobe": {{
-    "home": "在家穿的舒适衣物（中文描述，10字以内）",
-    "work": "上班穿的正式或商务休闲装（中文描述）",
-    "casual": "日常出门穿的休闲装（中文描述）",
-    "outdoor": "户外活动穿的穿搭（中文描述）",
-    "formal": "正式场合穿的着装（中文描述）",
-    "sport": "运动健身穿的服装（中文描述）",
-    "sleep": "睡觉穿的睡衣（中文描述）",
+    "home": "Comfortable home clothes (short English description)",
+    "work": "Office or business casual outfit (short English description)",
+    "casual": "Casual everyday outfit (short English description)",
+    "outdoor": "Outdoor activity outfit (short English description)",
+    "formal": "Formal occasion attire (short English description)",
+    "sport": "Sports/workout clothes (short English description)",
+    "sleep": "Sleepwear/pajamas (short English description)",
     "home_en": "English description of home outfit for image generation",
     "work_en": "English description of work outfit",
     "casual_en": "English description of casual outfit",
@@ -345,64 +345,64 @@ def _build_office_prompt(name, age, city, occupation, personality, extra_context
   }}
 }}
 
-只返回JSON，不要其他内容。所有地点必须是{city}真实存在的。人生目标要具体有趣，不要太空泛。wardrobe 要符合角色的性别、年龄和风格偏好——如果角色是男性，穿着应偏向男性化；如果性格偏运动风，户外和运动装应更具体。"""
+Return only JSON, no other content. All locations must be real places in {city}. Life goals should be specific and interesting. Wardrobe should match the character's gender, age, and style preferences. If the character is athletic, outdoor and sport outfits should be more detailed."""
 
 
 def _build_freelance_prompt(name, age, city, occupation, personality, extra_context):
-    """自由职业生成模板"""
-    return f"""为一个名叫"{name}"的虚拟角色生成详细的人物设定卡。
+    """Freelance generation template"""
+    return f"""Generate a detailed character card for a virtual character named "{name}".
 
-基本信息：
-- 年龄：{age}
-- 城市：{city}
-- 职业：{occupation}（自由职业/独立工作者，时间地点灵活）
-- 性格关键词：{personality}{extra_context}
+Basic info:
+- Age: {age}
+- City: {city}
+- Occupation: {occupation} (freelancer/independent worker, flexible schedule)
+- Personality keywords: {personality}{extra_context}
 
-重要：这是一个自由职业者，没有固定公司，不需要每天通勤。请根据具体职业生成合理的生活节奏。
+Important: This is a freelancer with no fixed company, no daily commute. Generate a reasonable life rhythm based on their specific occupation.
 
-请生成以下信息，返回JSON格式：
+Generate the following information, return in JSON format:
 {{
   "basic": {{
     "age": {age},
     "city": "{city}",
-    "district": "一个{city}真实的区名",
+    "district": "a real district in {city}",
     "occupation": "{occupation}",
     "work_style": "freelance",
     "company_name": "",
     "company_area": "",
     "work_location_weights": {{
-      "home": "在家工作的频率权重（整数0-100）",
-      "cafe": "咖啡馆工作的频率权重（整数0-100）",
-      "outdoor": "户外工作（拍摄/采访等）的频率权重（整数0-100）",
-      "studio": "工作室的频率权重（整数0-100）"
+      "home": "frequency weight for working at home (integer 0-100)",
+      "cafe": "frequency weight for working at cafes (integer 0-100)",
+      "outdoor": "frequency weight for outdoor work (shooting/interviews etc) (integer 0-100)",
+      "studio": "frequency weight for working at a studio (integer 0-100)"
     }},
-    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
-    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
-    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
-    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
+    "nationality": "Nationality/ethnicity (e.g. american, british, japanese, korean, mixed)",
+    "hair_color": "Hair color (e.g. black, brown, dark brown, blonde)",
+    "eye_color": "Eye color (e.g. brown, dark brown, black, blue)",
+    "body_type": "Body type (e.g. tall and slender, petite, average height, athletic)"
   }},
   "home": {{
-    "type": "合理的户型（自由职业者可能有一间书房或工作区）",
-    "description": "30字以内的住处描述，要体现自由职业者的生活气息",
+    "type": "plausible home type (freelancers may have a study or workspace)",
+    "description": "Home description under 30 words reflecting freelance lifestyle",
     "has_roommate": false,
-    "pets": "如果有宠物会更有生活感，没有写空字符串"
+    "pets": "Having a pet adds life flavor, empty string if none"
   }},
   "family": {{
-    "parents_location": "一个合理的城市",
-    "contact_frequency": "合理的联系频率",
-    "notes": "家人对这个职业的态度，一个小细节"
+    "parents_location": "a plausible city",
+    "contact_frequency": "a plausible contact frequency",
+    "notes": "Family's attitude toward this career, a small detail"
   }},
   "daily_schedule": {{
-    "wake_up": "合理的起床时间（自由职业者通常比上班族晚）",
+    "wake_up": "reasonable wake-up time (freelancers usually wake later than office workers)",
     "leave_home": "10:00",
     "arrive_work": "10:30",
     "lunch_break_start": "12:30",
     "lunch_break_end": "14:00",
     "leave_work": "19:00",
     "arrive_home": "19:00",
-    "sleep": "合理的睡觉时间（可能比上班族晚）",
-    "work_start": "实际开始工作的时间",
-    "work_end": "实际结束工作的时间"
+    "sleep": "reasonable bedtime (may be later than office workers)",
+    "work_start": "actual work start time",
+    "work_end": "actual work end time"
   }},
   "commute": {{
     "method": "",
@@ -410,40 +410,40 @@ def _build_freelance_prompt(name, age, city, occupation, personality, extra_cont
     "duration_minutes": 0
   }},
   "locations": {{
-    "home_address_hint": "一个{city}真实的路名附近",
+    "home_address_hint": "a real street near {city}",
     "company_landmark": "",
-    "favorite_cafe": "常去办公的咖啡馆名",
-    "supermarket": "一个真实的超市名",
-    "park": "一个真实的公园名（常去放松/找灵感的地方）",
-    "weekend_hangout": "一个真实的商圈/街道名",
-    "frequent_outdoor_spots": "常去的工作相关户外地点（如拍摄地、采访地点等）"
+    "favorite_cafe": "favorite cafe to work from",
+    "supermarket": "a real supermarket name",
+    "park": "a real park name (place to relax/find inspiration)",
+    "weekend_hangout": "a real shopping district/street name",
+    "frequent_outdoor_spots": "frequently visited work-related outdoor locations (shooting sites, interview spots, etc.)"
   }},
   "habits": {{
-    "morning_drink": "早上的饮品",
-    "lunch_style": "午餐习惯（可能自己做、点外卖或去附近小店）",
-    "evening_routine": "晚上的放松方式",
-    "weekend_morning": "周末早上的习惯"
+    "morning_drink": "morning drink preference",
+    "lunch_style": "lunch habits (cook at home, takeout, or nearby eateries)",
+    "evening_routine": "evening relaxation routine",
+    "weekend_morning": "weekend morning habit"
   }},
-  "current_context": "最近在忙什么项目/创作，30字以内",
+  "current_context": "What project/creation they are busy with lately, under 30 words",
   "pixel_appearance": {{
-    "hair_color": "#十六进制颜色",
-    "hair_style": "发型",
-    "default_outfit_color": "#十六进制颜色"
+    "hair_color": "#hex color",
+    "hair_style": "hairstyle",
+    "default_outfit_color": "#hex color"
   }},
   "life_goals": [
-    {{"category": "事业", "description": "一个与{occupation}直接相关的目标（如粉丝量、接单量、作品数等）", "target_date": "", "progress": 0, "priority": 1}},
-    {{"category": "生活", "description": "一个个人生活目标（从以下选一个或自创：考驾照、学游泳、练肌肉、画油画、种花、学做饭、养猫、旅行计划、学吉他、学跳舞、考个证书等）", "target_date": "", "progress": 0, "priority": 2}},
-    {{"category": "健康", "description": "一个健康相关目标（如跑步、健身、早睡、少吃外卖等）", "target_date": "", "progress": 0, "priority": 3}},
-    {{"category": "理财", "description": "一个理财目标（如攒钱买设备、月收入达到多少等）", "target_date": "", "progress": 0, "priority": 4}}
+    {{"category": "Career", "description": "a goal directly related to {occupation} (e.g. follower count, client volume, portfolio pieces)", "target_date": "", "progress": 0, "priority": 1}},
+    {{"category": "Life", "description": "a personal life goal (e.g. get drivers license, learn swimming, workout, learn painting, gardening, cooking, get a pet, travel plan, learn guitar, learn to dance, get a certificate)", "target_date": "", "progress": 0, "priority": 2}},
+    {{"category": "Health", "description": "a health-related goal (e.g. running, fitness, sleep earlier, less takeout)", "target_date": "", "progress": 0, "priority": 3}},
+    {{"category": "Finance", "description": "a financial goal (e.g. save for equipment, reach monthly income target)", "target_date": "", "progress": 0, "priority": 4}}
   ],
   "wardrobe": {{
-    "home": "在家穿的舒适衣物（自由职业者可能一整天穿家居服，中文描述）",
-    "work": "见客户或正式工作时的着装（自由职业者不一定穿正装，符合职业风格）",
-    "casual": "出门闲逛、去咖啡馆的穿搭",
-    "outdoor": "外出拍摄/采访/运动的穿搭（根据具体职业调整）",
-    "formal": "正式场合或约会时的着装",
-    "sport": "运动健身的服装",
-    "sleep": "睡衣",
+    "home": "Comfortable home clothes (freelancers may wear loungewear all day, short English description)",
+    "work": "Outfit for meeting clients or formal work (freelancers may not wear suits, match occupation style)",
+    "casual": "Going out to cafes or hanging out outfit",
+    "outdoor": "Outdoor shooting/interview/sports outfit (adjust based on occupation)",
+    "formal": "Formal occasion or date outfit",
+    "sport": "Sports/workout clothes",
+    "sleep": "Sleepwear",
     "home_en": "English description for image generation",
     "work_en": "English work outfit description",
     "casual_en": "English casual outfit",
@@ -454,97 +454,97 @@ def _build_freelance_prompt(name, age, city, occupation, personality, extra_cont
   }}
 }}
 
-只返回JSON，不要其他内容。所有地点必须是{city}真实存在的。时刻表要符合自由职业者的真实节奏，不要照搬上班族。人生目标要具体有趣、贴合{occupation}这个职业特点。wardrobe 要符合角色的性别、年龄和职业风格。"""
+Return only JSON, no other content. All locations must be real places in {city}. Schedule should match a freelancer's real rhythm, not copy the office worker template. Life goals should be specific and interesting, fitting {occupation} as an occupation. Wardrobe should match the character's gender, age and occupation style."""
 
 
 def _build_student_prompt(name, age, city, occupation, personality, extra_context):
-    """学生生成模板"""
-    return f"""为一个名叫"{name}"的虚拟角色生成详细的人物设定卡。
+    """Student generation template"""
+    return f"""Generate a detailed character card for a virtual character named "{name}".
 
-基本信息：
-- 年龄：{age}
-- 城市：{city}
-- 职业：{occupation}（学生）
-- 性格关键词：{personality}{extra_context}
+Basic info:
+- Age: {age}
+- City: {city}
+- Occupation: {occupation} (student)
+- Personality keywords: {personality}{extra_context}
 
-请生成以下信息，返回JSON格式：
+Generate the following information, return in JSON format:
 {{
   "basic": {{
     "age": {age},
     "city": "{city}",
-    "district": "一个{city}真实的区名（大学城附近）",
+    "district": "a real district in {city} (near university area)",
     "occupation": "{occupation}",
     "work_style": "student",
-    "company_name": "所在学校名",
-    "company_area": "学校所在区域",
+    "company_name": "school/university name",
+    "company_area": "school location area",
     "work_location_weights": {{"home": 40, "cafe": 25, "outdoor": 5, "studio": 0}},
-    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
-    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
-    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
-    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
+    "nationality": "Nationality/ethnicity (e.g. american, british, japanese, korean, mixed)",
+    "hair_color": "Hair color (e.g. black, brown, dark brown, blonde)",
+    "eye_color": "Eye color (e.g. brown, dark brown, black, blue)",
+    "body_type": "Body type (e.g. tall and slender, petite, average height, athletic)"
   }},
   "home": {{
-    "type": "宿舍/出租屋",
-    "description": "30字以内的住处描述",
+    "type": "dorm/rental apartment",
+    "description": "Home description under 30 words",
     "has_roommate": true,
     "pets": ""
   }},
   "family": {{
-    "parents_location": "一个合理的城市",
-    "contact_frequency": "合理的联系频率",
-    "notes": "一个家庭小细节"
+    "parents_location": "a plausible city",
+    "contact_frequency": "a plausible contact frequency",
+    "notes": "a small family detail"
   }},
   "daily_schedule": {{
-    "wake_up": "合理的起床时间",
-    "leave_home": "上课出发时间",
-    "arrive_work": "到教室/图书馆时间",
+    "wake_up": "reasonable wake-up time",
+    "leave_home": "time to head to class",
+    "arrive_work": "time to arrive at classroom/library",
     "lunch_break_start": "12:00",
     "lunch_break_end": "13:00",
-    "leave_work": "下课时间",
-    "arrive_home": "回宿舍/家时间",
-    "sleep": "合理的睡觉时间",
-    "work_start": "开始自习时间",
-    "work_end": "结束自习时间"
+    "leave_work": "time class ends",
+    "arrive_home": "time back to dorm/home",
+    "sleep": "reasonable bedtime",
+    "work_start": "self-study start time",
+    "work_end": "self-study end time"
   }},
   "commute": {{
-    "method": "步行/骑车/地铁",
-    "line": "具体线路（如有）",
+    "method": "walking/biking/subway",
+    "line": "specific route (if applicable)",
     "duration_minutes": 15
   }},
   "locations": {{
-    "home_address_hint": "一个{city}真实的路名附近",
-    "company_landmark": "学校名",
-    "favorite_cafe": "常去的咖啡馆名",
-    "supermarket": "一个真实的超市名",
-    "park": "一个真实的公园名",
-    "weekend_hangout": "一个真实的商圈/街道名",
+    "home_address_hint": "a real street near {city}",
+    "company_landmark": "school/university name",
+    "favorite_cafe": "favorite cafe name",
+    "supermarket": "a real supermarket name",
+    "park": "a real park name",
+    "weekend_hangout": "a real shopping district/street name",
     "frequent_outdoor_spots": ""
   }},
   "habits": {{
-    "morning_drink": "早上的饮品",
-    "lunch_style": "食堂/外卖/校外小店",
-    "evening_routine": "晚上的放松方式",
-    "weekend_morning": "周末早上"
+    "morning_drink": "morning drink preference",
+    "lunch_style": "cafeteria/takeout/off-campus eateries",
+    "evening_routine": "evening relaxation routine",
+    "weekend_morning": "weekend morning routine"
   }},
-  "current_context": "最近在忙什么（如考试、论文、社团等），30字以内",
+  "current_context": "What they are busy with lately (exams, thesis, clubs etc.), under 30 words",
   "pixel_appearance": {{
-    "hair_color": "#十六进制颜色",
-    "hair_style": "发型",
-    "default_outfit_color": "#十六进制颜色"
+    "hair_color": "#hex color",
+    "hair_style": "hairstyle",
+    "default_outfit_color": "#hex color"
   }},
   "life_goals": [
-    {{"category": "学业", "description": "一个学业目标（如考研、考级、GPA等）", "target_date": "", "progress": 0, "priority": 1}},
-    {{"category": "生活", "description": "一个生活目标（如学游泳、考驾照、旅行、学乐器等）", "target_date": "", "progress": 0, "priority": 2}},
-    {{"category": "社交", "description": "一个社交目标（如参加社团、脱单等）", "target_date": "", "progress": 0, "priority": 3}}
+    {{"category": "Academics", "description": "an academic goal (e.g. grad school, certifications, GPA)", "target_date": "", "progress": 0, "priority": 1}},
+    {{"category": "Life", "description": "a life goal (e.g. learn swimming, get drivers license, travel, learn an instrument)", "target_date": "", "progress": 0, "priority": 2}},
+    {{"category": "Social", "description": "a social goal (e.g. join a club, make new friends)", "target_date": "", "progress": 0, "priority": 3}}
   ],
   "wardrobe": {{
-    "home": "在宿舍/出租屋穿的舒适衣物（中文描述）",
-    "work": "上课穿的日常服装（学生不需要正装，符合学生风格）",
-    "casual": "周末出门穿的休闲装",
-    "outdoor": "户外运动或活动的穿搭",
-    "formal": "参加活动/面试/正式场合的着装",
-    "sport": "运动健身的服装",
-    "sleep": "睡衣",
+    "home": "Comfortable clothes for dorm/apartment (short English description)",
+    "work": "Daily outfit for class (student style, no need for formal wear)",
+    "casual": "Weekend casual outfit",
+    "outdoor": "Outdoor sports/activity outfit",
+    "formal": "Outfit for events/interviews/formal occasions",
+    "sport": "Sports/workout clothes",
+    "sleep": "Sleepwear",
     "home_en": "English description for image generation",
     "work_en": "English daily outfit for class",
     "casual_en": "English casual outfit",
@@ -555,58 +555,58 @@ def _build_student_prompt(name, age, city, occupation, personality, extra_contex
   }}
 }}
 
-只返回JSON，不要其他内容。所有地点必须是{city}真实存在的。wardrobe 要符合学生的性别和风格，不要生成过于成熟的职业装。"""
+Return only JSON, no other content. All locations must be real places in {city}. Wardrobe should match the student's gender and style, avoid overly mature business attire."""
 
 
 def _build_travel_prompt(name, age, city, occupation, personality, extra_context):
-    """旅行博主生成模板"""
-    return f"""为一个名叫"{name}"的虚拟角色生成详细的人物设定卡。
+    """Travel blogger generation template"""
+    return f"""Generate a detailed character card for a virtual character named "{name}".
 
-基本信息：
-- 年龄：{age}
-- 基地城市：{city}（旅行出发地和平时居住地）
-- 职业：{occupation}（旅行博主/旅游自媒体，常年全世界旅行拍视频）
-- 性格关键词：{personality}{extra_context}
+Basic info:
+- Age: {age}
+- Base city: {city} (home base and travel departure point)
+- Occupation: {occupation} (travel blogger/travel influencer, travels worldwide filming videos)
+- Personality keywords: {personality}{extra_context}
 
-重要：这是一个旅行博主，生活节奏不固定，经常在不同城市和国家之间穿梭。
-没有固定公司，工作时间就是旅行和拍摄时间。{city}是她的基地城市，不旅行时住在那里。
+Important: This is a travel blogger with an irregular schedule, frequently moving between cities and countries.
+No fixed company; work time equals travel and filming time. {city} is their home base where they stay when not traveling.
 
-请生成以下信息，返回JSON格式：
+Generate the following information, return in JSON format:
 {{
   "basic": {{
     "age": {age},
     "city": "{city}",
-    "district": "一个{city}真实的区名",
+    "district": "a real district in {city}",
     "occupation": "{occupation}",
     "work_style": "travel",
     "company_name": "",
     "company_area": "",
     "work_location_weights": {{"home": 20, "cafe": 10, "outdoor": 60, "studio": 10}},
-    "nationality": "国籍/种族（英文，如 chinese, japanese, korean, mixed asian）",
-    "hair_color": "发色（英文，如 black, brown, dark brown, blonde）",
-    "eye_color": "眼睛颜色（英文，如 brown, dark brown, black）",
-    "body_type": "身材描述（英文，如 tall and slender, petite, average height, athletic）"
+    "nationality": "Nationality/ethnicity (e.g. american, british, japanese, korean, mixed)",
+    "hair_color": "Hair color (e.g. black, brown, dark brown, blonde)",
+    "eye_color": "Eye color (e.g. brown, dark brown, black, blue)",
+    "body_type": "Body type (e.g. tall and slender, petite, average height, athletic)"
   }},
   "home": {{
-    "type": "合理的户型（可能不大，因为大部分时间在外面）",
-    "description": "30字以内的住处描述，可以有点凌乱有生活感",
+    "type": "plausible home type (may be small since they travel most of the time)",
+    "description": "Home description under 30 words, can be slightly messy with a lived-in feel",
     "has_roommate": false,
-    "pets": "如果有的话会更有趣，没有写空字符串"
+    "pets": "Having one would be more interesting, empty string if none"
   }},
   "family": {{
-    "parents_location": "一个合理的城市",
-    "contact_frequency": "合理的联系频率",
-    "notes": "家人对常年旅行这个职业的态度，一个小细节"
+    "parents_location": "a plausible city",
+    "contact_frequency": "a plausible contact frequency",
+    "notes": "Family's attitude toward the constant-travel career, a small detail"
   }},
   "daily_schedule": {{
-    "wake_up": "合理的起床时间（旅行时可能比平时晚或早起赶行程）",
+    "wake_up": "reasonable wake-up time (may wake later or earlier for travel schedule)",
     "leave_home": "09:00",
     "arrive_work": "10:00",
     "lunch_break_start": "12:00",
     "lunch_break_end": "13:30",
     "leave_work": "18:00",
     "arrive_home": "19:00",
-    "sleep": "合理的睡觉时间",
+    "sleep": "reasonable bedtime",
     "work_start": "10:00",
     "work_end": "18:00"
   }},
@@ -616,76 +616,76 @@ def _build_travel_prompt(name, age, city, occupation, personality, extra_context
     "duration_minutes": 0
   }},
   "locations": {{
-    "home_address_hint": "一个{city}真实的路名附近",
+    "home_address_hint": "a real street near {city}",
     "company_landmark": "",
-    "favorite_cafe": "常去的咖啡馆名",
-    "supermarket": "一个真实的超市名",
-    "park": "一个真实的公园名",
-    "weekend_hangout": "一个真实的商圈/街道名",
-    "frequent_outdoor_spots": "常去拍摄或取景的地方"
+    "favorite_cafe": "favorite cafe name",
+    "supermarket": "a real supermarket name",
+    "park": "a real park name",
+    "weekend_hangout": "a real shopping district/street name",
+    "frequent_outdoor_spots": "frequent filming/shooting locations"
   }},
   "habits": {{
-    "morning_drink": "早上的饮品（旅途中可能是当地特色咖啡或茶）",
-    "lunch_style": "午餐习惯（旅行时喜欢尝试当地美食）",
-    "evening_routine": "晚上的放松方式（整理素材、剪辑视频）",
-    "weekend_morning": "不旅行时周末早上的习惯"
+    "morning_drink": "morning drink (local specialty coffee or tea while traveling)",
+    "lunch_style": "lunch habits (loves trying local cuisine while traveling)",
+    "evening_routine": "evening routine (sorting footage, editing videos)",
+    "weekend_morning": "weekend morning routine when not traveling"
   }},
-  "current_context": "最近在忙什么旅行项目，30字以内",
+  "current_context": "What travel project they are busy with lately, under 30 words",
   "pixel_appearance": {{
-    "hair_color": "#十六进制颜色",
-    "hair_style": "发型",
-    "default_outfit_color": "#十六进制颜色"
+    "hair_color": "#hex color",
+    "hair_style": "hairstyle",
+    "default_outfit_color": "#hex color"
   }},
   "life_goals": [
-    {{"category": "事业", "description": "一个与{occupation}直接相关的目标（如粉丝量、去过多少国家、合作了多少品牌等）", "target_date": "", "progress": 0, "priority": 1}},
-    {{"category": "生活", "description": "一个个人生活目标（如学一门新语言、考潜水证、学冲浪等）", "target_date": "", "progress": 0, "priority": 2}},
-    {{"category": "健康", "description": "一个健康目标（旅行博主经常作息不规律，可能是调整作息等）", "target_date": "", "progress": 0, "priority": 3}},
-    {{"category": "旅行", "description": "一个旅行目标（如去南极、走完丝绸之路、自驾环游等）", "target_date": "", "progress": 0, "priority": 4}}
+    {{"category": "Career", "description": "a goal directly related to {occupation} (e.g. follower count, countries visited, brand collaborations)", "target_date": "", "progress": 0, "priority": 1}},
+    {{"category": "Life", "description": "a personal life goal (e.g. learn a new language, get scuba certified, learn surfing)", "target_date": "", "progress": 0, "priority": 2}},
+    {{"category": "Health", "description": "a health goal (travel bloggers often have irregular sleep, could be fixing sleep schedule)", "target_date": "", "progress": 0, "priority": 3}},
+    {{"category": "Travel", "description": "a travel goal (e.g. visit Antarctica, complete the Silk Road, road trip around a continent)", "target_date": "", "progress": 0, "priority": 4}}
   ],
   "travel_plan": {{
     "enabled": true,
     "destinations": [
       {{
-        "city": "一个真实的旅行目的地城市",
+        "city": "a real travel destination city",
         "city_en": "English city name",
-        "country": "国家名",
-        "start_date": "从明天开始的一个日期，格式YYYY-MM-DD",
-        "end_date": "4-7天后的日期，格式YYYY-MM-DD",
-        "spots": ["该城市3-5个真实景点名"],
-        "purpose": "这次旅行的目的（拍vlog、探店、体验文化等）",
+        "country": "country name",
+        "start_date": "a date starting tomorrow, format YYYY-MM-DD",
+        "end_date": "a date 4-7 days later, format YYYY-MM-DD",
+        "spots": ["3-5 real landmark names in that city"],
+        "purpose": "purpose of this trip (vlog filming, food exploration, cultural experience, etc.)",
         "mood_bonus": 15
       }},
       {{
-        "city": "另一个不同的国家城市",
+        "city": "another different city in another country",
         "city_en": "English city name",
-        "country": "国家名",
-        "start_date": "10-15天后的日期",
-        "end_date": "14-18天后的日期",
-        "spots": ["该城市3-5个真实景点名"],
-        "purpose": "旅行目的",
+        "country": "country name",
+        "start_date": "a date 10-15 days from now",
+        "end_date": "a date 14-18 days from now",
+        "spots": ["3-5 real landmark names in that city"],
+        "purpose": "travel purpose",
         "mood_bonus": 18
       }},
       {{
-        "city": "第三个目的地",
+        "city": "a third destination",
         "city_en": "English city name",
-        "country": "国家名",
-        "start_date": "20-25天后的日期",
-        "end_date": "24-30天后的日期",
-        "spots": ["该城市3-5个真实景点名"],
-        "purpose": "旅行目的",
+        "country": "country name",
+        "start_date": "a date 20-25 days from now",
+        "end_date": "a date 24-30 days from now",
+        "spots": ["3-5 real landmark names in that city"],
+        "purpose": "travel purpose",
         "mood_bonus": 20
       }}
     ]
   }},
   "wardrobe": {{
-    "home": "在基地城市家穿的舒适衣物（中文描述）",
-    "work": "见品牌方或正式工作时的着装",
-    "casual": "出门闲逛的穿搭",
-    "outdoor": "旅行拍摄时的穿搭（防晒、舒适、便于活动）",
-    "formal": "品牌活动或正式场合的着装",
-    "sport": "运动健身的服装",
-    "sleep": "睡衣",
-    "travel": "旅行标志性穿搭（如带有摄影师风格：马甲+工装裤+运动鞋）",
+    "home": "Comfortable home clothes at base city (short English description)",
+    "work": "Outfit for meeting brands or formal work",
+    "casual": "Casual going-out outfit",
+    "outdoor": "Travel filming outfit (sun protection, comfortable, easy to move in)",
+    "formal": "Brand event or formal occasion outfit",
+    "sport": "Sports/workout clothes",
+    "sleep": "Sleepwear",
+    "travel": "Signature travel look (e.g. photographer style: vest + cargo pants + sneakers)",
     "home_en": "English description for image generation",
     "work_en": "English work outfit description",
     "casual_en": "English casual outfit",
@@ -697,226 +697,226 @@ def _build_travel_prompt(name, age, city, occupation, personality, extra_context
   }}
 }}
 
-只返回JSON，不要其他内容。
-- 基地城市{city}的地点必须真实存在。
-- travel_plan 里的目的地城市和景点必须是真实存在的。
-- 日期从明天开始依次排列，每次旅行4-7天，之间间隔3-5天。
-- wardrobe 的 travel 穿搭要体现旅行博主特色（实用、便于拍摄、有辨识度）。
-- life_goals 要具体有趣，贴合旅行博主这个职业。"""
+Return only JSON, no other content. 
+- Base city {city} locations must be real.
+- Destination cities and landmarks in travel_plan must be real.
+- Dates are sequential starting from tomorrow, each trip 4-7 days, with 3-5 day gaps between.
+- Wardrobe travel outfit should reflect travel blogger style (practical, filming-friendly, distinctive).
+- Life goals should be specific and interesting, fitting the travel blogger occupation."""
 
 
 def generate_npc_cards(character_card: dict) -> list:
-    """根据主角人物卡生成 NPC 网络（根据工作模式调整）"""
+    """Generate NPC network based on character card (adapts to work style)"""
     llm = get_llm_client()
 
     name = character_card.get("basic", {}).get("name", "")
     age = character_card.get("basic", {}).get("age", 24)
     occupation = character_card.get("basic", {}).get("occupation", "")
-    city = character_card.get("basic", {}).get("city", "上海")
+    city = character_card.get("basic", {}).get("city", "New York")
     district = character_card.get("basic", {}).get("district", "")
     work_style = character_card.get("basic", {}).get("work_style", "office")
 
     if work_style == "freelance":
-        prompt = f"""为主角"{name}"生成一个丰富真实的人际圈。
+        prompt = f"""Generate a rich, realistic social circle for the protagonist "{name}".
 
-主角信息：{age}岁，{occupation}（自由职业者），住在{city}{district}。
-自由职业者的人际圈不同于上班族，通常有客户、合作者、同行朋友等。
+Protagonist info: {age} years old, {occupation} (freelancer), living in {city}{district}.
+Freelancers' social circles differ from office workers - they usually have clients, collaborators, fellow freelancers, etc.
 
-请生成以下NPC，返回JSON数组（必须包含所有角色）：
+Generate the following NPCs, return a JSON array (must include all characters):
 [
   {{
     "id": "npc_bestfriend",
-    "relation": "好友",
-    "name": "一个{city}常见名字",
+    "relation": "Best friend",
+    "name": "a common name in {city}",
     "age": 25,
-    "occupation": "合理的职业（可以是其他自由职业者）",
-    "personality_word": "性格词（如开朗、细腻等）",
-    "contact_frequency": "见面频率",
+    "occupation": "a plausible occupation (could be another freelancer)",
+    "personality_word": "personality word (e.g. cheerful, thoughtful, etc.)",
+    "contact_frequency": "how often they meet",
     "appear_scenes": ["CAFE", "STREET_WANDERING", "PARK", "FRIEND_HANGOUT", "CAFE_WORKING"],
     "event_pool": ["invite_hangout", "share_good_news"],
     "pixel_variant": "npc_f_01"
   }},
   {{
     "id": "npc_client",
-    "relation": "客户",
-    "name": "一个常见名字",
+    "relation": "Client",
+    "name": "a common name",
     "age": 30,
-    "occupation": "合理的行业",
-    "personality_word": "性格词",
-    "contact_frequency": "项目期间频繁",
+    "occupation": "a plausible industry",
+    "personality_word": "personality word",
+    "contact_frequency": "frequent during projects",
     "appear_scenes": ["CAFE_WORKING", "CAFE"],
     "event_pool": ["new_project", "payment_delay"],
     "pixel_variant": "npc_f_02"
   }},
   {{
     "id": "npc_collaborator",
-    "relation": "合作者",
-    "name": "一个常见名字",
+    "relation": "Collaborator",
+    "name": "a common name",
     "age": 27,
-    "occupation": "相关行业的自由职业者",
-    "personality_word": "性格词",
-    "contact_frequency": "偶尔合作",
+    "occupation": "a freelancer in a related field",
+    "personality_word": "personality word",
+    "contact_frequency": "occasional collaboration",
     "appear_scenes": ["CAFE_WORKING", "CAFE", "HOME_WORKING"],
     "event_pool": ["collaboration_opportunity", "share_resource"],
     "pixel_variant": "npc_m_01"
   }},
   {{
     "id": "npc_mom",
-    "relation": "妈妈",
-    "name": "不显示",
+    "relation": "Mother",
+    "name": "N/A",
     "age": {age + random.randint(25, 32)},
     "occupation": "",
-    "personality_word": "关心",
-    "contact_frequency": "每周视频",
+    "personality_word": "caring",
+    "contact_frequency": "weekly video call",
     "appear_scenes": [],
     "event_pool": ["video_call", "send_recipe"],
     "pixel_variant": null
   }},
   {{
     "id": "npc_dad",
-    "relation": "爸爸",
-    "name": "不显示",
+    "relation": "Father",
+    "name": "N/A",
     "age": {age + random.randint(27, 34)},
     "occupation": "",
-    "personality_word": "沉稳内敛",
-    "contact_frequency": "偶尔视频",
+    "personality_word": "reserved and steady",
+    "contact_frequency": "occasional video call",
     "appear_scenes": [],
     "event_pool": ["video_call", "send_money"],
     "pixel_variant": null
   }},
   {{
     "id": "npc_roommate",
-    "relation": "大学室友",
-    "name": "一个{city}常见名字",
+    "relation": "College roommate",
+    "name": "a common name in {city}",
     "age": {age},
-    "occupation": "合理职业",
-    "personality_word": "活泼古怪",
-    "contact_frequency": "每月见面",
+    "occupation": "a plausible occupation",
+    "personality_word": "lively and quirky",
+    "contact_frequency": "monthly meetup",
     "appear_scenes": ["CAFE", "FRIEND_HANGOUT", "STREET_WANDERING"],
     "event_pool": ["invite_hangout", "share_good_news", "catch_up"],
     "pixel_variant": "npc_f_03"
   }},
   {{
     "id": "npc_neighbor",
-    "relation": "邻居",
-    "name": "一个常见名字",
+    "relation": "Neighbor",
+    "name": "a common name",
     "age": {age + random.randint(0, 3)},
-    "occupation": "合理的职业",
-    "personality_word": "佛系随和",
-    "contact_frequency": "偶尔碰面",
+    "occupation": "a plausible occupation",
+    "personality_word": "easygoing and chill",
+    "contact_frequency": "occasionally run into each other",
     "appear_scenes": ["HOME_MORNING", "HOME_EVENING", "STREET_WANDERING"],
     "event_pool": ["borrow_thing", "share_good_news"],
     "pixel_variant": "npc_f_04"
   }}
 ]
 
-只返回JSON数组，不要其他内容。人名使用{city}常见名字风格。age 可以适当微调（±2岁）。"""
+Return only JSON array, no other content. Names should use {city} common name styles. Age can be fine-tuned (±2 years)."""
     else:
-        prompt = f"""为主角"{name}"生成一个丰富真实的人际圈。
+        prompt = f"""Generate a rich, realistic social circle for the protagonist "{name}".
 
-主角信息：{age}岁，{occupation}，住在{city}{district}。
+Protagonist info: {age} years old, {occupation}, living in {city}{district}.
 
-请生成以下NPC，返回JSON数组（必须包含所有角色）：
+Generate the following NPCs, return a JSON array (must include all characters):
 [
   {{
     "id": "npc_bestfriend",
-    "relation": "好友",
-    "name": "一个{city}常见名字",
+    "relation": "Best friend",
+    "name": "a common name in {city}",
     "age": {age + random.randint(1, 5)},
-    "occupation": "合理的职业",
-    "personality_word": "性格词（如开朗、细腻等）",
-    "contact_frequency": "见面频率",
+    "occupation": "a plausible occupation",
+    "personality_word": "personality word (e.g. cheerful, thoughtful, etc.)",
+    "contact_frequency": "how often they meet",
     "appear_scenes": ["CAFE", "STREET_WANDERING", "PARK", "FRIEND_HANGOUT"],
     "event_pool": ["invite_hangout", "share_good_news"],
     "pixel_variant": "npc_f_01"
   }},
   {{
     "id": "npc_colleague_a",
-    "relation": "同事",
-    "name": "一个常见名字",
+    "relation": "Colleague",
+    "name": "a common name",
     "age": {age + random.randint(2, 6)},
-    "occupation": "同公司",
-    "personality_word": "性格词",
-    "contact_frequency": "每天见面",
+    "occupation": "same company",
+    "personality_word": "personality word",
+    "contact_frequency": "daily",
     "appear_scenes": ["OFFICE_WORKING", "OFFICE_LUNCH"],
     "event_pool": ["lunch_together", "complain_about_work"],
     "pixel_variant": "npc_f_02"
   }},
   {{
     "id": "npc_colleague_b",
-    "relation": "同事",
-    "name": "一个常见名字",
+    "relation": "Colleague",
+    "name": "a common name",
     "age": {age + random.randint(3, 8)},
-    "occupation": "同公司",
-    "personality_word": "性格词",
-    "contact_frequency": "每天见面",
+    "occupation": "same company",
+    "personality_word": "personality word",
+    "contact_frequency": "daily",
     "appear_scenes": ["OFFICE_WORKING"],
     "event_pool": ["extra_task_from_boss"],
     "pixel_variant": "npc_m_01"
   }},
   {{
     "id": "npc_mom",
-    "relation": "妈妈",
-    "name": "不显示",
+    "relation": "Mother",
+    "name": "N/A",
     "age": {age + random.randint(25, 32)},
     "occupation": "",
-    "personality_word": "关心",
-    "contact_frequency": "每周视频",
+    "personality_word": "caring",
+    "contact_frequency": "weekly video call",
     "appear_scenes": [],
     "event_pool": ["video_call", "send_recipe"],
     "pixel_variant": null
   }},
   {{
     "id": "npc_dad",
-    "relation": "爸爸",
-    "name": "不显示",
+    "relation": "Father",
+    "name": "N/A",
     "age": {age + random.randint(27, 34)},
     "occupation": "",
-    "personality_word": "沉稳内敛",
-    "contact_frequency": "偶尔视频",
+    "personality_word": "reserved and steady",
+    "contact_frequency": "occasional video call",
     "appear_scenes": [],
     "event_pool": ["video_call", "send_money"],
     "pixel_variant": null
   }},
   {{
     "id": "npc_roommate",
-    "relation": "大学室友",
-    "name": "一个{city}常见名字",
+    "relation": "College roommate",
+    "name": "a common name in {city}",
     "age": {age},
-    "occupation": "合理职业",
-    "personality_word": "活泼古怪",
-    "contact_frequency": "每月见面",
+    "occupation": "a plausible occupation",
+    "personality_word": "lively and quirky",
+    "contact_frequency": "monthly meetup",
     "appear_scenes": ["CAFE", "FRIEND_HANGOUT", "STREET_WANDERING"],
     "event_pool": ["invite_hangout", "share_good_news", "catch_up"],
     "pixel_variant": "npc_f_03"
   }},
   {{
     "id": "npc_boss",
-    "relation": "直属上司",
-    "name": "一个常见名字",
+    "relation": "Direct supervisor",
+    "name": "a common name",
     "age": {age + random.randint(8, 14)},
-    "occupation": "合理的职位",
-    "personality_word": "干练严厉",
-    "contact_frequency": "每天见面",
+    "occupation": "a plausible position",
+    "personality_word": "competent and strict",
+    "contact_frequency": "daily",
     "appear_scenes": ["OFFICE_WORKING", "OFFICE_MEETING"],
     "event_pool": ["extra_task_from_boss", "praise_from_boss"],
     "pixel_variant": "npc_m_02"
   }},
   {{
     "id": "npc_neighbor",
-    "relation": "邻居",
-    "name": "一个常见名字",
+    "relation": "Neighbor",
+    "name": "a common name",
     "age": {age + random.randint(0, 3)},
-    "occupation": "合理的职业",
-    "personality_word": "佛系随和",
-    "contact_frequency": "偶尔碰面",
+    "occupation": "a plausible occupation",
+    "personality_word": "easygoing and chill",
+    "contact_frequency": "occasionally run into each other",
     "appear_scenes": ["HOME_MORNING", "HOME_EVENING", "STREET_WANDERING"],
     "event_pool": ["borrow_thing", "share_good_news"],
     "pixel_variant": "npc_f_04"
   }}
 ]
 
-只返回JSON数组，不要其他内容。人名使用{city}常见名字风格。age 可以适当微调（±2岁）。"""
+Return only JSON array, no other content. Names should use {city} common name styles. Age can be fine-tuned (±2 years)."""
 
     try:
         response = llm.generate(prompt, max_tokens=1500, temperature=0.8)
@@ -928,7 +928,6 @@ def generate_npc_cards(character_card: dict) -> list:
                 response = response[:-3]
             response = response.strip()
         npcs = json.loads(response)
-        # ── 自动为每个 NPC 补充生日 ──
         from .birthday_engine import auto_generate_birthday
         for npc in npcs:
             if not npc.get("birth_date"):
@@ -938,7 +937,7 @@ def generate_npc_cards(character_card: dict) -> list:
                 npc["birth_date"] = bd_info["birth_date"]
         return npcs
     except Exception as e:
-        print(f"[SimLife] NPC生成失败: {e}")
+        print(f"[SimLife] NPC generation failed: {e}")
         return None
 
 
@@ -949,33 +948,32 @@ def generate_activity_description(
     today_events_summary: str = "",
     mood: int = 70,
 ) -> str:
-    """生成一条口语化的活动描述"""
+    """Generate a conversational activity description"""
     llm = get_llm_client()
 
     from datetime import datetime
     now = datetime.now()
-    weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
     name = character_card.get("basic", {}).get("name", "")
     occupation = character_card.get("basic", {}).get("occupation", "")
 
     if mood > 80:
-        tone = "语气轻快，有小惊喜细节"
+        tone = "Light, upbeat tone with a small delightful detail"
     elif mood >= 60:
-        tone = "正常语气，平淡但有质感"
+        tone = "Neutral tone, mundane but textured"
     elif mood >= 40:
-        tone = "语气带轻微疲惫感"
+        tone = "Slightly weary tone"
     else:
-        tone = "语气低落，但不夸张"
+        tone = "Downbeat tone, but not exaggerated"
 
-    prompt = f"""角色名是"{name}"，职业是{occupation}，现在{weekday_names[now.weekday()]} {now.strftime('%H:%M')}。
-她/他刚进入"{scene_label}"状态。
-今天发生过的事：{today_events_summary or '暂无'}。
-{tone}。
-用第三人称写一句话描述这个瞬间，口语化，有细节，不超过30字，不要用感叹号。
-只返回描述文字，不要引号或其他内容。"""
+    prompt = f"""The character's name is "{name}", occupation: {occupation}, currently {weekday_names[now.weekday()]} {now.strftime('%H:%M')}.
+They just entered "{scene_label}" mode.
+What happened today: {today_events_summary or 'nothing in particular'}.
+{tone}.
+Write one sentence in third person describing this moment, conversational, with detail, no more than 20 words, no exclamation marks.
+Return only the description text, no quotes or other content."""
 
-    # 注入世界观活动引导
     world_guide = _get_world_guide("activity")
     if world_guide:
         prompt = world_guide + "\n\n" + prompt
@@ -985,100 +983,97 @@ def generate_activity_description(
         return response.strip().strip('"').strip('"').strip("'").strip()
     except Exception:
         defaults = {
-            "HOME_MORNING": "洗漱完在厨房煮咖啡",
-            "COMMUTE_TO_WORK": "在去公司的路上",
-            "OFFICE_WORKING": "在工位上做事",
-            "OFFICE_MEETING": "在会议室里开会",
-            "OFFICE_LUNCH": "出来觅食",
-            "COMMUTE_TO_HOME": "下班回家的路上",
-            "HOME_EVENING": "在家放松",
-            "CAFE": "在咖啡馆坐了一会儿",
-            "PARK": "在公园散步",
-            "HOME_SLEEPING": "睡着了",
-            "HOME_WEEKEND_LAZY": "赖在床上不想起来",
-            "HOME_WORKING": "在家对着电脑做事",
-            "CAFE_WORKING": "在咖啡馆打开了笔记本",
-            "OUTDOOR_WORKING": "在外面忙工作的事",
-            "STUDIO_WORKING": "在工作室里忙碌",
-            "OVERTIME": "还在加班",
-            # 旅行场景
-            "AIRPORT": "在机场候机",
-            "TOURING": "在景点拍素材",
-            "HOTEL": "在酒店整理照片",
-            "LOCAL_FOOD": "在吃当地美食",
-            "TRAIN_STATION": "在火车站等车",
-            "SCENIC_DRIVE": "坐在车上拍窗外风景",
-            "RESTAURANT_LOCAL": "在当地餐厅吃饭",
+            "HOME_MORNING": "woke up and making coffee in the kitchen",
+            "COMMUTE_TO_WORK": "on the way to work",
+            "OFFICE_WORKING": "working at the desk",
+            "OFFICE_MEETING": "in a meeting room",
+            "OFFICE_LUNCH": "out grabbing lunch",
+            "COMMUTE_TO_HOME": "on the way home from work",
+            "HOME_EVENING": "relaxing at home",
+            "CAFE": "sitting in a cafe for a while",
+            "PARK": "taking a walk in the park",
+            "HOME_SLEEPING": "fast asleep",
+            "HOME_WEEKEND_LAZY": "lazing in bed, not wanting to get up",
+            "HOME_WORKING": "working on the computer at home",
+            "CAFE_WORKING": "opened the laptop at a cafe",
+            "OUTDOOR_WORKING": "busy with work outdoors",
+            "STUDIO_WORKING": "busy in the studio",
+            "OVERTIME": "still working overtime",
+            "AIRPORT": "waiting at the airport",
+            "TOURING": "shooting content at a scenic spot",
+            "HOTEL": "organizing photos at the hotel",
+            "LOCAL_FOOD": "trying local cuisine",
+            "TRAIN_STATION": "waiting at the train station",
+            "SCENIC_DRIVE": "sitting in the car, photographing the scenery outside",
+            "RESTAURANT_LOCAL": "eating at a local restaurant",
         }
-        return defaults.get(scene, "在忙自己的事")
+        return defaults.get(scene, "busy with their own thing")
 
 
 def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
     """
-    根据世界观 + 角色信息，LLM 推算一个月级别的人生主线。
-    可选传入 previous_arc 作为上一段主线的摘要，保证故事连续性。
-    返回字典，可直接用于创建 LifeArc 对象。
+    Based on world setting + character info, LLM calculates a monthly-level life arc.
+    Optionally pass previous_arc as the summary of the previous arc for story continuity.
+    Returns a dict that can be used directly to create a LifeArc object.
     """
     llm = get_llm_client()
 
     name = character_card.get("basic", {}).get("name", "")
     occupation = character_card.get("basic", {}).get("occupation", "")
     personality = character_card.get("basic", {}).get("personality_traits", [])
-    traits_str = "、".join(personality[:3]) if personality else "未设定"
+    traits_str = ", ".join(personality[:3]) if personality else "not set"
     age = character_card.get("basic", {}).get("age", "")
 
-    # 前情提要：上一段主线的摘要
     prev_hint = ""
     if previous_arc:
         prev_title = previous_arc.get("title", "")
         prev_desc = previous_arc.get("description", "")
         stages = previous_arc.get("stages", [])
         final_stage = stages[-1] if stages else {}
-        final_events = "；".join(final_stage.get("key_events", [])[:3])
+        final_events = "; ".join(final_stage.get("key_events", [])[:3])
         if final_stage.get("description"):
-            final_events = final_stage["description"] + "。" + final_events
+            final_events = final_stage["description"] + ". " + final_events
         prev_hint = f"""
 
-【前情提要】
-上一条主线：「{prev_title}」
-概述：{prev_desc}
-结局：{final_events}
+[Previous Arc Summary]
+Previous arc: "{prev_title}"
+Overview: {prev_desc}
+Ending: {final_events}
 """
-        # 历史归档中的主线轨迹
         try:
             hist_path = Path(__file__).parent.parent / "data" / "life_arc_history.json"
             if hist_path.exists():
                 with open(hist_path, "r", encoding="utf-8") as f:
                     history = json.load(f)
                 if history:
-                    arc_titles = " → ".join([h.get("title", "?") for h in history[-5:]])
-                    prev_hint += f"角色经历过的所有主线：{arc_titles}\n"
+                    arc_titles = " -> ".join([h.get("title", "?") for h in history[-5:]])
+                    prev_hint += f"All previous arcs the character has experienced: {arc_titles}\n"
         except Exception:
             pass
 
-    prompt = f"""你是人生模拟器的叙事系统。请为角色「{name}」（{occupation}，{age}岁，性格：{traits_str}）规划一段为期约30天的人生主线任务。{prev_hint}
+    prompt = f"""You are the narrative system of a life simulator. Please plan a life arc quest spanning about 30 days for the character "{name}" ({occupation}, age {age}, personality: {traits_str}).{prev_hint}
 
-要求：
-1. 主线要有起承转合，符合角色身份和性格
-2. 分为 4-7 个阶段，每个阶段持续 3-10 天不等
-3. 阶段之间要有逻辑递进关系（如：准备→出发→探索→高潮→收尾）
-4. 每个阶段给出 2-4 个可能发生的关键事件
-5. 总时长控制在 25-40 天
-6. 内容要符合世界观设定，有冒险感但不离谱
-7. 标题用 10-20 字概括
-8. 如果有【前情提要】，新主线要基于前情自然延续，角色状态和关系要有继承性
+Requirements:
+1. The arc should have a beginning, development, turn, and conclusion that matches the character's identity and personality
+2. Divide into 4-7 stages, each lasting 3-10 days
+3. Stages should have logical progression (e.g.: preparation -> departure -> exploration -> climax -> resolution)
+4. Each stage should have 2-4 possible key events
+5. Total duration should be 25-40 days
+6. Content should fit the world setting, adventurous but not absurd
+7. Title should be 10-20 characters long
+8. If there is a [Previous Arc Summary], the new arc should naturally continue from it, with inherited character state and relationships
 
-返回 JSON，不要其他内容：
+Return JSON only, no other content:
 {{
-  "title": "主线标题",
-  "description": "主线概述（50-100字）",
+  "title": "Arc title",
+  "description": "Arc overview (50-100 chars)",
   "duration_days": 30,
   "stages": [
     {{
-      "name": "阶段名（5-10字）",
-      "description": "阶段描述（20-50字）",
+      "name": "Stage name (5-10 chars)",
+      "description": "Stage description (20-50 chars)",
       "duration_days": 5,
-      "key_events": ["事件1", "事件2", "事件3"]
+      "key_events": ["Event 1", "Event 2", "Event 3"]
     }}
   ]
 }}"""
@@ -1086,7 +1081,6 @@ def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
     world_context = _get_world_context()
     if world_context:
         prompt = world_context + "\n\n" + prompt
-    # 注入用户对剧情的影响
     story_influence = _get_story_influences()
     if story_influence:
         prompt = prompt + "\n\n" + story_influence
@@ -1102,7 +1096,6 @@ def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
             response = response.strip()
         result = json.loads(response)
 
-        # 规范化
         stages_raw = result.get("stages", [])
         total_days = 0
         stages = []
@@ -1113,7 +1106,7 @@ def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
             dur = max(2, min(15, dur))
             total_days += dur
             stages.append({
-                "name": str(s.get("name", "阶段")),
+                "name": str(s.get("name", "Stage")),
                 "description": str(s.get("description", "")),
                 "duration_days": dur,
                 "status": "pending",
@@ -1123,32 +1116,31 @@ def generate_life_arc(character_card: dict, previous_arc: dict = None) -> dict:
         if not stages:
             return _default_life_arc(name)
 
-        # 激活第一个阶段
         stages[0]["status"] = "active"
 
         return {
-            "title": str(result.get("title", "日常冒险")),
+            "title": str(result.get("title", "Daily Adventure")),
             "description": str(result.get("description", "")),
             "duration_days": total_days,
             "stages": stages,
         }
 
     except Exception as e:
-        print(f"[SimLife] 主线生成失败: {e}")
+        print(f"[SimLife] Life arc generation failed: {e}")
         return _default_life_arc(name)
 
 
-def _default_life_arc(name: str = "角色") -> dict:
-    """主线生成失败时的默认值"""
+def _default_life_arc(name: str = "Character") -> dict:
+    """Fallback when life arc generation fails"""
     return {
-        "title": "日常修炼与探索",
-        "description": f"{name}开始了平淡但充实的日常生活",
+        "title": "Daily Training and Exploration",
+        "description": f"{name} begins an ordinary but fulfilling daily life",
         "duration_days": 30,
         "stages": [
-            {"name": "日常修炼", "description": "在住处附近修炼基本功", "duration_days": 7, "status": "active", "key_events": ["晨练", "研读典籍", "基础训练"]},
-            {"name": "外出探索", "description": "到周边区域了解情况", "duration_days": 7, "status": "pending", "key_events": ["前往集市", "打听消息", "探索遗迹"]},
-            {"name": "任务执行", "description": "接受并完成一些任务", "duration_days": 10, "status": "pending", "key_events": ["接受委托", "战斗历练", "收获战利品"]},
-            {"name": "总结沉淀", "description": "休整并规划下一步", "duration_days": 6, "status": "pending", "key_events": ["整理收获", "修复装备", "记录心得"]},
+            {"name": "Daily Training", "description": "Training fundamentals near home", "duration_days": 7, "status": "active", "key_events": ["Morning exercise", "Studying texts", "Basic training"]},
+            {"name": "Outward Exploration", "description": "Exploring the surrounding area", "duration_days": 7, "status": "pending", "key_events": ["Visiting the market", "Gathering intel", "Exploring ruins"]},
+            {"name": "Mission Execution", "description": "Accepting and completing missions", "duration_days": 10, "status": "pending", "key_events": ["Accepting commissions", "Combat training", "Collecting spoils"]},
+            {"name": "Rest and Reflection", "description": "Rest and plan the next step", "duration_days": 6, "status": "pending", "key_events": ["Organizing gains", "Repairing equipment", "Recording insights"]},
         ],
     }
 
@@ -1162,54 +1154,50 @@ def generate_day_plan(
     recent_story_context: str = "",
 ) -> list:
     """
-    为非现代世界生成一天的大纲计划（LLM 一次调用，生成全天安排）。
-    返回列表：[{"time":"07:00","scene":"房间","label":"起床","activity":"...","mood_delta":0,"npc":"npc_id或空"}, ...]
-    通常 6-10 个节点，覆盖一天的作息。
+    Generate a daily outline plan for non-modern worlds (LLM single call, full day schedule).
+    Returns list: [{"time":"07:00","scene":"Room","label":"Wake up","activity":"...","mood_delta":0,"npc":"npc_id or empty"}, ...]
+    Typically 6-10 entries covering a full day.
     """
     from datetime import datetime
 
     llm = get_llm_client()
     now = datetime.now()
-    weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
     name = character_card.get("basic", {}).get("name", "")
     occupation = character_card.get("basic", {}).get("occupation", "")
     personality = character_card.get("basic", {}).get("personality_traits", [])
-    traits_str = "、".join(personality[:3]) if personality else "未设定"
+    traits_str = ", ".join(personality[:3]) if personality else "not set"
 
-    summary_hint = f"\n昨天的经历：{yesterday_summary}" if yesterday_summary else ""
+    summary_hint = f"\nYesterday: {yesterday_summary}" if yesterday_summary else ""
     arc_hint_text = f"\n\n{arc_hint}" if arc_hint else ""
 
-    # NPC卡司提示
     cast_hint = ""
     if cast:
-        npc_brief = "\n".join([f"- {c['name']}（{c['role']}，{c['personality']}）" for c in cast])
-        cast_hint = f"\n\n可用NPC卡司：\n{npc_brief}"
+        npc_brief = "\n".join([f"- {c['name']} ({c['role']}, {c['personality']})" for c in cast])
+        cast_hint = f"\n\nAvailable NPC cast:\n{npc_brief}"
 
-    prompt = f"""你是人生模拟器。请为角色「{name}」（{occupation}，性格：{traits_str}）安排今天一整天的大纲计划。
+    prompt = f"""You are a life simulator. Plan a full daily outline for character "{name}" ({occupation}, personality: {traits_str}).
 
-今天是{weekday_names[now.weekday()]}，当前心情{mood}/100。{summary_hint}{arc_hint_text}{cast_hint}
+Today is {weekday_names[now.weekday()]}, current mood: {mood}/100.{summary_hint}{arc_hint_text}{cast_hint}
 
-要求：
-1. 生成 8-10 个时间节点，从起床到入睡，均匀分布
-2. 每个节点包含：time(HH:MM)、scene(2-4字场景名)、label(4-8字标签)、activity(15-30字简短描述)、mood_delta(-5到+5)、npc(可选，NPC的id或空字符串)
-3. 活动要符合世界观设定，围绕主线推进
-4. 不要用感叹号
-5. activity 要精简概括，不要展开细节，细节会在到时间后按需展开
-6. 一天中至少 1-2 个节点涉及NPC互动
+Requirements:
+1. Generate 8-10 time entries, evenly distributed from waking up to going to sleep
+2. Each entry contains: time(HH:MM), scene(2-4 word scene name), label(4-8 word label), activity(15-30 word brief description), mood_delta(-5 to +5), npc(optional, NPC id or empty string)
+3. Activities should fit the world setting and advance the arc
+4. No exclamation marks
+5. Activity should be concise, details will be expanded on demand later
+6. At least 1-2 entries should involve NPC interaction
 
-返回 JSON 数组，不要其他内容：
-[{{"time":"07:00","scene":"房间","label":"晨起","activity":"{name}醒来，简单梳洗",  "mood_delta":1,"npc":""}}, ...]"""
+Return JSON array only, no other content:
+[{{"time":"07:00","scene":"Room","label":"Morning","activity":"{name} wakes up and freshens up","mood_delta":1,"npc":""}}, ...]"""
 
-    # 注入世界观引导
     world_context = _get_world_context()
     if world_context:
         prompt = world_context + "\n\n" + prompt
-    # 注入用户对剧情的影响
     story_influence = _get_story_influences()
     if story_influence:
         prompt = prompt + "\n\n" + story_influence
-    # 注入近期剧情回顾（存档历史）
     if recent_story_context:
         prompt = prompt + "\n\n" + recent_story_context
 
@@ -1226,38 +1214,33 @@ def generate_day_plan(
 
         plan = json.loads(response)
         if not isinstance(plan, list) or len(plan) == 0:
-            raise ValueError("空列表")
+            raise ValueError("Empty list")
 
-        # 验证并规范化
         valid_plan = []
         for item in plan:
             if not isinstance(item, dict):
                 continue
             valid_plan.append({
                 "time": str(item.get("time", "08:00")),
-                "scene": str(item.get("scene", "日常")),
+                "scene": str(item.get("scene", "Daily")),
                 "label": str(item.get("label", "")),
                 "activity": str(item.get("activity", "")),
                 "mood_delta": int(item.get("mood_delta", 0)),
                 "npc": str(item.get("npc", "")),
-                "expanded": None,  # 小说展开文本，按需生成
+                "expanded": None,
             })
         return valid_plan if valid_plan else _default_day_plan(name)
 
     except Exception as e:
-        print(f"[SimLife] 全天计划 JSON 解析失败，尝试修复: {e}")
-        # 尝试修复常见 JSON 格式错误
+        print(f"[SimLife] Daily plan JSON parsing failed, attempting repair: {e}")
         try:
             import re as _re
             fixed = response
 
-            # 1. 用正则提取 JSON 数组部分（LLM 可能在首尾附加了其他文本）
             array_match = _re.search(r'\[[\s\S]*\]', fixed)
             if array_match:
                 fixed = array_match.group(0)
-            # 2. 如果以 , 结尾，去掉
             fixed = _re.sub(r',\s*$', '', fixed.strip())
-            # 3. 修复未闭合的引号（Unterminated string）
             in_string = False
             escape_next = False
             for ch in fixed:
@@ -1271,11 +1254,9 @@ def generate_day_plan(
                     in_string = not in_string
             if in_string:
                 fixed += '"'
-            # 4. 补全最外层的 ] 或 }（LLM 经常截断）
             open_brackets = fixed.count('[') + fixed.count('{')
             close_brackets = fixed.count(']') + fixed.count('}')
             fixed += ']' * (open_brackets - close_brackets)
-            # 5. 尝试用 rjson（对引号缺失更宽容）
             try:
                 import rjson
                 plan = rjson.loads(fixed)
@@ -1288,7 +1269,7 @@ def generate_day_plan(
                         continue
                     valid_plan.append({
                         "time": str(item.get("time", "08:00")),
-                        "scene": str(item.get("scene", "日常")),
+                        "scene": str(item.get("scene", "Daily")),
                         "label": str(item.get("label", "")),
                         "activity": str(item.get("activity", "")),
                         "mood_delta": int(item.get("mood_delta", 0)),
@@ -1296,12 +1277,11 @@ def generate_day_plan(
                         "expanded": None,
                     })
                 if valid_plan:
-                    print(f"[SimLife] JSON 修复成功，得到 {len(valid_plan)} 个节点")
+                    print(f"[SimLife] JSON repair succeeded, got {len(valid_plan)} entries")
                     return valid_plan
         except Exception as e2:
-            print(f"[SimLife] JSON 修复也失败: {e2}")
+            print(f"[SimLife] JSON repair also failed: {e2}")
 
-        # 终极兜底：用正则逐字段提取每个 JSON 对象
         try:
             import re as _re
             objects = _re.findall(r'\{[^{}]*\}', response)
@@ -1310,11 +1290,9 @@ def generate_day_plan(
                 for obj_str in objects:
                     try:
                         key_values = {}
-                        # 提取 mood_delta（数字类型）
                         m = _re.search(r'"mood_delta"\s*:\s*(-?\d+)', obj_str)
                         if m:
                             key_values["mood_delta"] = int(m.group(1))
-                        # 提取字符串字段
                         for key in ("time", "scene", "label", "activity", "npc"):
                             m = _re.search(rf'"{key}"\s*:\s*"([^"]*)"', obj_str)
                             if m:
@@ -1322,7 +1300,7 @@ def generate_day_plan(
                         if "time" in key_values and "scene" in key_values:
                             valid_plan.append({
                                 "time": key_values.get("time", "08:00"),
-                                "scene": key_values.get("scene", "日常"),
+                                "scene": key_values.get("scene", "Daily"),
                                 "label": key_values.get("label", ""),
                                 "activity": key_values.get("activity", ""),
                                 "mood_delta": int(key_values.get("mood_delta", 0)),
@@ -1332,34 +1310,34 @@ def generate_day_plan(
                     except Exception:
                         continue
                 if valid_plan:
-                    print(f"[SimLife] 正则提取修复成功，得到 {len(valid_plan)} 个节点")
+                    print(f"[SimLife] Regex extraction repair succeeded, got {len(valid_plan)} entries")
                     return valid_plan
         except Exception:
             pass
 
-        print(f"[SimLife] 全天计划生成失败，使用默认计划")
+        print(f"[SimLife] Daily plan generation failed, using default plan")
         return _default_day_plan(name)
 
 
-def _default_day_plan(name: str = "角色") -> list:
-    """生成失败时的默认计划"""
+def _default_day_plan(name: str = "Character") -> list:
+    """Fallback plan when generation fails"""
     return [
-        {"time": "07:00", "scene": "房间", "label": "起床", "activity": f"{name}从睡梦中醒来", "mood_delta": 1},
-        {"time": "08:00", "scene": "日常", "label": "早餐", "activity": f"{name}简单吃了些东西", "mood_delta": 2},
-        {"time": "09:00", "scene": "工作", "label": "开始工作", "activity": f"{name}开始了一天的工作", "mood_delta": 0},
-        {"time": "12:00", "scene": "日常", "label": "午餐", "activity": f"{name}找了个地方吃饭休息", "mood_delta": 2},
-        {"time": "14:00", "scene": "工作", "label": "下午工作", "activity": f"{name}继续忙碌着", "mood_delta": -1},
-        {"time": "18:00", "scene": "日常", "label": "晚餐", "activity": f"{name}吃过晚饭，放松下来", "mood_delta": 3},
-        {"time": "20:00", "scene": "休闲", "label": "晚间休闲", "activity": f"{name}享受着属于自己的时光", "mood_delta": 2},
-        {"time": "22:00", "scene": "房间", "label": "入睡", "activity": f"{name}准备休息了", "mood_delta": 1},
+        {"time": "07:00", "scene": "Room", "label": "Wake up", "activity": f"{name} wakes up from sleep", "mood_delta": 1},
+        {"time": "08:00", "scene": "Daily", "label": "Breakfast", "activity": f"{name} has a simple breakfast", "mood_delta": 2},
+        {"time": "09:00", "scene": "Work", "label": "Start work", "activity": f"{name} starts the day's work", "mood_delta": 0},
+        {"time": "12:00", "scene": "Daily", "label": "Lunch", "activity": f"{name} finds a place to eat and rest", "mood_delta": 2},
+        {"time": "14:00", "scene": "Work", "label": "Afternoon work", "activity": f"{name} continues working", "mood_delta": -1},
+        {"time": "18:00", "scene": "Daily", "label": "Dinner", "activity": f"{name} has dinner and relaxes", "mood_delta": 3},
+        {"time": "20:00", "scene": "Leisure", "label": "Evening leisure", "activity": f"{name} enjoys some personal time", "mood_delta": 2},
+        {"time": "22:00", "scene": "Room", "label": "Sleep", "activity": f"{name} gets ready for bed", "mood_delta": 1},
     ]
 
 
 def generate_story_cast(character_card: dict) -> list:
     """
-    为非现代世界生成剧情NPC卡司（3-5个角色）。
-    每个NPC有名字、身份、性格、秘密、说话风格。
-    基于世界观设定自动适配内容。
+    Generate story NPC cast for non-modern worlds (3-5 characters).
+    Each NPC has name, identity, personality, secret, and speaking style.
+    Automatically adapts content based on world setting.
     """
     llm = get_llm_client()
 
@@ -1367,28 +1345,28 @@ def generate_story_cast(character_card: dict) -> list:
     occupation = character_card.get("basic", {}).get("occupation", "")
     age = character_card.get("basic", {}).get("age", 24)
     personality = character_card.get("basic", {}).get("personality_traits", [])
-    traits_str = "、".join(personality[:3]) if personality else "未设定"
+    traits_str = ", ".join(personality[:3]) if personality else "not set"
 
-    prompt = f"""你是人生模拟器的叙事系统。请为角色「{name}」（{occupation}，{age}岁，性格：{traits_str}）生成一组剧情NPC卡司。
+    prompt = f"""You are the narrative system of a life simulator. Generate a cast of story NPCs for character "{name}" ({occupation}, age {age}, personality: {traits_str}).
 
-要求：
-1. 生成 3-5 个NPC，他们将在剧情中反复出现
-2. NPC类型要多样：同伴、对手、导师、神秘人、交易伙伴等
-3. 每个NPC要有独特的性格和说话风格，让对话有辨识度
-4. 每个NPC要有一个秘密或隐藏身份，为后续剧情埋伏笔
-5. NPC要完全符合世界观设定，不要出现现代元素
+Requirements:
+1. Generate 3-5 NPCs who will appear repeatedly in the story
+2. NPC types should be varied: companion, rival, mentor, mysterious figure, trading partner, etc.
+3. Each NPC should have a unique personality and speaking style for recognizable dialogue
+4. Each NPC should have a secret or hidden identity to set up future plot points
+5. NPCs must fully fit the world setting, no modern elements
 
-返回 JSON 数组，不要其他内容：
+Return JSON array only, no other content:
 [
   {{
-    "id": "npc_角色英文id",
-    "name": "角色名",
-    "role": "在故事中的角色（如：冒险同伴、图书馆管理员、对头、导师的旧友等）",
-    "personality": "性格描述（30字以内）",
-    "appearance": "外貌描述（30字以内）",
-    "secret": "一个秘密或隐藏身份（20字以内）",
-    "voice_style": "说话风格（15字以内，如：喜欢用反问句、说话慢条斯理、口头禅是什么等）",
-    "first_encounter": "与主角初次相遇的场景描述（30字以内）"
+    "id": "npc_character_english_id",
+    "name": "Character name",
+    "role": "Role in the story (e.g. adventure companion, librarian, rival, mentor's old friend, etc.)",
+    "personality": "Personality description (within 30 words)",
+    "appearance": "Appearance description (within 30 words)",
+    "secret": "A secret or hidden identity (within 20 words)",
+    "voice_style": "Speaking style (within 15 words, e.g. uses rhetorical questions, speaks slowly, catchphrase, etc.)",
+    "first_encounter": "Scene of first meeting with the protagonist (within 30 words)"
   }}
 ]"""
 
@@ -1426,87 +1404,84 @@ def generate_story_cast(character_card: dict) -> list:
                 "secret": str(item.get("secret", "")),
                 "voice_style": str(item.get("voice_style", "")),
                 "first_encounter": str(item.get("first_encounter", "")),
-                "trust": 50,       # 初始信任度 0-100
+                "trust": 50,
                 "encountered": False,
             })
         return valid_cast if valid_cast else _default_story_cast(name)
     except Exception as e:
-        print(f"[SimLife] NPC卡司生成失败: {e}")
+        print(f"[SimLife] NPC cast generation failed: {e}")
         return _default_story_cast(name)
 
 
-def _default_story_cast(name: str = "角色") -> list:
-    """卡司生成失败时的默认值"""
+def _default_story_cast(name: str = "Character") -> list:
+    """Fallback when cast generation fails"""
     return [
-        {"id": "npc_companion", "name": "旅行者", "role": "偶然相遇的同行者",
-         "personality": "话多但心善", "appearance": "穿着斗篷看不清面容",
-         "secret": "其实是在逃亡", "voice_style": "喜欢用夸张的比喻",
-         "first_encounter": "在路边休息时被搭话", "trust": 50, "encountered": False},
-        {"id": "npc_mentor", "name": "老者", "role": "神秘的引导者",
-         "personality": "沉默寡言但关键时刻指点迷津", "appearance": "白发苍苍，眼神深邃",
-         "secret": "与主角的导师有旧交", "voice_style": "说话简短有力",
-         "first_encounter": "在图书馆角落偶遇", "trust": 50, "encountered": False},
-        {"id": "npc_rival", "name": "竞争者", "role": "目标相同的对手",
-         "personality": "表面友善内心算计", "appearance": "衣着整洁，面带微笑",
-         "secret": "为某个组织效力", "voice_style": "语气温和但暗藏锋芒",
-         "first_encounter": "在任务发布处争抢同一个委托", "trust": 30, "encountered": False},
+        {"id": "npc_companion", "name": "Traveler", "role": "A fellow traveler met by chance",
+         "personality": "Talkative but kind-hearted", "appearance": "Wearing a cloak, face hidden",
+         "secret": "Actually on the run", "voice_style": "Loves exaggerated metaphors",
+         "first_encounter": "Approached while resting by the roadside", "trust": 50, "encountered": False},
+        {"id": "npc_mentor", "name": "Elder", "role": "A mysterious guide",
+         "personality": "Silent but gives crucial advice at key moments", "appearance": "White-haired with deep, penetrating eyes",
+         "secret": "Has old ties with the protagonist's mentor", "voice_style": "Speaks succinctly and powerfully",
+         "first_encounter": "Met by chance in a library corner", "trust": 50, "encountered": False},
+        {"id": "npc_rival", "name": "Rival", "role": "A competitor with the same goal",
+         "personality": "Friendly on the surface, scheming underneath", "appearance": "Neatly dressed with a smile",
+         "secret": "Works for a certain organization", "voice_style": "Gentle tone but with hidden edge",
+         "first_encounter": "Competing for the same commission at the quest board", "trust": 30, "encountered": False},
     ]
 
 
 def expand_node(character_card: dict, node: dict, cast: list = None,
                 arc_context: str = "", prev_nodes: list = None) -> str:
     """
-    将 day_plan 的一个节点展开为 200-500 字的小说段落。
-    包含场景描写、动作细节、内心独白、NPC对话。
+    Expand a day_plan node into a 200-500 word narrative paragraph.
+    Includes scene description, action details, internal monologue, NPC dialogue.
     """
     llm = get_llm_client()
 
     name = character_card.get("basic", {}).get("name", "")
     occupation = character_card.get("basic", {}).get("occupation", "")
 
-    # 构建 NPC 上下文
     cast_info = ""
     if cast and node.get("npc"):
         npc_id = node.get("npc", "")
         for c in cast:
             if c.get("id") == npc_id:
                 cast_info = (
-                    f"\n互动NPC：{c['name']}（{c['role']}）\n"
-                    f"性格：{c['personality']}\n"
-                    f"说话风格：{c['voice_style']}\n"
-                    f"秘密：{c['secret']}"
+                    f"\nInteracting NPC: {c['name']} ({c['role']})\n"
+                    f"Personality: {c['personality']}\n"
+                    f"Speaking style: {c['voice_style']}\n"
+                    f"Secret: {c['secret']}"
                 )
                 break
         if not cast_info and cast:
-            # 如果没找到具体NPC，把所有卡司简要列出
             brief = "; ".join([f"{c['name']}({c['role']})" for c in cast[:4]])
-            cast_info = f"\n可用NPC：{brief}"
+            cast_info = f"\nAvailable NPCs: {brief}"
 
-    # 构建上文衔接
     prev_context = ""
     if prev_nodes and len(prev_nodes) > 0:
         last = prev_nodes[-1]
-        prev_context = f"\n上一个节点：{last.get('time', '')} {last.get('label', '')} - {last.get('activity', '')}"
+        prev_context = f"\nPrevious entry: {last.get('time', '')} {last.get('label', '')} - {last.get('activity', '')}"
 
     arc_hint = f"\n\n{arc_context}" if arc_context else ""
 
-    prompt = f"""你是人生模拟器的小说叙事系统。请将以下日程节点展开为一段生动的小说段落。
+    prompt = f"""You are the narrative system of a life simulator. Expand the following schedule entry into a vivid narrative paragraph.
 
-角色：{name}（{occupation}）
-当前节点：{node.get('time', '')} {node.get('label', '')} - {node.get('scene', '')}
-活动概要：{node.get('activity', '')}{cast_info}{prev_context}{arc_hint}
+Character: {name} ({occupation})
+Current entry: {node.get('time', '')} {node.get('label', '')} - {node.get('scene', '')}
+Activity summary: {node.get('activity', '')}{cast_info}{prev_context}{arc_hint}
 
-写作要求：
-1. 字数 200-500 字
-2. 包含场景描写（环境、氛围、五感）
-3. 包含动作细节（微表情、小动作）
-4. 如果有互动NPC，必须包含对话（要有性格辨识度）
-5. 可以包含角色内心独白
-6. 第三人称叙事，语气自然流畅
-7. 不要用感叹号
-8. 严格符合世界观设定
+Writing requirements:
+1. 200-500 words
+2. Include scene description (environment, atmosphere, senses)
+3. Include action details (micro-expressions, small gestures)
+4. If there is an interacting NPC, must include dialogue (with character-distinctive voice)
+5. May include character internal monologue
+6. Third-person narrative, natural and smooth tone
+7. No exclamation marks
+8. Strictly fit the world setting
 
-只返回小说正文，不要其他内容。"""
+Return only the narrative text, no other content."""
 
     world_context = _get_world_context()
     if world_context:
@@ -1519,7 +1494,7 @@ def expand_node(character_card: dict, node: dict, cast: list = None,
         response = llm.generate(prompt, max_tokens=600, temperature=0.9)
         return response.strip()
     except Exception as e:
-        print(f"[SimLife] 节点展开失败: {e}")
+        print(f"[SimLife] Node expansion failed: {e}")
         return node.get("activity", "")
 
 
@@ -1528,35 +1503,34 @@ def generate_future_events(
     recent_events: list,
     days: int = 3,
 ) -> list:
-    """生成未来N天的随机事件队列"""
+    """Generate a queue of random events for the next N days"""
     llm = get_llm_client()
 
     name = character_card.get("basic", {}).get("name", "")
     occupation = character_card.get("basic", {}).get("occupation", "")
     work_style = character_card.get("basic", {}).get("work_style", "office")
-    recent = "、".join([e.get("label", "") for e in recent_events[-5:]]) if recent_events else "暂无"
+    recent = ", ".join([e.get("label", "") for e in recent_events[-5:]]) if recent_events else "none"
 
     style_hint = ""
     if work_style == "freelance":
-        style_hint = "她是自由职业者，事件可能涉及找灵感、客户沟通、作品创作、自我提升等。"
+        style_hint = "They are a freelancer. Events may involve seeking inspiration, client communication, creative work, self-improvement, etc."
     elif work_style == "student":
-        style_hint = "她是学生，事件可能涉及考试、社团、作业、同学社交等。"
+        style_hint = "They are a student. Events may involve exams, clubs, assignments, social life, etc."
     elif work_style == "travel":
-        style_hint = "她是旅行博主，事件可能涉及航班变化、拍摄素材、当地见闻、品牌合作、粉丝互动等。"
+        style_hint = "They are a travel blogger. Events may involve flight changes, shooting content, local experiences, brand collaborations, fan interaction, etc."
     else:
-        style_hint = "她是上班族，事件可能涉及工作项目、同事关系、加班、通勤等。"
+        style_hint = "They are an office worker. Events may involve work projects, colleague relationships, overtime, commuting, etc."
 
-    prompt = f"""角色"{name}"，{occupation}。最近发生过：{recent}。
+    prompt = f"""Character "{name}", {occupation}. Recent events: {recent}.
 {style_hint}
-帮她/他生成接下来{days}天可能发生的生活小事，
-每天0-2条，带发生时间段（如"19:00-20:00"）和心情影响值（-30到+30）。
-返回JSON数组格式：
+Generate life events for the next {days} days that may happen,
+0-2 per day, with time range (e.g. "19:00-20:00") and mood impact (-30 to +30).
+Return JSON array format:
 [
-  {{"event_id": "自定义英文id", "label": "事件描述", "scheduled_date": "YYYY-MM-DD", "scheduled_time_range": "HH:MM-HH:MM", "mood_delta": 10, "source": "llm_generated"}}
+  {{"event_id": "custom_english_id", "label": "Event description", "scheduled_date": "YYYY-MM-DD", "scheduled_time_range": "HH:MM-HH:MM", "mood_delta": 10, "source": "llm_generated"}}
 ]
-从明天开始。只返回JSON数组。"""
+Starting from tomorrow. Return only JSON array."""
 
-    # 注入世界观事件引导
     world_guide = _get_world_guide("event")
     if world_guide:
         prompt = world_guide + "\n\n" + prompt
@@ -1583,5 +1557,5 @@ def generate_future_events(
 
         return events
     except Exception as e:
-        print(f"[SimLife] 未来事件生成失败: {e}")
+        print(f"[SimLife] Future events generation failed: {e}")
         return []

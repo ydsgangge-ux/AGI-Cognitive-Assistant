@@ -89,9 +89,9 @@ def _archive_yesterday_story(world_state, old_date: str):
     try:
         with open(archive_path, "w", encoding="utf-8") as f:
             json.dump(archive, f, ensure_ascii=False, indent=2)
-        print(f"[SimLife] 剧情已存档: {old_date}")
+        print(f"[SimLife] Story archived: {old_date}")
     except Exception as e:
-        print(f"[SimLife] 存档失败: {e}")
+        print(f"[SimLife] Archive failed: {e}")
 
 
 def _load_archive(date_str: str) -> dict:
@@ -324,15 +324,15 @@ def _tick_non_modern():
                 "stages": [s.to_dict() for s in arc.stages],
             }
             archive_life_arc(arc)
-            print(f"[SimLife] 主线「{arc.title}」已完成，已归档")
+            print(f"[SimLife] Main story arc \"{arc.title}\" completed, archived")
         try:
             from simlife.backend.generator import generate_life_arc
             arc_data = generate_life_arc(character_card.model_dump(), previous_arc=prev_arc)
             arc = LifeArc(arc_data)
             save_life_arc(arc)
-            print(f"[SimLife] 新主线「{arc.title}」（{arc.total_stages} 个阶段，共 {arc.duration_days} 天）")
+            print(f"[SimLife] New main arc \"{arc.title}\" ({arc.total_stages} stages, {arc.duration_days} days total)")
         except Exception as e:
-            print(f"[SimLife] 主线生成失败: {e}")
+            print(f"[SimLife] Main arc generation failed: {e}")
             arc = None
 
     # 推进主线阶段（基于天数自动推进）
@@ -345,7 +345,7 @@ def _tick_non_modern():
                 stage_name = "全部完成"
             else:
                 stage_name = arc.current_stage.name if arc.current_stage else "?"
-            print(f"[SimLife] 主线推进 → {stage_name}")
+            print(f"[SimLife] Main arc advancing → {stage_name}")
         arc_hint = get_stage_hint(arc)
 
     # ── NPC卡司管理 ──
@@ -356,9 +356,9 @@ def _tick_non_modern():
             story_cast = generate_story_cast(character_card.model_dump())
             _save_story_cast(story_cast)
             cast_names = [c["name"] for c in story_cast]
-            print(f"[SimLife] 已生成NPC卡司：{'、'.join(cast_names)}")
+            print(f"[SimLife] NPC cast generated: {', '.join(cast_names)}")
         except Exception as e:
-            print(f"[SimLife] NPC卡司生成失败: {e}")
+            print(f"[SimLife] NPC cast generation failed: {e}")
             story_cast = []
 
     # ── 新的一天：生成全天计划 ──
@@ -390,9 +390,9 @@ def _tick_non_modern():
                 recent_story_context=recent_story,  # 传入近期剧情回顾
             )
             world_state.day_plan = plan
-            print(f"[SimLife] 已生成全天计划（{len(plan)} 个节点）")
+            print(f"[SimLife] Full-day plan generated ({len(plan)} segments)")
         except Exception as e:
-            print(f"[SimLife] 全天计划生成失败: {e}")
+            print(f"[SimLife] Full-day plan generation failed: {e}")
             world_state.day_plan = []
 
     # ── 推进计划节点 ──
@@ -446,7 +446,7 @@ def _tick_non_modern():
                     )
                     node["expanded"] = text
                 except Exception as e:
-                    print(f"[SimLife] 节点展开失败: {e}")
+                    print(f"[SimLife] Segment expansion failed: {e}")
 
             expanded_text = node.get("expanded", "")
             if expanded_text:
@@ -646,7 +646,7 @@ def _tick():
             )
             world_state.current_activity = activity
         except Exception as e:
-            print(f"[SimLife] Activity生成失败: {e}")
+            print(f"[SimLife] Activity generation failed: {e}")
             world_state.current_activity = f"在{label}"
 
         last_tick_scene = scene.value
@@ -966,9 +966,9 @@ def api_setup_generate(data: dict):
                 story_cast = generate_story_cast(character_card.model_dump())
                 _save_story_cast(story_cast)
                 cast_names = [c["name"] for c in story_cast]
-                print(f"[SimLife] 已生成NPC卡司：{'、'.join(cast_names)}")
+                print(f"[SimLife] NPC cast generated: {', '.join(cast_names)}")
             except Exception as e:
-                print(f"[SimLife] NPC卡司生成失败: {e}")
+                print(f"[SimLife] NPC cast generation failed: {e}")
         else:
             # 现代世界：生成社交NPC
             npc_data = generate_npc_cards(card_data)
@@ -1344,38 +1344,38 @@ def on_startup():
     agidpa_path = config.get("agidpa_data_path", "")
     agidpa_reader = AGIDPAReader(agidpa_path)
 
-    # 天气服务（Open-Meteo 免费 API，无需配置 Key，根据人物卡城市自动定位）
-    city = character_card.basic.city if character_card else "上海"
+    # Weather service (Open-Meteo free API, no API key needed, auto-locates via character card city)
+    city = character_card.basic.city if character_card else "Shanghai"
     weather_service = WeatherService(city=city)
     geo = weather_service._geo
     if geo:
-        print(f"[SimLife] 天气服务已启用（{city}，{geo[0]:.2f}°N {geo[1]:.2f}°E）")
+        print(f"[SimLife] Weather service enabled ({city}, {geo[0]:.2f}°N {geo[1]:.2f}°E)")
     else:
-        print(f"[SimLife] 天气服务：城市「{city}」未找到坐标，使用季节推断")
+        print(f"[SimLife] Weather: city \"{city}\" coordinates not found, using seasonal inference")
 
-    print("[SimLife] 后端启动")
+    print("[SimLife] Backend started")
     if character_card:
-        print(f"[SimLife] 角色: {character_card.basic.name}")
+        print(f"[SimLife] Character: {character_card.basic.name}")
         h = get_holiday_info()
         if h:
-            print(f"[SimLife] 今天: {h['label']}（{h['type']}）")
+            print(f"[SimLife] Today: {h['label']} ({h['type']})")
         _tick()
     else:
-        print("[SimLife] 未初始化，请访问设置页面")
+        print("[SimLife] Not initialized, visit the settings page")
 
-    # ── 后台定时 tick 线程（不依赖前端轮询，每 3 分钟自动推进一次）──
+    # ── Background periodic tick thread (auto-advances every 3 minutes, independent of frontend polling) ──
     def _background_tick_loop():
         while True:
             try:
                 import time
-                time.sleep(180)  # 每 3 分钟
+                time.sleep(180)  # every 3 minutes
                 _tick()
             except Exception as e:
-                print(f"[SimLife] 后台tick出错: {e}")
+                print(f"[SimLife] Background tick error: {e}")
 
     _bg_thread = threading.Thread(target=_background_tick_loop, daemon=True)
     _bg_thread.start()
-    print("[SimLife] 后台定时 tick 已启动（每 3 分钟）")
+    print("[SimLife] Background periodic tick started (every 3 minutes)")
 
 
 def run_server(port: int = 87659, open_browser: bool = True):

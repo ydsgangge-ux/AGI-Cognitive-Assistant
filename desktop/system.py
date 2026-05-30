@@ -14,9 +14,9 @@ from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
 from desktop.config import APP_NAME, DATA_ROOT
 
 
-# ── 生成默认图标（无需外部图片文件）────────────────
+# -- Generate default icon (no external image needed) --
 def make_tray_icon(color: str = "#58a6ff") -> QIcon:
-    """动态生成托盘图标"""
+    """Dynamically generate tray icon"""
     px = QPixmap(32, 32)
     px.fill(Qt.GlobalColor.transparent)
     p = QPainter(px)
@@ -31,7 +31,7 @@ def make_tray_icon(color: str = "#58a6ff") -> QIcon:
     return QIcon(px)
 
 
-# ── 系统托盘 ──────────────────────────────────────
+# -- System tray --
 class SystemTray(QObject):
 
     show_main    = pyqtSignal()
@@ -137,7 +137,7 @@ class GlobalHotkey(QObject):
         return self._active
 
 
-# ── 开机自启动 ────────────────────────────────────
+# -- Autostart --
 class AutoStart:
     """管理开机自启动（Windows + Linux）"""
 

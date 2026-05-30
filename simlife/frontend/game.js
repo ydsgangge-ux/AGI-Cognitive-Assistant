@@ -1,5 +1,5 @@
 /**
- * SimLife 主循环 v2
+ * SimLife Game Loop v2
  */
 
 const API_BASE = '';
@@ -99,7 +99,7 @@ const Game = {
       const isStoryMode = state.is_story_mode || false;
 
       const now = new Date();
-      const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       UI.updateTopBar({
         city: isStoryMode ? (state.world?.world_name || '') : (this.character?.basic?.city || ''),
         weekday: weekdays[now.getDay()],
@@ -109,12 +109,12 @@ const Game = {
       UI.updateMood(state.mood);
       UI.updateActivity(state.activity, state.scene_label || '');
 
-      // 现代模式：显示日志；异世界模式：日志由 day_plan 面板承载
+      // Modern mode: show logs; Story mode: logs handled by day_plan panel
       if (state.latest_log && !isStoryMode) {
         UI.updateLogs(state.latest_log);
       }
 
-      // 世界观信息同步
+      // Sync world info
       if (state.world && state.world.world_name) {
         let worldEl = document.getElementById('world-tag');
         if (!worldEl) {
@@ -127,10 +127,10 @@ const Game = {
         worldEl.textContent = state.world.world_name;
       }
 
-      // 隐藏非现代世界不相关的UI元素
+      // Hide non-modern world irrelevant UI elements
       this._applyStoryModeUI(isStoryMode);
 
-      // 主线进度展示（非现代世界）
+      // Main quest progress (non-modern world)
       if (state.life_arc) {
         let arcEl = document.getElementById('life-arc-panel');
         if (!arcEl) {
@@ -145,19 +145,19 @@ const Game = {
         let html = `<div style="color:#f59e0b;margin-bottom:4px;font-size:12px;">${arc.title}</div>`;
         html += `<div style="background:#333;border-radius:4px;height:6px;margin-bottom:6px;"><div style="background:#f59e0b;border-radius:4px;height:6px;width:${pct}%;transition:width 0.3s;"></div></div>`;
         if (arc.current_stage) {
-          html += `<div style="color:#ccc;margin-bottom:4px;">当前：${arc.current_stage}</div>`;
+          html += `<div style="color:#ccc;margin-bottom:4px;">Current: ${arc.current_stage}</div>`;
         }
         if (arc.stages && arc.stages.length > 0) {
           arc.stages.forEach(s => {
             const color = s.status === 'completed' ? '#22c55e' : s.status === 'active' ? '#f59e0b' : '#555';
             const marker = s.status === 'completed' ? '✓' : s.status === 'active' ? '▶' : '○';
-            html += `<div style="color:${color}">${marker} ${s.name}（${s.duration_days}天）</div>`;
+            html += `<div style="color:${color}">${marker} ${s.name} (${s.duration_days} days)</div>`;
           });
         }
         arcEl.innerHTML = html;
       }
 
-      // 当天大纲展示（非现代世界）— 渐进式，只显示已到达的节点
+      // Today outline (non-modern world) - progressive, only show reached nodes
       if (state.day_plan && state.day_plan.length > 0 && isStoryMode) {
         let planEl = document.getElementById('day-plan-panel');
         if (!planEl) {
@@ -170,16 +170,16 @@ const Game = {
         const progress = state.day_plan_progress || 0;
         const cast = state.story_cast || [];
         const total = state.day_plan.length;
-        let html = '<div style="color:#a78bfa;margin-bottom:4px;">今日剧情 <span style="color:#555;font-size:10px;">' + progress + '/' + total + '</span></div>';
+        let html = '<div style="color:#a78bfa;margin-bottom:4px;">Today Story <span style="color:#555;font-size:10px;">' + progress + '/' + total + '</span></div>';
         state.day_plan.forEach((item, idx) => {
-          // 只显示已到达的节点，未来的不显示
+          // Only show reached nodes, not future ones
           if (idx > progress) return;
           const isPast = idx < progress;
           const isNow = idx === progress;
           const color = isPast ? '#666' : '#a78bfa';
           const marker = isPast ? '✓' : '▶';
 
-          // NPC名字
+          // NPC name
           let npcName = '';
           if (item.npc && cast.length > 0) {
             const npc = cast.find(c => c.id === item.npc);
@@ -187,7 +187,7 @@ const Game = {
           }
 
           html += '<div style="color:' + color + '" id="plan-item-' + idx + '">' + marker + ' ' + item.time + ' ' + item.label + npcName + '</div>';
-          // 显示简短的activity
+          // Show brief activity
           if (item.activity) {
             html += '<div style="color:#555;margin:1px 0 3px 16px;font-size:11px;">' + item.activity + '</div>';
           }
@@ -209,7 +209,7 @@ const Game = {
 
       this._activeNpcIds = state.active_npcs || [];
 
-      // 同步用户入驻状态
+      // Sync user enter status
       if (state.user) {
         UI._userProfile = {
           ...UI._userProfile,
@@ -219,7 +219,7 @@ const Game = {
         };
         UI._updateEnterButton();
 
-        // 冻结指示器
+        // Freeze indicator
         const freezeEl = document.getElementById('freeze-indicator');
         if (freezeEl) {
           if (state.user && state.user.entered) {
@@ -236,11 +236,11 @@ const Game = {
   },
 
   _applyStoryModeUI(isStoryMode) {
-    // 隐藏/显示非相关UI元素
+    // Hide/show irrelevant UI elements
     const weatherEl = document.getElementById('disp-weather');
     if (weatherEl) weatherEl.style.display = isStoryMode ? 'none' : '';
 
-    // 异世界模式：隐藏日志面板（内容由 day_plan 面板承载）
+    // Story mode: hide log panel (content handled by day_plan panel)
     const logPanel = document.getElementById('log-panel');
     if (logPanel) logPanel.style.display = isStoryMode ? 'none' : '';
   },

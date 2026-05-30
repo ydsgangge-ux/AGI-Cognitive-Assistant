@@ -101,7 +101,7 @@ _STRINGS = {
 }
 
 
-_current_lang = "zh"
+_current_lang = "en"
 
 
 def set_language(lang: str):

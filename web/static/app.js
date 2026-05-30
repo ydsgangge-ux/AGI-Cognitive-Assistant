@@ -13,7 +13,7 @@ socket.on('connect', () => {
 });
 
 socket.on('auth_result', d => {
-  if (!d || !d.ok) { showLoginErr((d && d.error) || '认证失败'); return; }
+  if (!d || !d.ok) { showLoginErr((d && d.error) || 'Authentication failed'); return; }
   sessionStorage.setItem('sessionId', socket.id);
   if (d.name) document.getElementById('userName').textContent = d.name;
   document.getElementById('loginPage').style.display = 'none';
@@ -50,13 +50,13 @@ socket.on('chat:typing', () => { showTyping(); });
 
 socket.on('error', e => {
   hideTyping();
-  const msg = (e && e.message) || e || '未知错误';
-  appendMessage({ role: 'assistant', content: '**错误：** ' + msg });
+  const msg = (e && e.message) || e || 'Unknown error';
+  appendMessage({ role: 'assistant', content: '**Error:** ' + msg });
   scrollToBottom();
 });
 
 socket.on('timed:reminder', d => {
-  showReminderToast(d.message || '⏰ 定时提醒');
+  showReminderToast(d.message || '⏰ Timed reminder');
   loadTimedTasks();
 });
 
@@ -67,17 +67,17 @@ function doLogin() {
   if (!p) return;
   const btn = document.getElementById('loginBtn');
   btn.disabled = true;
-  btn.textContent = '登录中…';
+  btn.textContent = 'Logging in…';
   socket.emit('login', { passphrase: p }, r => {
     btn.disabled = false;
-    btn.textContent = '登录';
-    if (!r || !r.ok) showLoginErr((r && r.error) || '登录失败，请检查网络连接');
+    btn.textContent = 'Login';
+    if (!r || !r.ok) showLoginErr((r && r.error) || 'Login failed, please check network connection');
   });
   setTimeout(() => {
     if (btn.disabled) {
       btn.disabled = false;
-      btn.textContent = '登录';
-      showLoginErr('登录超时，请检查服务是否正常运行');
+      btn.textContent = 'Login';
+      showLoginErr('Login timeout, please check if service is running');
     }
   }, 10000);
 }
@@ -163,7 +163,7 @@ function formatContent(text) {
 }
 
 function formatTime(ts) {
-  try { return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
+  try { return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); }
   catch { return ''; }
 }
 
@@ -223,7 +223,7 @@ function renderToolbox(list) {
   const container = document.getElementById('toolboxList');
   if (!container) return;
   if (!list || list.length === 0) {
-    container.innerHTML = '<div style="padding:10px;text-align:center;color:#999;font-size:.82rem">暂无可用工具</div>';
+    container.innerHTML = '<div style="padding:10px;text-align:center;color:#999;font-size:.82rem">No tools available</div>';
     return;
   }
   container.innerHTML = '';
@@ -256,7 +256,7 @@ function filterTools(keyword) {
 function useTool(name, params) {
   const input = document.getElementById('chatInput');
   const paramHint = (params && params.length > 0) ? params.join(', ') : '';
-  input.value = `使用 ${name} 工具` + (paramHint ? `（参数：${paramHint}）` : '') + '：';
+  input.value = `Use ${name} tool` + (paramHint ? ` (params: ${paramHint})` : '') + ': ';
   input.focus();
   autoResize(input);
   toggleToolbox();
@@ -288,14 +288,14 @@ function renderChatList(list) {
     item.className = 'chat-item' + (c.chat_id === currentChatId || c.id === currentChatId ? ' active' : '');
     item.dataset.id = c.chat_id || c.id;
 
-    const title = c.title || '新对话';
+    const title = c.title || 'New chat';
     const msgs = c.messages || [];
     const msgCount = msgs.length;
 
     item.innerHTML = `
       <span class="chat-item-title" onclick="loadChat('${c.chat_id || c.id}')">${escapeHtml(title)}</span>
       ${msgCount > 1 ? `<span class="chat-item-count">${msgCount}</span>` : ''}
-      <button class="chat-item-delete" onclick="deleteChat('${c.chat_id || c.id}',event)" title="删除">&times;</button>`;
+      <button class="chat-item-delete" onclick="deleteChat('${c.chat_id || c.id}',event)" title="Delete">&times;</button>`;
 
     (c.starred ? starredEl : recentEl).appendChild(item);
   });
@@ -311,7 +311,7 @@ function loadChat(id) {
 
 function deleteChat(id, e) {
   e.stopPropagation();
-  if (!confirm('确定删除此对话？')) return;
+  if (!confirm('Are you sure to delete this chat?')) return;
   socket.emit('delete_chat', { chat_id: id });
   if (id === currentChatId) newChat();
   setTimeout(() => loadChatList(), 200);
@@ -359,24 +359,24 @@ function loadTimedTasks() { socket.emit('list_timed_tasks'); }
 function renderTimedList(list) {
   const body = document.getElementById('timedBody');
   if (!list || list.length === 0) {
-    body.innerHTML = '<p class="timed-hint">暂无定时任务。通过对话设置提醒，如"30分钟后提醒我喝水"</p>';
+    body.innerHTML = '<p class="timed-hint">No timed tasks. Set reminder via chat, e.g. "Remind me to drink water in 30 minutes"</p>';
     return;
   }
   body.innerHTML = '';
   list.forEach(t => {
     const item = document.createElement('div');
     item.className = 'timed-item';
-    const statusMap = { pending: '⏳ 等待中', done: '✅ 已完成', cancelled: '❌ 已取消', expired: '⚠️ 已过期' };
+    const statusMap = { pending: '⏳ Waiting', done: '✅ Completed', cancelled: '❌ Cancelled', expired: '⚠️ Expired' };
     const statusLabel = statusMap[t.status] || t.status;
     item.innerHTML = `
       <div class="timed-item-content">
-        <strong>${escapeHtml(t.message || '提醒')}</strong>
+        <strong>${escapeHtml(t.message || 'Reminder')}</strong>
         <span style="color:#999;font-size:.78rem;margin-left:6px">[${statusLabel}]</span>
-        ${t.repeat_interval ? '<span class="timed-item-repeat">重复</span>' : ''}
+        ${t.repeat_interval ? '<span class="timed-item-repeat">Repeat</span>' : ''}
       </div>
       <div class="timed-item-time">
-        触发时间：${new Date((t.trigger_time || 0) * 1000).toLocaleString('zh-CN')}
-        ${t.repeat_interval ? '<br>重复间隔：' + t.repeat_interval : ''}
+        Trigger time: ${new Date((t.trigger_time || 0) * 1000).toLocaleString('en-US')}
+        ${t.repeat_interval ? '<br>Repeat interval: ' + t.repeat_interval : ''}
       </div>`;
     body.appendChild(item);
   });

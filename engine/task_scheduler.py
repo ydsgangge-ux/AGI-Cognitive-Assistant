@@ -44,9 +44,9 @@ class TaskScheduler:
                 with open(TASKS_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 self._tasks = data.get("tasks", [])
-                self._log(f"已加载 {len(self._tasks)} 个任务")
+                self._log(f"Loaded {len(self._tasks)}  tasks")
             except Exception as e:
-                self._log(f"加载任务失败: {e}")
+                self._log(f"Failed to load tasks: {e}")
                 self._tasks = []
         else:
             self._tasks = []
@@ -103,16 +103,16 @@ class TaskScheduler:
 
         self._tasks.append(task)
         self._save()
-        self._log(f"创建任务: {content} @ {trigger_dt.strftime('%m月%d日 %H:%M')}")
+        self._log(f"Task created: {content} @ {trigger_dt.strftime('%m/%d %H:%M')}")
         self._notify_wakeup()
-        return {"ok": True, "task_id": task_id, "message": f"已设定: {content}（{trigger_dt.strftime('%m月%d日 %H:%M')}）"}
+        return {"ok": True, "task_id": task_id, "message": f"已设定: {content}（{trigger_dt.strftime('%m/%d %H:%M')}）"}
 
     def cancel_task(self, task_id: str) -> Dict:
         for t in self._tasks:
             if t["id"] == task_id and t["status"] == "pending":
                 t["status"] = "cancelled"
                 self._save()
-                self._log(f"取消任务: {t['content']}")
+                self._log(f"Task cancelled: {t['content']}")
                 return {"ok": True, "message": f"已取消: {t['content']}"}
         return {"ok": False, "error": f"未找到待执行任务: {task_id}"}
 
@@ -125,7 +125,7 @@ class TaskScheduler:
         if cancelled:
             self._save()
             self._notify_wakeup()
-            return {"ok": True, "message": f"已取消 {len(cancelled)} 个任务", "cancelled": cancelled}
+            return {"ok": True, "message": f"已取消 {len(cancelled)}  tasks", "cancelled": cancelled}
         return {"ok": False, "error": f"未找到包含「{keyword}」的待执行任务"}
 
     def list_tasks(self, status: str = "pending") -> List[Dict]:
@@ -171,13 +171,13 @@ class TaskScheduler:
 
     def _fire_task(self, task: Dict):
         task["status"] = "done"
-        self._log(f"触发任务: {task['content']} [{task['action']}]")
+        self._log(f"Task triggered: {task['content']} [{task['action']}]")
 
         if self._on_trigger:
             try:
                 self._on_trigger(task)
             except Exception as e:
-                self._log(f"回调执行失败: {e}")
+                self._log(f"Callback execution failed: {e}")
 
         if task.get("repeat"):
             next_dt = self._next_occurrence(task)
@@ -244,15 +244,15 @@ class TaskScheduler:
                 expired.append(task)
 
         for task in overdue:
-            self._log(f"补执行过期任务: {task['content']}（迟到 {(now - datetime.fromisoformat(task['trigger_time'])).seconds // 60} 分钟）")
+            self._log(f"Catching up expired task: {task['content']} (late  {(now - datetime.fromisoformat(task['trigger_time'])).seconds // 60} 分钟）")
             task["action_params"] = task.get("action_params", {})
             msg = task["action_params"].get("message", task["content"])
-            task["action_params"]["message"] = f"（迟到的提醒）{msg}"
+            task["action_params"]["message"] = f" (late 的提醒）{msg}"
             self._fire_task(task)
 
         for task in expired:
             task["status"] = "expired"
-            self._log(f"标记过期任务: {task['content']}（超过 {CATCHUP_MAX_HOURS} 小时）")
+            self._log(f"Marking expired task: {task['content']} (over  {CATCHUP_MAX_HOURS}  hours)")
 
         if overdue or expired:
             self._save()
@@ -273,7 +273,7 @@ class TaskScheduler:
                 try:
                     self._check_and_fire()
                 except Exception as e:
-                    self._log(f"检查出错: {e}")
+                    self._log(f"Check error: {e}")
 
                 next_time = self._next_pending_time()
                 if next_time is None:
@@ -287,12 +287,12 @@ class TaskScheduler:
 
         self._thread = threading.Thread(target=_loop, daemon=True)
         self._thread.start()
-        self._log("调度器已启动（智能等待模式）")
+        self._log("Scheduler started (smart wait mode)")
 
     def stop(self):
         self._running = False
         self._notify_wakeup()
-        self._log("调度器已停止")
+        self._log("Scheduler stopped")
 
 
 _scheduler_instance: Optional[TaskScheduler] = None

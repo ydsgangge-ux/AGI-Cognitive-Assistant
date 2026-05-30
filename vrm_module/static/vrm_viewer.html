@@ -84,7 +84,7 @@
   }
 </style>
 
-<!-- ES Module import map: 本地文件优先，CDN 兜底 -->
+<!-- ES Module import map: local files first, CDN fallback -->
 <script type="importmap">
 {
   "imports": {
@@ -103,7 +103,7 @@
   <div class="scanlines"></div>
   <div id="loading">
     VRM INIT<br>
-    <span id="load-status">初始化渲染引擎</span>
+    <span id="load-status">Initializing render engine</span>
   </div>
   <div id="error-panel">
     <span id="error-text"></span>
@@ -139,7 +139,7 @@ function showError(msg) {
   errorText.innerHTML = msg;
 }
 
-// ── 1. 场景初始化 ──
+// -- 1. Scene init --
 function initScene() {
   const canvas = document.getElementById("vrm-canvas");
   const container = document.getElementById("vrm-container");
@@ -183,9 +183,9 @@ function onResize() {
   renderer.setSize(w, h);
 }
 
-// ── 2. VRM 加载 ──
+// -- 2. VRM load --
 async function loadVRM() {
-  loadStatus.textContent = "加载 VRM 模型";
+  loadStatus.textContent = "Loading VRM model";
   try {
     const response = await fetch("model.vrm");
     if (!response.ok) throw new Error("HTTP " + response.status);
@@ -214,16 +214,16 @@ async function loadVRM() {
 
     scene.add(vrm.scene);
     loadingEl.classList.add("hidden");
-    console.log("[VRM] 模型加载成功");
+    console.log("[VRM] Model loaded successfully");
   } catch (e) {
-    console.warn("[VRM] 模型加载失败:", e.message);
-    loadStatus.innerHTML = "模型加载失败: " + e.message + "<br>5秒后重试...";
+    console.warn("[VRM] Model load failed:", e.message);
+    loadStatus.innerHTML = "Model load failed: " + e.message + "<br>Retrying in 5s...";
     setTimeout(loadVRM, 5000);
   }
 }
 
-// ── 3. 表情控制 API ──
-// 查找表情：大小写不敏感匹配
+// -- 3. Expression control API --
+// Find expression: case-insensitive match
 function findExpression(name) {
   if (!vrm || !vrm.expressionManager) return false;
   const expressions = vrm.expressionManager.expressions;
@@ -241,7 +241,7 @@ window.setSpeaking = function(isSpeaking) {
   emotionLabel.textContent = speaking ? "SPEAKING" : (targetEmotion.name || "IDLE").toUpperCase();
 };
 
-// ── 4. 动画循环 ──
+// -- 4. Animation loop --
 function animate() {
   requestAnimationFrame(animate);
   if (!renderer) return;
@@ -304,13 +304,13 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// ── 5. 启动 ──
+// -- 5. Start --
 if (location.protocol === "file:") {
   showError(
-    "file:// 协议无法加载模型<br><br>" +
-    "请运行测试服务:<br>" +
+    "file:// protocol cannot load model<br><br>" +
+    "Please run test server:<br>" +
     "python vrm_module/test_server.py<br><br>" +
-    "或直接启动主程序测试"
+    "Or start main program directly for testing"
   );
 } else {
   initScene();

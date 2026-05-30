@@ -1,8 +1,8 @@
 """
-悬浮窗
-始终置顶、半透明、可拖拽的迷你对话窗口
-点击展开/收缩，快速发送消息
-内嵌 SimLife 生活状态面板
+Floating Window
+Always-on-top, semi-transparent, draggable mini chat window
+Click to expand/collapse, quick message sending
+Embedded SimLife life status panel
 """
 
 from PyQt6.QtCore    import Qt, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurve, QSize, QTimer
@@ -16,7 +16,7 @@ from engine.i18n import t
 
 
 class FloatBubble(QWidget):
-    """单条消息气泡"""
+    """Single message bubble"""
     def __init__(self, text: str, is_user: bool, is_proactive: bool = False,
                  on_replied=None, parent=None):
         super().__init__(parent)
@@ -24,11 +24,11 @@ class FloatBubble(QWidget):
         layout.setContentsMargins(6, 3, 6, 3)
         layout.setSpacing(2)
 
-        # 主动消息勾选栏
+        # Proactive message checkbox
         if not is_user and is_proactive:
             top = QHBoxLayout()
             top.setContentsMargins(4, 0, 4, 0)
-            chk = QCheckBox("已回复")
+            chk = QCheckBox("Replied")
             chk.setStyleSheet(
                 "QCheckBox{color:#8b949e;font-size:10px;spacing:3px;}"
                 "QCheckBox::indicator{width:12px;height:12px;"
@@ -36,17 +36,17 @@ class FloatBubble(QWidget):
                 "QCheckBox::indicator:checked{background:#3fb950;"
                 "border-color:#3fb950;image:none;}"
             )
-            status_lbl = QLabel("未回复")
+            status_lbl = QLabel("Not replied")
             status_lbl.setStyleSheet("color:#d29922;font-size:10px;")
 
             def _toggle(state, s=status_lbl, msg=text, cb=on_replied):
                 if state == Qt.CheckState.Checked.value:
-                    s.setText("已回复")
+                    s.setText("Replied")
                     s.setStyleSheet("color:#3fb950;font-size:10px;")
                     if cb:
                         cb(msg)
                 else:
-                    s.setText("未回复")
+                    s.setText("Not replied")
                     s.setStyleSheet("color:#d29922;font-size:10px;")
             chk.stateChanged.connect(_toggle)
             top.addWidget(chk)
@@ -80,7 +80,7 @@ class FloatBubble(QWidget):
 
 
 class SimLifePanel(QWidget):
-    """SimLife 生活状态面板（嵌入悬浮窗内）"""
+    """SimLife life status panel (embedded in floating window)"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -94,7 +94,7 @@ class SimLifePanel(QWidget):
         root.setContentsMargins(12, 8, 12, 8)
         root.setSpacing(6)
 
-        # ── 状态头部 ──
+        # -- Status header --
         header = QHBoxLayout()
         header.setSpacing(8)
 
@@ -108,10 +108,10 @@ class SimLifePanel(QWidget):
         info_col = QVBoxLayout()
         info_col.setSpacing(1)
 
-        self._name_lbl = QLabel("零一花")
+        self._name_lbl = QLabel("ZeroOne")
         self._name_lbl.setStyleSheet("color:#e6edf3; font-size:13px; font-weight:600;")
 
-        self._scene_lbl = QLabel("晚间放松")
+        self._scene_lbl = QLabel("Evening Relax")
         self._scene_lbl.setStyleSheet("color:#8b949e; font-size:11px;")
 
         info_col.addWidget(self._name_lbl)
@@ -121,7 +121,7 @@ class SimLifePanel(QWidget):
         header.addLayout(info_col)
         header.addStretch()
 
-        # 心情
+        # Mood
         mood_box = QVBoxLayout()
         mood_box.setSpacing(0)
         mood_box.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -140,33 +140,33 @@ class SimLifePanel(QWidget):
 
         root.addLayout(header)
 
-        # ── 分隔线 ──
+        # -- Separator --
         sep = QLabel("")
         sep.setFixedHeight(1)
         sep.setStyleSheet("background:#21262d;")
         root.addWidget(sep)
 
-        # ── 当前活动 ──
+        # -- Current activity --
         self._activity_row = QHBoxLayout()
         self._activity_row.setSpacing(6)
         act_icon = QLabel("▶")
         act_icon.setStyleSheet("color:#58a6ff; font-size:10px; font-weight:bold;")
-        self._activity_lbl = QLabel("正在刷手机")
+        self._activity_lbl = QLabel("Browsing phone")
         self._activity_lbl.setStyleSheet("color:#c9d1d9; font-size:12px;")
         self._activity_lbl.setWordWrap(True)
         self._activity_row.addWidget(act_icon)
         self._activity_row.addWidget(self._activity_lbl, 1)
         root.addLayout(self._activity_row)
 
-        # ── 天气 + 时间 ──
-        self._weather_time_lbl = QLabel("☁️ 多云 · 22:00")
+        # -- Weather + time --
+        self._weather_time_lbl = QLabel("☁️ Cloudy · 22:00")
         self._weather_time_lbl.setStyleSheet("color:#8b949e; font-size:11px;")
         root.addWidget(self._weather_time_lbl)
 
-        # ── 今日动态标题 ──
+        # -- Today activity title --
         log_header = QHBoxLayout()
         log_header.setSpacing(4)
-        log_title = QLabel("📋 今日动态")
+        log_title = QLabel("📋 Today's Activity")
         log_title.setStyleSheet("color:#8b949e; font-size:11px; font-weight:600;")
         self._log_count_lbl = QLabel("")
         self._log_count_lbl.setStyleSheet("color:#484f58; font-size:10px;")
@@ -175,7 +175,7 @@ class SimLifePanel(QWidget):
         log_header.addStretch()
         root.addLayout(log_header)
 
-        # ── 日志滚动区 ──
+        # -- Log scroll area --
         self._log_container = QWidget()
         self._log_layout = QVBoxLayout(self._log_container)
         self._log_layout.setContentsMargins(0, 0, 0, 0)
@@ -193,32 +193,32 @@ class SimLifePanel(QWidget):
         """)
         root.addWidget(self._log_scroll)
 
-        # 无数据占位
-        self._empty_lbl = QLabel("暂无今日动态")
+        # No data placeholder
+        self._empty_lbl = QLabel("No activity today")
         self._empty_lbl.setStyleSheet("color:#484f58; font-size:11px;")
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._log_layout.insertWidget(0, self._empty_lbl)
 
     def update_data(self, summary: dict):
-        """用 SimLife 数据更新面板"""
+        """Update panel with SimLife data"""
         if not summary:
             return
 
-        # 角色名
+        # Character name
         name = summary.get("name", "")
         if name:
             self._name_lbl.setText(name)
 
-        # 场景
+        # Scene
         scene = summary.get("scene", "")
-        self._scene_lbl.setText(scene if scene else "未知场景")
+        self._scene_lbl.setText(scene if scene else "Unknown scene")
 
-        # 心情
+        # Mood
         mood = summary.get("mood", 70)
         self._mood_emoji.setText(summary.get("mood_emoji", "😊"))
         self._mood_lbl.setText(str(mood))
 
-        # 心情颜色
+        # Mood color
         if mood >= 80:
             avatar_bg = "#238636"
         elif mood >= 60:
@@ -231,11 +231,11 @@ class SimLifePanel(QWidget):
             f"background:{avatar_bg}; border-radius:16px; font-size:16px;"
         )
 
-        # 当前活动
+        # Current activity
         activity = summary.get("activity", "")
-        self._activity_lbl.setText(activity if activity else "空闲中")
+        self._activity_lbl.setText(activity if activity else "Idle")
 
-        # 天气 + 时间 + 节假日
+        # Weather + time + holiday
         weather = summary.get("weather", "")
         time_str = summary.get("time_str", "")
         holiday = summary.get("holiday")
@@ -248,21 +248,21 @@ class SimLifePanel(QWidget):
             parts.append(time_str)
         self._weather_time_lbl.setText(" · ".join(parts) if parts else "")
 
-        # 节假日时场景标签加颜色
+        # Color scene label on holidays
         if holiday and holiday.get("type") == "public_holiday":
             self._scene_lbl.setStyleSheet("color:#3fb950; font-size:11px;")
         else:
             self._scene_lbl.setStyleSheet("color:#8b949e; font-size:11px;")
 
-        # 日志
+        # Logs
         logs = summary.get("today_log", [])
         self._log_data = logs
-        self._log_count_lbl.setText(f"{len(logs)} 条")
+        self._log_count_lbl.setText(f"{len(logs)} items")
         self._render_logs(logs)
 
     def _render_logs(self, logs: list, page: int = 0):
-        """渲染日志列表（按页）"""
-        # 清除旧日志（保留 stretch）
+        """Render log list (by page)"""
+        # Clear old logs (keep stretch)
         while self._log_layout.count() > 1:
             item = self._log_layout.takeAt(0)
             w = item.widget()
@@ -270,13 +270,13 @@ class SimLifePanel(QWidget):
                 w.deleteLater()
 
         if not logs:
-            lbl = QLabel("暂无今日动态")
+            lbl = QLabel("No activity today")
             lbl.setStyleSheet("color:#484f58; font-size:11px;")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._log_layout.insertWidget(0, lbl)
             return
 
-        # 倒序显示（最新在上）
+        # Reverse order (newest first)
         total = len(logs)
         start = max(0, total - (page + 1) * self._log_per_page)
         end = total - page * self._log_per_page
@@ -304,21 +304,21 @@ class SimLifePanel(QWidget):
 
 class FloatingWindow(QWidget):
     """
-    悬浮窗主体
-    - 始终置顶
-    - 可拖拽移动
-    - 展开/收缩动画
-    - 半透明背景
-    - 内嵌 SimLife 生活状态面板
+    Floating Window Main
+    - Always on top
+    - Draggable
+    - Expand/collapse animation
+    - Semi-transparent background
+    - Embedded SimLife life status panel
     """
 
-    message_sent    = pyqtSignal(str)   # 用户发送消息
-    screenshot_requested = pyqtSignal() # 请求截图
+    message_sent    = pyqtSignal(str)   # User sends message
+    screenshot_requested = pyqtSignal() # Request screenshot
     closed          = pyqtSignal()
-    proactive_replied = pyqtSignal(str, str) # (主动消息, 用户回复内容)
+    proactive_replied = pyqtSignal(str, str) # (Proactive msg, user reply content)
 
-    COLLAPSED_H = 56    # 收缩高度（标题栏高度）
-    EXPANDED_H  = 520   # 展开高度（加大以容纳状态面板）
+    COLLAPSED_H = 56    # Collapsed height (titlebar height)
+    EXPANDED_H  = 520   # Expanded height (larger to fit status panel)
     WIDTH       = 340
 
     def __init__(self, opacity: float = 0.95, parent=None):
@@ -335,19 +335,19 @@ class FloatingWindow(QWidget):
 
         self._drag_pos: QPoint | None = None
         self._expanded = True
-        self._simlife_shown = False  # 状态面板是否展开
+        self._simlife_shown = False  # Whether status panel is expanded
 
-        # ── 主动发言状态（已迁移到 main.py 全局管理）────────
-        self.agent = None  # 由 main.py 注入
-        self._pending_proactive_msg = None  # 待回复的主动消息内容
-        self.simlife_client = None  # 由 main.py 注入
+        # -- Proactive speech state (migrated to main.py global management) --
+        self.agent = None  # Injected by main.py
+        self._pending_proactive_msg = None  # Pending proactive message content
+        self.simlife_client = None  # Injected by main.py
 
         self._setup_ui()
         self._setup_animation()
         self._position_bottom_right()
 
     def _setup_ui(self):
-        # 给主窗口自身加 Layout，确保 container 完美贴合
+        # Add Layout to main window itself, ensure container fits perfectly
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -366,7 +366,7 @@ class FloatingWindow(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 标题栏 ──────────────────────────────
+        # -- Titlebar --
         self._titlebar = QWidget()
         self._titlebar.setFixedHeight(self.COLLAPSED_H)
         self._titlebar.setStyleSheet("background: transparent;")
@@ -427,7 +427,7 @@ class FloatingWindow(QWidget):
         tb_layout.addWidget(self._btn_toggle)
         tb_layout.addWidget(btn_close)
 
-        # ── SimLife 状态触发条 ──────────────────
+        # -- SimLife status trigger bar --
         self._simlife_tab = QWidget()
         self._simlife_tab.setFixedHeight(36)
         self._simlife_tab.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -444,7 +444,7 @@ class FloatingWindow(QWidget):
         )
         self._simlife_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._simlife_brief = QLabel("点击查看生活状态")
+        self._simlife_brief = QLabel("Click to view life status")
         self._simlife_brief.setStyleSheet("color:#8b949e; font-size:11px;")
 
         self._simlife_arrow = QLabel("▼")
@@ -454,15 +454,15 @@ class FloatingWindow(QWidget):
         tab_layout.addWidget(self._simlife_brief, 1)
         tab_layout.addWidget(self._simlife_arrow)
 
-        # 点击展开/收起状态面板
+        # Click to expand/collapse status panel
         self._simlife_tab.mousePressEvent = lambda e: self._toggle_simlife_panel()
 
-        # ── SimLife 状态面板 ────────────────────
+        # -- SimLife status panel --
         self._simlife_panel = SimLifePanel()
         self._simlife_panel.setStyleSheet("background:transparent;")
         self._simlife_panel.hide()
 
-        # ── 消息区 ──────────────────────────────
+        # -- Message area --
         self._msg_area = QWidget()
         self._msg_area.setStyleSheet("background:transparent;")
         self._msg_layout = QVBoxLayout(self._msg_area)
@@ -480,7 +480,7 @@ class FloatingWindow(QWidget):
         """)
         self._scroll = scroll
 
-        # ── 输入栏 ──────────────────────────────
+        # -- Input bar --
         self._input_bar = QWidget()
         self._input_bar.setStyleSheet(
             "background:transparent; border-top:1px solid #21262d;"
@@ -517,7 +517,7 @@ class FloatingWindow(QWidget):
         in_layout.addWidget(self._input)
         in_layout.addWidget(btn_send)
 
-        # ── 组装 ────────────────────────────────
+        # -- Assembly --
         root.addWidget(self._titlebar)
         root.addWidget(self._simlife_tab)
         root.addWidget(self._simlife_panel)
@@ -540,44 +540,44 @@ class FloatingWindow(QWidget):
         )
 
     def update_chat_time(self):
-        """用户发消息时调用，重置空闲计时（兼容旧接口）"""
-        pass  # 已由 main.py AGIApp 全局管理
+        """Called when user sends message, reset idle timer (compatible with old interface)"""
+        pass  # Already managed globally by main.py AGIApp
 
-    # ── SimLife 面板 ────────────────────────────
+    # -- SimLife panel --
     def _toggle_simlife_panel(self):
         if self._simlife_shown:
             self._simlife_panel.hide()
             self._simlife_arrow.setText("▼")
             self._simlife_shown = False
-            # 恢复高度
+            # Restore height
             self.resize(self.WIDTH, self.EXPANDED_H)
         else:
             self._refresh_simlife()
             self._simlife_panel.show()
             self._simlife_arrow.setText("▲")
             self._simlife_shown = True
-            # 加高以容纳面板
+            # Increase height to fit panel
             self.resize(self.WIDTH, self.EXPANDED_H + 200)
 
     def _refresh_simlife(self):
-        """从 simlife_client 读取数据并刷新面板"""
+        """Read data from simlife_client and refresh panel"""
         if not self.simlife_client:
             return
         try:
             summary = self.simlife_client.get_life_summary()
             if summary:
                 self._simlife_panel.update_data(summary)
-                # 更新标签栏简报
+                # Update tab bar brief
                 emoji = summary.get("mood_emoji", "😊")
                 scene = summary.get("scene", "")
                 activity = summary.get("activity", "")
                 if activity:
                     brief = f"{scene} · {activity[:12]}"
                 else:
-                    brief = scene if scene else "点击查看生活状态"
+                    brief = scene if scene else "Click to view life status"
                 self._simlife_brief.setText(brief)
                 self._simlife_indicator.setText(emoji)
-                # 心情颜色
+                # Mood color
                 mood = summary.get("mood", 70)
                 if mood >= 80:
                     bg = "#238636"
@@ -594,11 +594,11 @@ class FloatingWindow(QWidget):
             pass
 
     def refresh_simlife_state(self):
-        """外部定时调用，刷新 SimLife 面板数据（如果面板可见）"""
+        """Called externally by timer, refresh SimLife panel data (if panel visible)"""
         if self._simlife_shown:
             self._refresh_simlife()
 
-    # ── 展开 / 收缩 ────────────────────────────
+    # -- Expand / Collapse --
     def toggle_expand(self):
         if self._expanded:
             self._collapse()
@@ -635,7 +635,7 @@ class FloatingWindow(QWidget):
             pass
         self._anim.start()
 
-    # ── 消息 ────────────────────────────────────
+    # -- Messages --
     def _send(self):
         text = self._input.text().strip()
         if not text:
@@ -643,14 +643,14 @@ class FloatingWindow(QWidget):
         self._input.clear()
         self.update_chat_time()
         self.add_message(text, is_user=True)
-        # 有待回复的主动消息时，把主动消息+用户回复一起关联存储
+        # When there is pending proactive message, associate proactive msg + user reply together
         if self._pending_proactive_msg:
             self.proactive_replied.emit(self._pending_proactive_msg, text)
             self._pending_proactive_msg = None
         self.message_sent.emit(text)
 
     def _on_proactive_check(self, message: str):
-        """主动消息勾选'已回复'时触发（手动勾选，无回复文本）"""
+        """Triggered when proactive message checkbox 'Replied' is checked (manual check, no reply text)"""
         self.proactive_replied.emit(message, "")
         self._pending_proactive_msg = None
 
@@ -662,7 +662,7 @@ class FloatingWindow(QWidget):
         self._msg_layout.insertWidget(
             self._msg_layout.count() - 1, bubble
         )
-        # 滚动到底部
+        # Scroll to bottom
         QTimer.singleShot(50, lambda: self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         ))
@@ -683,7 +683,7 @@ class FloatingWindow(QWidget):
         self._brain_icon.setText(emoji)
         self._emotion_lbl.setText(f"· {emotion} {int(intensity*10)}/10")
 
-    # ── 拖拽移动 ────────────────────────────────
+    # -- Drag to move --
     def mousePressEvent(self, e: QMouseEvent):
         if e.button() == Qt.MouseButton.LeftButton:
             child = self.childAt(e.position().toPoint())

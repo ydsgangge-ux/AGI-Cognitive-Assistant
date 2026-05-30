@@ -247,11 +247,11 @@ def _migrate_table(conn, table: str, target_version: int):
                     )
                 except Exception:
                     # ALTER 也失败，重建表
-                    print("[db_guard] formed_cognition 迁移失败，重建表...")
+                    print("[db_guard] formed_cognition migration failed, recreating table...")
                     _rebuild_formed_cognition(conn)
             else:
                 # 其他错误（如 syntax error = schema 损坏），重建表
-                print(f"[db_guard] formed_cognition 表异常 ({e})，重建表...")
+                print(f"[db_guard] formed_cognition table error ({e})，重建表...")
                 _rebuild_formed_cognition(conn)
 
     # ── memories 迁移 ──
